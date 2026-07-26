@@ -104,14 +104,10 @@ public sealed class ModuleBoundaryBaselineTests
         ["DownKyi.Core/Settings/SettingsManager.Network.cs"] = 671,
         ["DownKyi/CustomControl/CustomPagerViewModel.cs"] = 506,
         ["DownKyi/Services/Download/AddToDownloadService.cs"] = 667,
-        ["DownKyi/Services/Download/DownloadPipeline.cs"] = 1058,
-        ["DownKyi/Services/Download/DownloadTaskProjectionStore.cs"] = 605,
         ["DownKyi/ViewModels/Settings/ViewNetworkViewModel.cs"] = 649,
         ["DownKyi/ViewModels/Settings/ViewVideoViewModel.cs"] = 1020,
         ["DownKyi/ViewModels/ViewMyBangumiFollowViewModel.cs"] = 531,
-        ["DownKyi/ViewModels/ViewMyFavoritesViewModel.cs"] = 572,
         ["DownKyi/ViewModels/ViewMySpaceViewModel.cs"] = 669,
-        ["DownKyi/ViewModels/ViewPublicationViewModel.cs"] = 515,
         ["DownKyi/ViewModels/ViewUserSpaceViewModel.cs"] = 569,
         ["DownKyi/Views/Settings/ViewNetwork.axaml"] = 608,
         ["DownKyi/Views/ViewVideoDetail.axaml"] = 565,
@@ -342,7 +338,6 @@ public sealed class ModuleBoundaryBaselineTests
         var knownConsumers = new HashSet<string>(StringComparer.Ordinal)
         {
             "DownKyi/Services/Download/DownloadListState.cs",
-            "DownKyi/Services/Download/DownloadPipeline.cs",
             "DownKyi/ViewModels/DownloadManager/ViewDownloadFinishedViewModel.cs",
             "DownKyi/ViewModels/DownloadManager/ViewDownloadingViewModel.cs",
             "DownKyi/ViewModels/ImmutableObservableCollection.cs"

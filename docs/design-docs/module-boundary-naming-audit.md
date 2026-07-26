@@ -37,19 +37,19 @@ pwsh ./script/audit-module-boundaries.ps1 `
 
 | Priority | Finding | Current evidence | Verdict |
 |---|---|---|---|
-| P0 | 發布與計畫狀態不一致 | final branch not in `main`; PR #75/#77/#79/#80 open; `version.txt=1.0.32` | confirmed |
+| P0 | 發布與計畫狀態不一致 | stacked release-hardening branch not in `main`; `version.txt=1.0.32` | confirmed release blocker |
 | P1 | `DownKyi.Desktop` 是名義邊界 | 1 source file, 39 lines; Views/VMs/adapters remain in executable | confirmed, omitted by attachment |
-| P1 | Domain aggregate 不是 runtime authority | 52 `DownloadingItem` references vs 15 Domain task/id references in download runtime | confirmed, omitted by attachment |
-| P1 | Channel 仍輪詢 UI collection | `DispatchAsync`, 500 ms delay, `Channel<DownloadingItem>` | confirmed, omitted by attachment |
-| P1 | `DownloadPipeline` 仍是 mixed-responsibility owner | 1,058 lines, UI models/resources, retry, media, persistence | confirmed |
+| P1 | Domain aggregate 不是 runtime authority | durable commands and queue identity now use Domain tasks; execution context still exposes one UI projection | durable authority resolved, projection leak remains |
+| P1 | Channel 仍輪詢 UI collection | direct `DownloadTaskId` admission; no dispatcher polling or collection-membership scheduling | resolved by Gate 5 |
+| P1 | `DownloadPipeline` 仍是 mixed-responsibility owner | typed six-stage sequence below 150 lines; presenter/projector isolated | resolved by Gate 6 stage extraction |
 | P1 | HTTP DI 只完成一半 | static `WebClient` facade plus sync `Send`, `ReadToEnd`, `WaitOne` | confirmed, omitted by attachment |
 | P1 | Core 仍依賴 UI | 5 known files/project entries | confirmed |
-| P1 | service contracts 仍依賴 presentation | 4 interfaces | confirmed, attachment undercounted |
-| P1 | custom collection contract 不完整 | 5 consumers, 5 `NotImplementedException` members | confirmed, omitted by attachment |
+| P1 | service contracts 仍依賴 presentation | 3 interfaces | confirmed |
+| P1 | custom collection contract 不完整 | 4 consumers, 5 `NotImplementedException` members | confirmed, omitted by attachment |
 | P2 | naming and folder taxonomy inconsistent | 9 duplicate-name groups, 5 generic names, 7 file/type mismatches | confirmed with qualifications |
-| P2 | oversized owners | 18 production files above 500 physical lines | confirmed, attachment undercounted |
+| P2 | oversized owners | 14 production files above 500 physical lines | confirmed, decreasing |
 | P2 | logging owner too broad | `ApplicationLogProvider` 715 lines and multiple responsibilities | confirmed design risk, not proven runtime defect |
-| P1 | AI knowledge environment incomplete | `ARCHITECTURE.md` and required docs taxonomy absent before this audit | confirmed |
+| P1 | AI knowledge environment incomplete | required root/docs structure and reproducible audit scripts now exist | resolved |
 
 ## Finding 1: 名義上的 Desktop 邊界
 
@@ -93,6 +93,8 @@ Resolution (2026-07-26): Gate 5 replaced this compatibility path with direct `Do
 目標是 `EnqueueAsync(DownloadTaskId)`，啟動時只從 store 一次性恢復 queued/interrupted tasks。
 
 ## Finding 4: DownloadPipeline 仍是 God Object
+
+Resolution (2026-07-26): Gate 6 extracted a typed execution context and six ordered stages. `DownloadPipeline` is now below 150 lines, localized activity and completion projection have dedicated owners, and its oversized-file/collection-consumer allowlist entries were removed. Retry ownership remains Finding 5 and is intentionally handled in the next PR.
 
 `DownloadPipeline.cs` 有 1,058 physical lines，直接操作 `DownloadingItem`、download lists、UI display state、播放地址、音訊/影片/DURL、retry、FFmpeg、artifact 與 persistence。先前抽出的 artifact/state writers 是有效改善，但不代表 pipeline 已完成拆分。
 
@@ -171,9 +173,8 @@ Domain task changed
 
 ## Finding 11: 巨檔與 logging owner
 
-目前 18 個 production files 超過 500 physical lines。最優先的手寫 owners：
+2026-07-26 的實際 boundary audit 有 14 個 production files 超過 500 physical lines；`DownloadPipeline`、`DownloadTaskProjectionStore`、`ViewMyFavoritesViewModel` 與 `ViewPublicationViewModel` 已從 allowlist 移除。其餘最優先的手寫 owners：
 
-- `DownloadPipeline.cs` 1,058
 - `ViewVideoViewModel.cs` 1,020
 - `SqliteDownloadTaskStore.cs` 928
 - `ApplicationLogProvider.cs` 715

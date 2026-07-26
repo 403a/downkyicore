@@ -2,8 +2,8 @@
 
 Status: active
 Last updated: 2026-07-26
-Current group: Gate 5 Event-driven download queue
-Current branch: `refactor/event-driven-download-queue`
+Current group: Gate 6 DownloadPipeline stage extraction
+Current branch: `refactor/download-pipeline-stages`
 
 This file contains only unfinished or not-yet-integrated work. Completed PR 02-32 items are not restored. Design rationale belongs in `design-docs`; product acceptance belongs in `product-specs`.
 
@@ -16,56 +16,33 @@ The previous `Status: complete` was incorrect.
 - PR #75 and PR #77 are closed after their replacement was validated in PR #82.
 - PR #79 and PR #80 were superseded by green PR #83, closed, and their typed replacement was merged into the stacked release-hardening base.
 - Gate 4 passed Windows/Linux/macOS quality CI and CodeQL, then PR #87 was merged into `refactor/pr-30-32-release-hardening` as merge commit `d8342abc`.
-- The explicit authenticated read-only Bilibili audit passed its `/nav` login gate and all 14 contract probes. Only the allowlisted diagnostics artifact is retained; strict build, architecture tests, format verification and a zero-finding candidate secret scan are green, but the audit changes are not integrated yet.
+- Gate 5 and the authenticated read-only Bilibili audit passed Windows/Linux/macOS quality CI and CodeQL, then PR #88 was merged into `refactor/pr-30-32-release-hardening` as merge commit `fadd7eb3`.
+- The authenticated audit passed its `/nav` login gate and all 14 contract probes. Only the allowlisted sanitized diagnostics artifact is retained; the candidate-file Gitleaks scan reported zero findings.
 - `version.txt` remains `1.0.32`; v1.1.0 has not passed its release gate.
 
 No release tag may be created while any release blocker below remains.
 
 ## Execution Order
 
-### Gate 5: Replace UI Polling With Event-Driven Enqueue
-
-Owner branch: `refactor/event-driven-download-queue` after Gate 4.
-
-Progress (2026-07-26):
-
-- New, resumed, and persisted startup tasks directly enqueue `DownloadTaskId`; the bounded channel and fixed workers no longer receive or scan `DownloadingItem`.
-- The one startup query returns Domain snapshots and UI projections together. Interrupted `Downloading`/`Pausing` snapshots recover to `Queued` before admission.
-- Every executing task owns a linked cancellation source; deleting one active task does not stop its worker or unrelated tasks.
-- Pre-start admissions are deduplicated in `DownloadTaskQueueGateway` and flushed when the runtime attaches. A closing runtime returns admissions to that pending owner instead of dropping committed work.
-- `DispatchAsync`, the 500 ms delay, `_queuedDownloads`, and UI collection membership checks are removed.
-- Strict Release build is at zero warnings; all 565 solution tests, format verification, `git diff --check`, module-boundary audit, vulnerable/deprecated package audits, and the candidate secret scan are green. Draft PR #88 is published and its Windows/Linux/macOS quality matrix plus CodeQL are green; merge into the stacked release-hardening base remains.
-
-Scope:
-
-- Add `EnqueueAsync(DownloadTaskId, CancellationToken)`.
-- Restore queued/interrupted task IDs from SQLite once during startup.
-- Give each active task an explicit cancellation owner.
-- Remove `DispatchAsync`, 500 ms polling, `_queuedDownloads` and collection-membership validity checks.
-
-Verification:
-
-- enqueue latency tests use deterministic clock/channel controls.
-- 1/4/8 worker tests prove no duplicate execution.
-- shutdown cancellation restores resumable state.
-
-Completion:
-
-- runtime never scans an `ObservableCollection` for work.
-
-Rollback:
-
-- Revert queue wiring only after confirming stored queued tasks are still discoverable on next launch.
-
 ### Gate 6: Split DownloadPipeline And Centralize Retry
 
 Owner branches: one stage extraction PR, followed by one retry-policy PR.
 
+Stage extraction progress (2026-07-26):
+
+- `DownloadPipeline` is reduced from 1,058 physical lines to a typed stage sequencer below 150 lines.
+- `DownloadExecutionContext` captures one immutable settings snapshot and never stores an operation cancellation token.
+- The ordered stages are `ResolvePlaybackStage`, `DownloadMediaStage`, `DownloadArtifactsStage`, `MuxStage`, `ValidateStage`, and `FinalizeStage`.
+- Localized status rendering is isolated in `DownloadActivityPresenter`; observable collection completion updates are isolated in `DownloadCompletionProjector`.
+- DURL ordering/key behavior, empty-DASH versus DURL selection, path/image helpers, mux output choice, injected completion clock, stage ordering, cancellation-token forwarding, first-failure short circuit, and output validation have deterministic tests.
+- The duplicate `VideoPlayUrlBasic` adapter is removed; `DownloadTransferKey` is the single stable key owner and selected DASH streams retain `ExpectedSize`.
+- The oversized-file and mutable-collection-consumer allowlists no longer include `DownloadPipeline`.
+- Strict Release build has zero warnings; all 574 solution tests, format verification, `git diff --check`, module-boundary audit, vulnerable/deprecated package audits, and the 894-candidate secret scan are green. Cross-platform CI and integration into the stacked release-hardening base remain for this PR.
+
 Scope:
 
-- Introduce `DownloadExecutionContext` and typed stage results.
-- Extract resolve, media transfer, artifacts, mux, validate and finalize stages.
-- Move localized UI text to Desktop presenter.
+- Complete and integrate the stage extraction PR without changing stored task, partial-file, GID, or resume formats.
+- Move the transitional presenter/projector into the final Desktop owner during Gate 8.
 - Establish one retry budget owner with typed decisions for timeout/5xx, 429, expired URL, invalid media, disk error and cancellation.
 
 Verification:
@@ -77,7 +54,8 @@ Verification:
 Completion:
 
 - pipeline only orders stages.
-- no stage references `DictionaryResource`, UI collection or ViewModel types.
+- no stage directly references `DictionaryResource`, UI collection or ViewModel types.
+- pipeline and backend do not multiply independent retry budgets.
 
 Rollback:
 
