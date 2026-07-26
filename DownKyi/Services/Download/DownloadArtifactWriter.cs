@@ -12,6 +12,7 @@ using DownKyi.Core.BiliApi.VideoStream;
 using DownKyi.Core.Danmaku2Ass;
 using DownKyi.Core.Logging;
 using DownKyi.Core.Settings;
+using DownKyi.Domain.Downloads;
 using DownKyi.Models;
 using DownKyi.Utils;
 using DownKyi.ViewModels.DownloadManager;
@@ -46,6 +47,12 @@ internal sealed class DownloadArtifactWriter
         downloading.DownloadContent = DictionaryResource.GetString("DownloadingCover");
         downloading.DownloadingFileSize = string.Empty;
         downloading.SpeedDisplay = string.Empty;
+        var taskId = new DownloadTaskId(downloading.DownloadBase.Id);
+        await _stateWriter.UpdateActivityAsync(
+            taskId,
+            downloading.DownloadContent,
+            downloading.DownloadStatusTitle,
+            cancellationToken).ConfigureAwait(false);
 
         try
         {
@@ -55,10 +62,11 @@ internal sealed class DownloadArtifactWriter
             }
 
             WebClient.DownloadFile(coverUrl, fileName, cancellationToken: cancellationToken);
-            if (downloading.Downloading.DownloadFiles.TryAdd(coverUrl, fileName))
-            {
-                await _stateWriter.UpdateAsync(downloading, cancellationToken).ConfigureAwait(false);
-            }
+            await _stateWriter.RecordTransferFileAsync(
+                taskId,
+                coverUrl,
+                fileName,
+                cancellationToken).ConfigureAwait(false);
 
             return fileName;
         }
@@ -93,12 +101,19 @@ internal sealed class DownloadArtifactWriter
         downloading.DownloadContent = DictionaryResource.GetString("DownloadingDanmaku");
         downloading.DownloadingFileSize = string.Empty;
         downloading.SpeedDisplay = string.Empty;
+        var taskId = new DownloadTaskId(downloading.DownloadBase.Id);
+        await _stateWriter.UpdateActivityAsync(
+            taskId,
+            downloading.DownloadContent,
+            downloading.DownloadStatusTitle,
+            cancellationToken).ConfigureAwait(false);
 
         var assFile = $"{downloading.DownloadBase?.FilePath}.ass";
-        if (downloading.Downloading.DownloadFiles.TryAdd("danmaku", assFile))
-        {
-            await _stateWriter.UpdateAsync(downloading, cancellationToken).ConfigureAwait(false);
-        }
+        await _stateWriter.RecordTransferFileAsync(
+            taskId,
+            "danmaku",
+            assFile,
+            cancellationToken).ConfigureAwait(false);
 
         var subtitleConfig = new Config
         {
@@ -134,6 +149,12 @@ internal sealed class DownloadArtifactWriter
         downloading.DownloadContent = DictionaryResource.GetString("DownloadingSubtitle");
         downloading.DownloadingFileSize = string.Empty;
         downloading.SpeedDisplay = string.Empty;
+        var taskId = new DownloadTaskId(downloading.DownloadBase.Id);
+        await _stateWriter.UpdateActivityAsync(
+            taskId,
+            downloading.DownloadContent,
+            downloading.DownloadStatusTitle,
+            cancellationToken).ConfigureAwait(false);
 
         var srtFiles = new List<string>();
         var subRipTexts = await WbiRequestExecutor.ExecuteAsync(
@@ -159,10 +180,11 @@ internal sealed class DownloadArtifactWriter
             try
             {
                 await File.WriteAllTextAsync(srtFile, subRip.SrtString, cancellationToken).ConfigureAwait(false);
-                if (downloading.Downloading.DownloadFiles.TryAdd("subtitle", srtFile))
-                {
-                    await _stateWriter.UpdateAsync(downloading, cancellationToken).ConfigureAwait(false);
-                }
+                await _stateWriter.RecordTransferFileAsync(
+                    taskId,
+                    "subtitle",
+                    srtFile,
+                    cancellationToken).ConfigureAwait(false);
 
                 srtFiles.Add(srtFile);
             }

@@ -1,3 +1,4 @@
+using System;
 using Avalonia;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -18,12 +19,22 @@ namespace DownKyi.ViewModels.DownloadManager
             get => _downloadBase;
             set
             {
+                ArgumentNullException.ThrowIfNull(value);
                 _downloadBase = value;
 
                 ZoneImage = Avalonia.Application.Current == null
                     ? null
                     : DictionaryResource.Get<DrawingImage>(
                         VideoZoneIcon.Instance().GetZoneImageKey(DownloadBase.ZoneId));
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(Order));
+                OnPropertyChanged(nameof(MainTitle));
+                OnPropertyChanged(nameof(Name));
+                OnPropertyChanged(nameof(Duration));
+                OnPropertyChanged(nameof(VideoCodecName));
+                OnPropertyChanged(nameof(Resolution));
+                OnPropertyChanged(nameof(AudioCodec));
+                OnPropertyChanged(nameof(FileSize));
             }
         }
 

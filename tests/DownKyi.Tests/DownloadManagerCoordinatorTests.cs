@@ -1,4 +1,5 @@
 using DownKyi.Application.Desktop;
+using DownKyi.Application.Downloads;
 using DownKyi.Core.BiliApi.VideoStream.Models;
 using DownKyi.Domain.Downloads;
 using DownKyi.Infrastructure.Downloads;
@@ -17,19 +18,22 @@ public sealed class DownloadManagerCoordinatorTests
     public async Task PauseAndResumeAllArePersistedForNextLaunch()
     {
         using var context = new CoordinatorContext();
-        var item = context.CreateDownloadingItem("pause-resume", DownloadStatus.Downloading);
+        var item = context.CreateDownloadingItem("pause-resume", DownloadStatus.WaitForDownload);
         context.State.Downloading.Add(item);
         await context.Storage.AddDownloadingAsync(item, TestContext.Current.CancellationToken);
+        await context.StateWriter.StartAsync(
+            new DownloadTaskId(item.DownloadBase.Id),
+            TestContext.Current.CancellationToken);
 
         await context.Coordinator.PauseAllAsync(
             context.State.Downloading,
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(DownloadStatus.Pause, item.Downloading.DownloadStatus);
+        Assert.Equal(DownloadStatus.PauseStarted, item.Downloading.DownloadStatus);
         var paused = await context.Store.FindAsync(
             new DownloadTaskId(item.DownloadBase.Id),
             TestContext.Current.CancellationToken);
-        Assert.Equal(DownloadPhase.Paused, Assert.IsType<DownloadTask>(paused).Phase);
+        Assert.Equal(DownloadPhase.Pausing, Assert.IsType<DownloadTask>(paused).Phase);
 
         await context.Coordinator.ResumeAllAsync(
             context.State.Downloading,
@@ -40,6 +44,28 @@ public sealed class DownloadManagerCoordinatorTests
             new DownloadTaskId(item.DownloadBase.Id),
             TestContext.Current.CancellationToken);
         Assert.Equal(DownloadPhase.Queued, Assert.IsType<DownloadTask>(resumed).Phase);
+    }
+
+    [Fact]
+    public async Task DeleteCanBeRetriedAfterAFormerFileCleanupLeftTaskCanceled()
+    {
+        using var context = new CoordinatorContext();
+        var item = context.CreateDownloadingItem("delete-retry", DownloadStatus.WaitForDownload);
+        item.Downloading.DownloadFiles["video"] = "delete-retry.mp4";
+        context.State.Downloading.Add(item);
+        await context.Storage.AddDownloadingAsync(item, TestContext.Current.CancellationToken);
+        await context.StateWriter.CancelAsync(
+            new DownloadTaskId(item.DownloadBase.Id),
+            TestContext.Current.CancellationToken);
+        var media = context.CreateFile("delete-retry.mp4", "partial media");
+
+        await context.Coordinator.DeleteAsync(item, TestContext.Current.CancellationToken);
+
+        Assert.False(File.Exists(media));
+        Assert.DoesNotContain(item, context.State.Downloading);
+        Assert.Null(await context.Store.FindAsync(
+            new DownloadTaskId(item.DownloadBase.Id),
+            TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -113,18 +139,30 @@ public sealed class DownloadManagerCoordinatorTests
             Store = new SqliteDownloadTaskStore(
                 new SqliteDownloadTaskStoreOptions(Path.Combine(_directory, "download.db")),
                 new SystemClock());
-            Storage = new DownloadTaskProjectionStore(Store, new SystemClock());
+            var clock = new SystemClock();
+            TaskService = new DownloadTaskApplicationService(Store, clock);
+            Storage = new DownloadTaskProjectionStore(TaskService, clock);
+            StateWriter = new DownloadTaskStateWriter(TaskService);
             State = new DownloadListState();
             Launcher = new RecordingPlatformLauncher();
             var fileService = new DownloadTaskFileService(
                 new AriaRuntimeClientRegistry(),
                 NullLogger<DownloadTaskFileService>.Instance);
-            Coordinator = new DownloadManagerCoordinator(Storage, fileService, State, Launcher);
+            Coordinator = new DownloadManagerCoordinator(
+                Storage,
+                StateWriter,
+                fileService,
+                State,
+                Launcher);
         }
 
         public SqliteDownloadTaskStore Store { get; }
 
         public DownloadTaskProjectionStore Storage { get; }
+
+        public DownloadTaskApplicationService TaskService { get; }
+
+        public DownloadTaskStateWriter StateWriter { get; }
 
         public DownloadListState State { get; }
 
@@ -175,6 +213,7 @@ public sealed class DownloadManagerCoordinatorTests
         public void Dispose()
         {
             Storage.Dispose();
+            TaskService.Dispose();
             Store.Dispose();
             SqliteConnection.ClearAllPools();
             if (Directory.Exists(_directory))

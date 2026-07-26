@@ -7,6 +7,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using DownKyi.Application.Desktop;
+using DownKyi.Domain.Downloads;
 using DownKyi.Models;
 using DownKyi.ViewModels;
 using DownKyi.ViewModels.DownloadManager;
@@ -64,17 +65,20 @@ internal sealed class DownloadManagerCoordinator : IDownloadManagerCoordinator
         }.ToFrozenDictionary(StringComparer.Ordinal);
 
     private readonly DownloadTaskProjectionStore _storage;
+    private readonly DownloadTaskStateWriter _stateWriter;
     private readonly DownloadTaskFileService _fileService;
     private readonly DownloadListState _downloadLists;
     private readonly IPlatformLauncher _platformLauncher;
 
     public DownloadManagerCoordinator(
         DownloadTaskProjectionStore storage,
+        DownloadTaskStateWriter stateWriter,
         DownloadTaskFileService fileService,
         DownloadListState downloadLists,
         IPlatformLauncher platformLauncher)
     {
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
+        _stateWriter = stateWriter ?? throw new ArgumentNullException(nameof(stateWriter));
         _fileService = fileService ?? throw new ArgumentNullException(nameof(fileService));
         _downloadLists = downloadLists ?? throw new ArgumentNullException(nameof(downloadLists));
         _platformLauncher = platformLauncher ?? throw new ArgumentNullException(nameof(platformLauncher));
@@ -92,9 +96,8 @@ internal sealed class DownloadManagerCoordinator : IDownloadManagerCoordinator
                 or DownloadStatus.WaitForDownload
                 or DownloadStatus.Downloading)
             {
-                await ApplyAndPersistStatusAsync(
-                    item,
-                    DownloadStatus.Pause,
+                await _stateWriter.PauseAsync(
+                    GetTaskId(item),
                     cancellationToken).ConfigureAwait(true);
             }
         }
@@ -114,9 +117,8 @@ internal sealed class DownloadManagerCoordinator : IDownloadManagerCoordinator
                 or DownloadStatus.Pause
                 or DownloadStatus.DownloadFailed)
             {
-                await ApplyAndPersistStatusAsync(
-                    item,
-                    DownloadStatus.WaitForDownload,
+                await _stateWriter.ResumeAsync(
+                    GetTaskId(item),
                     cancellationToken).ConfigureAwait(true);
             }
         }
@@ -127,18 +129,15 @@ internal sealed class DownloadManagerCoordinator : IDownloadManagerCoordinator
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(item);
-        var target = item.Downloading.DownloadStatus switch
+        return item.Downloading.DownloadStatus switch
         {
-            DownloadStatus.NotStarted or DownloadStatus.WaitForDownload => DownloadStatus.PauseStarted,
+            DownloadStatus.NotStarted or DownloadStatus.WaitForDownload =>
+                _stateWriter.PauseAsync(GetTaskId(item), cancellationToken),
             DownloadStatus.PauseStarted or DownloadStatus.Pause or DownloadStatus.DownloadFailed =>
-                DownloadStatus.WaitForDownload,
-            DownloadStatus.Downloading => DownloadStatus.Pause,
-            _ => item.Downloading.DownloadStatus
+                _stateWriter.ResumeAsync(GetTaskId(item), cancellationToken),
+            DownloadStatus.Downloading => _stateWriter.PauseAsync(GetTaskId(item), cancellationToken),
+            _ => Task.FromResult(_storage.GetRequiredSnapshot(GetTaskId(item)))
         };
-
-        return target == item.Downloading.DownloadStatus
-            ? Task.CompletedTask
-            : ApplyAndPersistStatusAsync(item, target, cancellationToken);
     }
 
     public async Task DeleteAsync(
@@ -148,8 +147,12 @@ internal sealed class DownloadManagerCoordinator : IDownloadManagerCoordinator
         ArgumentNullException.ThrowIfNull(item);
         cancellationToken.ThrowIfCancellationRequested();
 
-        await ApplyAndPersistStatusAsync(item, DownloadStatus.Pause, cancellationToken)
-            .ConfigureAwait(true);
+        var taskId = GetTaskId(item);
+        if (_storage.GetRequiredSnapshot(taskId).Phase != DownloadPhase.Canceled)
+        {
+            await _stateWriter.CancelAsync(taskId, cancellationToken).ConfigureAwait(true);
+        }
+
         await _fileService.CancelActiveDownloadAsync(item).ConfigureAwait(true);
 
         // Once physical deletion starts, finish the database/list transaction even if app shutdown is requested.
@@ -161,9 +164,7 @@ internal sealed class DownloadManagerCoordinator : IDownloadManagerCoordinator
             throw new IOException("One or more generated download files could not be deleted.");
         }
 
-        await _storage
-            .RemoveDownloadingAsync(item, cascadeRemove: true, CancellationToken.None)
-            .ConfigureAwait(true);
+        await _stateWriter.DeleteAsync(taskId, CancellationToken.None).ConfigureAwait(true);
         _downloadLists.Downloading.Remove(item);
     }
 
@@ -237,25 +238,6 @@ internal sealed class DownloadManagerCoordinator : IDownloadManagerCoordinator
         return DownloadArtifactOpenResult.NotFound;
     }
 
-    private async Task ApplyAndPersistStatusAsync(
-        DownloadingItem item,
-        DownloadStatus target,
-        CancellationToken cancellationToken)
-    {
-        var previousStatus = item.Downloading.DownloadStatus;
-        var previousTitle = item.DownloadStatusTitle;
-        item.ApplyControlStatus(target);
-        try
-        {
-            await _storage.UpdateDownloadingAsync(item, cancellationToken).ConfigureAwait(true);
-        }
-        catch
-        {
-            item.RestoreControlStatus(previousStatus, previousTitle);
-            throw;
-        }
-    }
-
     private async Task<DownloadArtifactOpenResult> OpenFirstFileAsync(
         string? basePath,
         IEnumerable<string> suffixes,
@@ -289,5 +271,10 @@ internal sealed class DownloadManagerCoordinator : IDownloadManagerCoordinator
         return downloadBase.NeedDownloadContent
             .Where(item => item.Value && FileSuffixMap.ContainsKey(item.Key))
             .SelectMany(item => FileSuffixMap[item.Key]);
+    }
+
+    private static DownloadTaskId GetTaskId(DownloadingItem item)
+    {
+        return new DownloadTaskId(item.DownloadBase.Id);
     }
 }

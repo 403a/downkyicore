@@ -8,6 +8,7 @@ using System.Threading.Channels;
 using System.Threading.Tasks;
 using DownKyi.Core.Logging;
 using DownKyi.Core.Settings;
+using DownKyi.Domain.Downloads;
 using DownKyi.Models;
 using DownKyi.ViewModels.DownloadManager;
 using Microsoft.Extensions.Logging;
@@ -153,18 +154,17 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
         {
             await foreach (var downloading in reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
             {
+                var taskId = new DownloadTaskId(downloading.DownloadBase.Id);
                 try
                 {
                     if (!_downloadLists.Downloading.Contains(downloading) ||
-                        downloading.Downloading.DownloadStatus is not (
-                            DownloadStatus.NotStarted or DownloadStatus.WaitForDownload))
+                        _pipeline.GetTaskPhase(taskId) != DownloadPhase.Queued)
                     {
                         continue;
                     }
 
-                    downloading.Downloading.DownloadStatus = DownloadStatus.Downloading;
-                    await _stateWriter.UpdateAsync(downloading, cancellationToken).ConfigureAwait(false);
-                    await _pipeline.ExecuteAsync(downloading, cancellationToken).ConfigureAwait(false);
+                    await _stateWriter.StartAsync(taskId, cancellationToken).ConfigureAwait(false);
+                    await _pipeline.ExecuteAsync(taskId, cancellationToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
@@ -174,10 +174,12 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
                     or InvalidOperationException or HttpRequestException or Newtonsoft.Json.JsonException)
                 {
                     _logger.LogErrorMessage("Download worker failed.", exception);
-                    await _pipeline.MarkFailedAsync(downloading).ConfigureAwait(false);
+                    await _pipeline.MarkFailedAsync(
+                        taskId).ConfigureAwait(false);
                 }
                 finally
                 {
+                    await ConfirmPauseAfterWorkerStopsAsync(taskId).ConfigureAwait(false);
                     UnmarkQueued(downloading);
                 }
             }
@@ -185,6 +187,22 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             return;
+        }
+    }
+
+    private async Task ConfirmPauseAfterWorkerStopsAsync(DownloadTaskId taskId)
+    {
+        try
+        {
+            if (_pipeline.GetTaskPhase(taskId) == DownloadPhase.Pausing)
+            {
+                await _stateWriter.ConfirmPausedAsync(taskId, CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+        }
+        catch (InvalidOperationException exception)
+        {
+            _logger.LogErrorMessage("Download pause acknowledgement failed.", exception);
         }
     }
 

@@ -1,9 +1,9 @@
 # DownKyi Core Live Refactoring Plan
 
 Status: active
-Last updated: 2026-07-22
-Current group: Gate 3 Bilibili API contract audit
-Current branch: `audit/gate-03-bilibili-api-contracts`
+Last updated: 2026-07-26
+Current group: Gate 4 Domain download authority
+Current branch: `refactor/domain-download-authority`
 
 This file contains only unfinished or not-yet-integrated work. Completed PR 02-32 items are not restored. Design rationale belongs in `design-docs`; product acceptance belongs in `product-specs`.
 
@@ -21,47 +21,22 @@ No release tag may be created while any release blocker below remains.
 
 ## Execution Order
 
-### Gate 3: Bilibili API Inventory And Runtime Contract Audit
-
-Owner branch: `audit/gate-03-bilibili-api-contracts` from the latest integrated architecture head.
-
-Progress (2026-07-22):
-
-- Inventoried all 47 fixed Bilibili endpoints in Core with method, envelope, authentication/WBI requirement, runtime use, evidence, alternative, decision and tests.
-- Added an explicit anonymous live-probe script that records Runtime, OS, architecture and Commit SHA while refusing to load local cookies or account state.
-- Confirmed and fixed anonymous WBI bootstrap: `/x/web-interface/nav` returns `-101` with valid public WBI metadata, so only this endpoint may deserialize that code.
-- Cross-checked maintained yt-dlp, bilibili-api endpoint maps, community protocol docs and controlled live probes.
-- Migrated bangumi playback from the working legacy v1 route to current v2 and made `result.video_info` a nullable required contract.
-- Recorded retired channel APIs, the invalid unused nickname query, legacy danmaku and authenticated watch-later ambiguity without speculative remapping.
-- Full local gates are green: strict Release build `0 warning / 0 error`, all `543/543` tests, format `0/742` changed files, clean vulnerable/deprecated package audits, module-boundary inventory, anonymous live-probe `27/27` HTTP results, and `git diff --check`.
-- Remaining Gate 3 work is commit/PR publication, remote Windows/Linux/macOS CI, review, and merge into the stacked release-hardening base.
-
-Scope:
-
-- Inventory every Bilibili endpoint, method, envelope field, authentication/WBI requirement and caller.
-- Cross-check recent reliable documentation, at least one maintained open-source implementation and controlled live requests.
-- Replace an endpoint only when evidence is strong; otherwise record risk without speculative change.
-- Add fixed JSON fixtures and injectable/loopback HTTP tests for changed contracts.
-- Keep cookies, tokens, personal paths and sensitive URLs out of reports and logs.
-
-Verification:
-
-- Report lists endpoint, use, status, evidence, alternative, code change and test.
-- ordinary video, bangumi, cheese, list, favorites, publication, login and user-space paths are covered.
-- no unit test depends on production Bilibili availability.
-
-Completion:
-
-- API audit PR is green and merged.
-- Every changed endpoint has a regression fixture and typed failure behavior.
-
-Rollback:
-
-- Revert endpoint changes independently; retain audit evidence and risk notes.
-
 ### Gate 4: Make Domain DownloadTask The Runtime Authority
 
 Owner branch: `refactor/domain-download-authority`.
+
+Progress (2026-07-26):
+
+- Added `IDownloadTaskApplicationService` and `DownloadTaskApplicationService` as the authoritative typed command/query owner; commands load the aggregate, apply one legal transition, persist with optimistic versioning, then publish the committed snapshot.
+- Worker and pipeline entry points now use `DownloadTaskId`; transfer requests carry Domain progress/GID callbacks and no longer carry `DownloadingItem` as task authority.
+- Replaced normal UI-to-Domain reconstruction with one-way Domain-to-UI projection. `DownloadTask.Restore` is limited to the SQLite materializer and explicit NRBF migration mapper.
+- Preserved unfinished task IDs, GID, transfer file map, completed keys, progress, output size and versions across reopen and shutdown recovery.
+- Pause now remains `Pausing` until the transfer worker has actually stopped; built-in and aria2 pause outcomes preserve partial files before the worker confirms `Paused`.
+- Active deletion is durable and retryable: a failed physical cleanup leaves `Canceled` state, while a later delete skips duplicate cancellation and can finish file/store removal.
+- Projection changes notify all affected bindings. UI-thread dispatch of projection events remains explicit Gate 8 work; the current 500 ms UI-list queue scan remains explicit Gate 5 work.
+- Local strict Release build is green with zero warnings, all 552 solution tests pass, format changed 0/750 files, `git diff --check` passes, the module-boundary audit completes, and vulnerable/deprecated package audits are empty.
+- The .NET 10 dependency-audit command is verified with the required `dotnet package list --project <solution>` syntax; stale positional examples were removed from the Agent and rollback guides.
+- Commit/PR publication and remote matrix validation remain. Gate 4 stays in this live plan until its integration evidence is available.
 
 Scope:
 

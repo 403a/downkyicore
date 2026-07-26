@@ -15,6 +15,7 @@ using DownKyi.Core.BiliApi.Login;
 using DownKyi.Core.Logging;
 using DownKyi.Core.Settings;
 using DownKyi.Core.Utils;
+using DownKyi.Domain.Downloads;
 using DownKyi.Models;
 using DownKyi.Utils;
 using Microsoft.Extensions.Logging;
@@ -96,7 +97,6 @@ internal sealed class Aria2TransferBackend : ITransferBackend
     public async Task<DownloadTransferOutcome> TransferAsync(DownloadTransferRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var downloading = request.Download;
         var activeGid = await EnsureAriaTaskAsync(
             request).ConfigureAwait(true);
         if (activeGid == null)
@@ -108,8 +108,16 @@ internal sealed class Aria2TransferBackend : ITransferBackend
         var ariaManager = new AriaManager(
             _ariaClient,
             _loggerFactory.CreateLogger<AriaManager>());
+        DownloadProgress? lastProgress = null;
         EventHandler<AriaProgressEventArgs> progressHandler = (_, eventArgs) =>
-            UpdateProgress(downloading, eventArgs);
+        {
+            var progress = CreateProgress(activeGid, eventArgs);
+            if (progress != null)
+            {
+                lastProgress = progress;
+                request.PublishProgress(progress);
+            }
+        };
         ariaManager.TellStatus += progressHandler;
         try
         {
@@ -118,12 +126,13 @@ internal sealed class Aria2TransferBackend : ITransferBackend
                 async cancellationToken =>
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    request.EnsureActive();
-                    if (downloading.Downloading.DownloadStatus == DownloadStatus.Pause)
+                    if (request.IsPauseRequested())
                     {
                         await _ariaClient.PauseAsync(activeGid).ConfigureAwait(false);
                         throw new OperationCanceledException("Download was paused.");
                     }
+
+                    request.EnsureActive();
                 },
                 request.CancellationToken).ConfigureAwait(true);
 
@@ -134,16 +143,25 @@ internal sealed class Aria2TransferBackend : ITransferBackend
                 _ => DownloadTransferOutcome.Failed
             };
         }
+        catch (OperationCanceledException) when (
+            !request.CancellationToken.IsCancellationRequested && request.IsPauseRequested())
+        {
+            return DownloadTransferOutcome.Paused;
+        }
         finally
         {
             ariaManager.TellStatus -= progressHandler;
+            if (lastProgress != null)
+            {
+                await request.PersistProgressAsync(lastProgress, CancellationToken.None)
+                    .ConfigureAwait(true);
+            }
         }
     }
 
     private async Task<string?> EnsureAriaTaskAsync(DownloadTransferRequest request)
     {
-        var downloading = request.Download;
-        var gid = downloading.Downloading.Gid;
+        var gid = request.BackendIdentity;
         if (!string.IsNullOrWhiteSpace(gid))
         {
             var status = await _ariaClient.TellStatus(gid).ConfigureAwait(true);
@@ -151,8 +169,7 @@ internal sealed class Aria2TransferBackend : ITransferBackend
                 status.Error?.Message.Contains("is not found", StringComparison.OrdinalIgnoreCase) == true)
             {
                 gid = null;
-                downloading.Downloading.Gid = null;
-                await request.PersistStateAsync(request.CancellationToken).ConfigureAwait(true);
+                await request.SetBackendIdentityAsync(null, request.CancellationToken).ConfigureAwait(true);
             }
         }
 
@@ -183,8 +200,7 @@ internal sealed class Aria2TransferBackend : ITransferBackend
             }
 
             gid = added.Result;
-            downloading.Downloading.Gid = gid;
-            await request.PersistStateAsync(request.CancellationToken).ConfigureAwait(true);
+            await request.SetBackendIdentityAsync(gid, request.CancellationToken).ConfigureAwait(true);
         }
         else
         {
@@ -272,31 +288,29 @@ internal sealed class Aria2TransferBackend : ITransferBackend
         }
     }
 
-    private void UpdateProgress(DownKyi.ViewModels.DownloadManager.DownloadingItem video, AriaProgressEventArgs eventArgs)
+    private DownloadProgress? CreateProgress(string activeGid, AriaProgressEventArgs eventArgs)
     {
-        if (!string.Equals(video.Downloading.Gid, eventArgs.Gid, StringComparison.Ordinal))
+        if (!string.Equals(activeGid, eventArgs.Gid, StringComparison.Ordinal))
         {
-            return;
+            return null;
         }
 
         var percent = eventArgs.TotalLength == 0
             ? 0
             : (float)eventArgs.CompletedLength / eventArgs.TotalLength * 100;
-        if (Math.Abs(percent - video.Progress) < 0.01)
-        {
-            return;
-        }
-
-        video.Progress = percent;
-        video.DownloadingFileSize = $"{Format.FormatFileSize(eventArgs.CompletedLength)}/{Format.FormatFileSize(eventArgs.TotalLength)}";
-        video.SpeedDisplay = Format.FormatSpeedWithBandwidth(eventArgs.Speed);
         _diagnosticLogger.LogSpeed(
             Name,
             eventArgs.Gid,
             eventArgs.CompletedLength,
             eventArgs.TotalLength,
             eventArgs.Speed);
-        video.Downloading.MaxSpeed = Math.Max(video.Downloading.MaxSpeed, eventArgs.Speed);
+        return new DownloadProgress(
+            Math.Clamp(percent, 0, 100),
+            eventArgs.CompletedLength,
+            Math.Max(eventArgs.CompletedLength, eventArgs.TotalLength),
+            eventArgs.Speed,
+            $"{Format.FormatFileSize(eventArgs.CompletedLength)}/{Format.FormatFileSize(eventArgs.TotalLength)}",
+            Format.FormatSpeedWithBandwidth(eventArgs.Speed));
     }
 
     public void Dispose()

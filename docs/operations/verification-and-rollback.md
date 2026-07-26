@@ -31,8 +31,8 @@ dotnet build ./DownKyi.sln `
 dotnet test ./DownKyi.sln -c Release --no-restore --no-build
 dotnet format ./DownKyi.sln --no-restore --verify-no-changes
 git diff --check
-dotnet package list ./DownKyi.sln --vulnerable --include-transitive
-dotnet package list ./DownKyi.sln --deprecated
+dotnet package list --project ./DownKyi.sln --vulnerable --include-transitive
+dotnet package list --project ./DownKyi.sln --deprecated
 ```
 
 ## UI 與 runtime evidence

@@ -19,9 +19,9 @@ The target projects exist, but the target ownership model is not complete. Read 
 
 - `src/DownKyi.Desktop` currently owns only Host creation. Views, ViewModels, navigation/dialog adapters, UI projections, and lifecycle remain in the `DownKyi` executable assembly.
 - `src/DownKyi.Infrastructure` currently owns SQLite task persistence, write-behind, and clock. Bilibili HTTP, aria2, FFmpeg, filesystem paths, and logging implementation remain mainly in `DownKyi.Core` or `DownKyi`.
-- `DownKyi.Domain.DownloadTask` is not yet the runtime source of truth. Download workers still operate on `DownloadingItem`; `DownloadTaskProjectionStore` reconstructs Domain tasks from legacy mutable projections.
+- `DownKyi.Domain.DownloadTask` is the durable runtime state authority. `DownloadTaskApplicationService` loads by `DownloadTaskId`, invokes legal transitions, persists optimistic versions, and only then publishes committed snapshots. Normal runtime no longer reconstructs Domain state from mutable UI projections.
 - `DownloadOrchestrator` still scans the UI downloading collection every 500 ms before writing `DownloadingItem` values to its channel.
-- `DownloadPipeline` is still a mixed workflow/presentation/persistence owner and the HTTP compatibility layer still uses a static facade plus synchronous send/read/backoff.
+- Workers and pipeline entry points use `DownloadTaskId`, but the channel and several media stages still carry/read `DownloadingItem` as transient playback/UI context. `DownloadPipeline` remains a mixed workflow/presentation owner and the HTTP compatibility layer still uses a static facade plus synchronous send/read/backoff.
 - These facts are tracked debt, not stable contracts. The ordered migration and release blockers live in `docs/refactoring-live-plan.md`.
 - `ModuleBoundaryBaselineTests` allows every listed debt item to disappear, but rejects new owners, consumers, duplicate names, UI dependencies, synchronous HTTP debt, or oversized-file growth.
 
@@ -119,9 +119,11 @@ flowchart TD
     DownloadBootstrap["service.download-bootstrap\nDownloadBootstrapHostedService"]
     DownloadService["service.download-runtime\nFactory + Orchestrator + Pipeline"]
     DownloadDomain["core.download-domain\nimmutable task aggregate"]
+    DownloadCommands["service.download-task-application\ntyped commands + committed events"]
     StoreContract["service.application-contracts\nIDownloadTaskStore"]
     SqliteStore["core.sqlite-download-store\nSqliteDownloadTaskStore"]
-    Storage["core.storage\nProjectionStore + StorageManager"]
+    Projection["ui.download-projection\nDownloadTaskProjectionStore + mapper"]
+    Storage["core.storage\nStorageManager"]
     Aria["external.aria2\naria2c process"]
     FFmpeg["external.ffmpeg\nffmpeg process"]
     Logs["core.logging\nApplicationLogProvider + diagnostic export"]
@@ -139,6 +141,7 @@ flowchart TD
     Program -->|runs restart helper| Lifecycle
     App -->|creates| Host
     App -->|attaches Host and shell| Lifecycle
+    App -->|resolves compatible data paths| Storage
     Host -->|injects| MainWindow
     App -->|loads| UiTheme
     Host -->|registers| ApplicationLayer
@@ -147,11 +150,15 @@ flowchart TD
     Infrastructure -->|implements| ApplicationLayer
     Infrastructure -->|depends on| Domain
     Domain -->|owns| DownloadDomain
+    ApplicationLayer -->|owns| DownloadCommands
     ApplicationLayer -->|defines| StoreContract
+    DownloadCommands -->|loads and transitions| DownloadDomain
+    DownloadCommands -->|calls| StoreContract
     SqliteStore -->|implements| StoreContract
     SqliteStore -->|persists| DownloadDomain
-    Storage -->|projects legacy UI| DownloadDomain
-    Storage -->|calls| StoreContract
+    DownloadCommands -->|publishes committed snapshots| Projection
+    Projection -->|projects to UI| DownloadDomain
+    Projection -->|calls commands and queries| DownloadCommands
     SystemBenchmarks -->|measures| Host
     SystemBenchmarks -->|measures| SqliteStore
     SystemBenchmarks -->|measures| DownloadService
@@ -208,12 +215,13 @@ flowchart TD
     VideoVm -->|reads| Settings
     Settings -->|migrates old format through| LegacySettings
     VideoVm -->|calls| DownloadAdd
-    DownloadAdd -->|persists| Storage
+    DownloadAdd -->|creates queued input through| Projection
     DownloadAdd -->|queues| DownloadService
     Host -->|starts and stops| DownloadBootstrap
-    DownloadBootstrap -->|loads startup state| Storage
+    DownloadBootstrap -->|loads startup state| Projection
     DownloadBootstrap -->|starts and stops| DownloadService
-    DownloadService -->|persists| Storage
+    DownloadService -->|commands by DownloadTaskId| DownloadCommands
+    DownloadService -->|reads transient playback projection| Projection
     DownloadService -->|executes optional| Aria
     DownloadService -->|executes| FFmpeg
     DownloadService -->|writes| Logs
@@ -458,6 +466,38 @@ contracts:
   - Coalesced progress writes retain their first expected version and latest contiguous target version.
 tests:
   - test.application-lifetime
+  - test.architecture-boundaries
+```
+
+### service.download-task-application
+
+```yaml
+id: service.download-task-application
+type: service
+paths:
+  - src/DownKyi.Application/Downloads/IDownloadTaskApplicationService.cs
+  - src/DownKyi.Application/Downloads/DownloadTaskApplicationService.cs
+responsibility: Owns typed download commands and queries, serializes per-task mutations, persists immutable aggregates, and publishes only committed snapshots.
+inbound:
+  - service.download-runtime
+  - ui.download-projection
+  - app.host-composition
+outbound:
+  - core.domain-contracts
+  - service.application-contracts
+contracts:
+  - Every mutation is addressed by `DownloadTaskId`; no command accepts `DownloadingItem` or another mutable UI model.
+  - A command loads the latest aggregate, invokes one legal Domain transition, writes with the expected optimistic version, and retries only a bounded store conflict.
+  - `TaskChanged` is published after the store succeeds. Invalid transitions and failed writes do not publish replacement snapshots.
+  - Start, pause, confirm-paused, resume, retry, interruption recovery, failure, completion, cancel, delete, transfer-file, GID, progress, activity, and output updates remain typed operations.
+  - Shutdown recovery preserves GID, partial-file map, completed keys, progress, output, timestamps, and monotonically increasing versions.
+hazards:
+  - The current synchronous event reaches the executable projection owner; Gate 8 must marshal projection mutation through the Desktop UI dispatcher without moving persistence into Desktop.
+  - Per-task synchronization lives for the Application service lifetime; task churn and disposal behavior must remain bounded and race-tested as queue ownership moves in Gate 5.
+tests:
+  - test.download-task-application
+  - test.download-domain
+  - test.storage-resume
   - test.architecture-boundaries
 ```
 
@@ -1531,7 +1571,8 @@ inbound:
   - viewmodel.user-space-pages
   - other viewmodels that support add-to-download
 outbound:
-  - core.storage
+  - ui.download-projection
+  - service.download-task-application
   - service.download-runtime
   - service.download-list-state
   - service.video-tag-provider
@@ -1577,9 +1618,9 @@ contracts:
   - Collection mutation is projected on the UI thread by the calling desktop boundary.
   - Headless construction must not synchronously wait on an uninitialized Avalonia dispatcher.
   - Download-manager ViewModels own only confirmation, localized feedback, binding state, and command wiring; they cannot access storage, generated files, or platform launch APIs directly.
-  - Single and bulk pause/resume transitions are persisted before the command completes; persistence failure restores the prior UI projection.
-  - Explicit deletion persists a paused state, cancels the active backend, removes media and resume sidecars, deletes the store row, and only then removes the UI projection.
-  - If generated-file cleanup reports a failure, the database row and UI projection remain so deletion can be retried; once physical deletion starts, store/list cleanup is not interrupted by shutdown cancellation.
+  - Single and bulk pause/resume commands address tasks by ID; UI state follows only committed Domain events, so a failed persistence operation cannot publish a replacement projection.
+  - Explicit deletion persists `Canceled`, cancels the active backend, removes media and resume sidecars, transitions to `Deleted`, and only then removes the UI projection.
+  - If generated-file cleanup reports a failure, the canceled database row and UI projection remain; another delete is idempotent with respect to cancellation and can retry physical cleanup.
   - File and folder probing belongs to the coordinator and returns a typed open result without exposing filesystem checks to ViewModels.
 hazards:
   - Replacing the collection object disconnects existing views and download workers.
@@ -1601,12 +1642,14 @@ id: service.legacy-upgrade
 type: migration-service
 paths:
   - DownKyi/Services/Migration/LegacyUpgradeCoordinator.cs
+  - DownKyi/Services/Migration/LegacyDownloadTaskMapper.cs
   - DownKyi/ViewModels/Dialogs/ViewUpgradingDialogViewModel.cs
 responsibility: Converts legacy NRBF login/download data into current storage while the dialog owns only progress, cancellation, result projection, and restart state.
 inbound:
   - app.application
 outbound:
   - core.storage
+  - ui.download-projection
   - service.download-list-state
 contracts:
   - Closing or disposing the dialog cancels migration; cancellation is rethrown by the coordinator and never reported as data corruption.
@@ -1614,6 +1657,7 @@ contracts:
   - A malformed legacy login payload is logged and isolated; it cannot prevent an independently present download database from migrating.
   - Each legacy SQLite connection is validated, read, and disposed before the source database is deleted, moved, or renamed.
   - Valid records are persisted in bounded batches; one malformed record is logged and skipped without discarding the rest of its batch.
+  - `LegacyDownloadTaskMapper` is the only executable-layer caller allowed to restore a Domain aggregate from NRBF data; normal runtime cannot reuse it.
   - Failed databases are preserved under a collision-resistant backup name and UI diagnostics reveal only the backup filename, never a full personal path.
   - Migration context owns typed diagnostics; the low-level SQLite helper rethrows without duplicating or printing failures.
   - The dialog cannot own NRBF, SQLite, storage lookup, worker scheduling, or dispatcher code.
@@ -1640,6 +1684,7 @@ inbound:
   - app.host-composition
 outbound:
   - core.storage
+  - ui.download-projection
   - service.download-list-state
   - service.download-runtime
 contracts:
@@ -1673,6 +1718,9 @@ paths:
   - DownKyi/Services/Download/AriaRuntimeClientRegistry.cs
   - DownKyi/Services/Download/DownloadArtifactWriter.cs
   - DownKyi/Services/Download/DownloadTaskStateWriter.cs
+  - DownKyi/Services/Download/DownloadTaskShutdownRecovery.cs
+  - DownKyi/Services/Download/DownloadTransferRequestFactory.cs
+  - DownKyi/Services/Download/DownloadOutputRecorder.cs
   - DownKyi/Services/Download/DownloadTaskFileService.cs
   - DownKyi/Services/Download/DownloadFileIntegrity.cs
   - DownKyi/Services/Download/DownloadDiagnosticLogger.cs
@@ -1682,7 +1730,8 @@ inbound:
   - service.download-bootstrap
   - service.download-add
 outbound:
-  - core.storage
+  - service.download-task-application
+  - ui.download-projection
   - service.download-list-state
   - external.aria2
   - external.ffmpeg
@@ -1696,8 +1745,9 @@ contracts:
   - Each multi-segment DURL key includes stable `DURL.Order`; BVID, codec, and runtime hash codes are not segment identities.
   - DURL merge input is sorted by Order and success requires ffprobe stream, duration, and middle/tail seek-decode validation.
   - Multi-segment DURL output is re-encoded to rebuild timestamps, keyframes, and MP4 indexes; hardware failure falls back to `libx264 + aac`.
-  - State transitions await persistence; high-rate progress uses the bounded write-behind boundary.
-  - Runtime receives `DownloadListState`, `DownloadTaskProjectionStore`, and dedicated state/artifact writers through construction; it cannot resolve dependencies through App or a global container.
+  - State transitions go through typed Application commands and await persistence; high-rate live progress is a projection signal while accepted durable samples preserve Domain resume state.
+  - `PauseAsync` persists `Pausing`; built-in and aria2 backends preserve partial state and return a paused outcome; the worker confirms `Paused` only after transfer teardown.
+  - Runtime receives `DownloadListState`, `DownloadTaskProjectionStore`, and dedicated state/artifact writers through construction; worker/pipeline command APIs use `DownloadTaskId` and cannot resolve dependencies through App or a global container.
   - Runtime factory, backends, workers, and diagnostic logger share the Host-injected `ISettingsStore`; no download service reads the global settings singleton.
   - Runtime factory captures one immutable network settings snapshot and creates a dedicated `AriaClient`; local and custom endpoints cannot overwrite process-global host, port, or token fields.
   - The same runtime client is injected into transfer, polling, server shutdown, and task cancellation. `AriaRuntimeClientRegistry` exposes only the currently active runtime client and releases it deterministically on stop or failed startup.
@@ -1705,15 +1755,15 @@ contracts:
   - Runtime factory creates a typed backend logger, and every download/file-lifecycle/maintenance owner uses the shared provider; this directory cannot call static `LogManager`.
   - Download diagnostic throttling belongs to the injected runtime logger instance; scopes contain only a SHA-256-derived short task ID and cannot retain raw task IDs in process-wide static state.
   - `DownloadTaskFileService` is an injected instance so cancellation, sidecar cleanup, retry, and permission failures use the same logger without a static owner.
-  - Shutdown cancellation while dispatch waits for capacity cannot skip fixed-worker drain or resumable-state recovery; active `Downloading` rows return to `WaitForDownload` and are persisted before exit completes.
+  - Shutdown cancellation while dispatch waits for capacity cannot skip fixed-worker drain or resumable-state recovery; active `Downloading` or `Pausing` Domain rows return to `Queued` and are persisted before exit completes.
   - Recovery persistence after cancellation explicitly ignores the canceled operation token; ordinary transfer and progress writes continue to propagate their caller token.
-  - `DownloadArtifactWriter` owns cover, subtitle, danmaku, and NFO generation; `DownloadTaskStateWriter` owns projection updates and narrow persistence error handling.
+  - `DownloadArtifactWriter` owns cover, subtitle, danmaku, and NFO generation; `DownloadTaskStateWriter` is a typed Application-command adapter and never accepts a UI task model.
   - `DownloadPipeline` cannot regain subtitle API, danmaku converter, NFO XML, direct projection-update, or SQLite exception implementation details.
   - Diagnostic logs should include downloader, split/parallel count, speed, and limit values without full local paths or sensitive URLs.
 hazards:
   - Blocking waits in download lifecycle can freeze UI or prevent process exit.
   - The bounded channel is fed by a 500 ms scan of `DownloadListState.Downloading`, so the UI projection remains a runtime input and scheduling has polling latency.
-  - Workers and stages operate on `DownloadingItem`; Domain transition rules do not yet own the runtime state machine.
+  - The channel still carries `DownloadingItem`, and media stages resolve that projection for playback metadata even though all durable transitions are Domain-authoritative.
   - Pipeline retry and backend URL fallback can multiply attempts because one typed retry budget does not yet own both decisions.
   - `DownloadPipeline` still owns UI-facing state and remains over the current 500-line architecture budget.
   - Letting an expected shutdown `OperationCanceledException` escape before state recovery leaves rows stored as active and prevents clean resume after restart.
@@ -1729,36 +1779,58 @@ tests:
   - test.durl-seekability
 ```
 
+### ui.download-projection
+
+```yaml
+id: ui.download-projection
+type: ui
+paths:
+  - DownKyi/Services/Download/DownloadTaskProjectionStore.cs
+  - DownKyi/Services/Download/DownloadTaskProjectionMapper.cs
+responsibility: Projects committed immutable tasks into existing UI models and creates only brand-new queued aggregates from add input.
+inbound:
+  - service.download-task-application
+  - service.download-bootstrap
+  - service.download-add
+  - service.download-runtime
+outbound:
+  - service.download-task-application
+contracts:
+  - The projection owner never opens SQLite or serializes storage JSON directly.
+  - Normal runtime projection is one-way Domain to UI. It may create a brand-new queued task from add input, but cannot reconstruct an existing aggregate from mutable UI state.
+  - Replacing an internal projection model raises every dependent binding notification; Gate 8 remains responsible for marshaling committed events to the UI dispatcher.
+  - Startup restores all unfinished tasks and only the newest 100 history items before loading remaining keyset pages later.
+hazards:
+  - `DownloadingItem` and `DownloadedItem` remain UI projection models, never persistence models.
+tests:
+  - test.storage-resume
+  - test.download-task-application
+  - test.architecture-boundaries
+```
+
 ### core.storage
 
 ```yaml
 id: core.storage
 type: core
 paths:
-  - DownKyi/Services/Download/DownloadTaskProjectionStore.cs
   - DownKyi.Core/Storage/StorageManager.cs
-  - src/DownKyi.Application/Downloads/IDownloadTaskStore.cs
-  - src/DownKyi.Infrastructure/Downloads/SqliteDownloadTaskStore.cs
-responsibility: Projects immutable stored tasks into existing UI models while StorageManager owns app-data, portable-mode, cache, log, and aria paths and Infrastructure owns SQLite persistence.
+responsibility: Resolves portable and per-user application-data, cache, log, database, media, and external-process state paths.
 inbound:
+  - app.application
+  - service.legacy-upgrade
   - service.download-bootstrap
-  - service.download-add
-  - service.download-runtime
 outbound:
-  - service.application-contracts
   - external.filesystem
 contracts:
-  - Download records must survive app restarts.
-  - The projection owner never opens SQLite or serializes storage JSON directly.
-  - Startup restores all unfinished tasks and only the newest 100 history items before loading remaining keyset pages later.
-  - Legacy completion order is atomic: non-cascading remove is deferred and completion moves state through one store transaction.
-  - Storage paths used in logs must be sanitized when exported for diagnostics.
+  - Existing portable-mode and per-user path selection remains compatible across upgrades.
+  - Tests and probes use isolated roots and cannot read a developer's real settings, cookies, database, logs, or aria2 session.
+  - Storage paths used in diagnostics are redacted or reduced to safe filenames.
 hazards:
-  - `DownloadingItem` and `DownloadedItem` remain UI projection models, never persistence models.
   - Mixing user data with program files complicates updates and permissions.
 tests:
-  - test.download-store
-  - test.storage-resume
+  - test.storage-retention
+  - test.ui-smoke
 ```
 
 ### core.logging
@@ -2138,6 +2210,7 @@ sequenceDiagram
     participant Shell as MainWindow
     participant Bootstrap as DownloadBootstrapHostedService
     participant Projection as DownloadTaskProjectionStore
+    participant Tasks as DownloadTaskApplicationService
     participant Store as SqliteDownloadTaskStore
     participant Runtime as DownloadRuntime
 
@@ -2148,8 +2221,10 @@ sequenceDiagram
     App-->>Host: StartAsync after shell creation
     Host->>Bootstrap: StartAsync
     Bootstrap->>Projection: load unfinished + newest history page
-    Projection->>Store: async keyset queries
-    Store-->>Projection: immutable tasks
+    Projection->>Tasks: async task/history queries
+    Tasks->>Store: async keyset queries
+    Store-->>Tasks: immutable tasks
+    Tasks-->>Projection: immutable tasks
     Projection-->>Bootstrap: UI projections
     Bootstrap-->>Shell: project through IUiDispatcher
     Bootstrap-->>Projection: load remaining history in background
@@ -2167,7 +2242,9 @@ sequenceDiagram
     participant Parser as VideoParseCoordinator
     participant API as BiliApiRequest/WebClient
     participant Add as DownloadAddCoordinator
-    participant Storage as DownloadTaskProjectionStore
+    participant Projection as DownloadTaskProjectionStore
+    participant Tasks as DownloadTaskApplicationService
+    participant Store as SqliteDownloadTaskStore
     participant Queue as DownloadingList
 
     VM->>Resolver: classify input
@@ -2181,7 +2258,10 @@ sequenceDiagram
     alt user cancels
         Add-->>VM: return 0, no queue mutation
     else user selects directory
-        Add->>Storage: persist task
+        Add->>Projection: create new queued aggregate
+        Projection->>Tasks: AddAsync(DownloadTask)
+        Tasks->>Store: persist queued aggregate
+        Tasks-->>Projection: committed TaskChanged
         Add->>Queue: append task on UI thread
     end
 ```
@@ -2192,20 +2272,27 @@ Rule: cancel means no task, no background add, no storage write.
 
 ```mermaid
 flowchart TD
-    Queue["DownloadingList item"] --> Channel["DownloadOrchestrator bounded Channel"]
-    Channel --> Runtime["Fixed Download Workers"]
-    Runtime --> Pipeline["DownloadPipeline"]
+    Queue["DownloadingList item"] --> Poll["500 ms compatibility scan"]
+    Poll --> Channel["DownloadOrchestrator bounded Channel<DownloadingItem>"]
+    Channel --> Runtime["Worker extracts DownloadTaskId"]
+    Runtime --> Commands["DownloadTaskApplicationService"]
+    Runtime --> Pipeline["DownloadPipeline(DownloadTaskId)"]
     Pipeline --> Choice{"Downloader setting"}
     Choice --> Builtin["BuiltinTransferBackend"]
     Choice --> Aria["Aria2TransferBackend"]
     Pipeline --> Artifacts["DownloadArtifactWriter"]
-    Pipeline --> State["DownloadTaskStateWriter"]
+    Pipeline --> State["DownloadTaskStateWriter typed adapter"]
     Builtin --> Integrity["DownloadFileIntegrity"]
     Aria --> Integrity
     Integrity -->|valid| FFmpeg["FFmpeg command runner + bounded gate"]
     Integrity -->|invalid| Retry["retry or fail visibly"]
-    FFmpeg --> Complete["DownloadedList + downloaded table"]
-    State --> Projection["DownloadTaskProjectionStore"]
+    FFmpeg --> Complete["Complete Domain command"]
+    State --> Commands
+    Commands --> Store["SqliteDownloadTaskStore"]
+    Store -->|"commit succeeded"| Commands
+    Commands --> Event["TaskChanged snapshot"]
+    Event --> Projection["DownloadTaskProjectionStore"]
+    Projection --> Lists["Downloading / Downloaded UI projections"]
     Retry --> Logs["sanitized diagnostics"]
 ```
 
@@ -2671,6 +2758,17 @@ test.download-domain:
     - legal lifecycle transitions produce new immutable task versions
     - illegal pause, resume, retry, completion, and terminal updates return typed conflicts
     - timestamps and transfer/progress payloads preserve aggregate invariants
+
+test.download-task-application:
+  paths:
+    - tests/DownKyi.Application.Tests/DownloadTaskApplicationServiceTests.cs
+    - tests/DownKyi.Architecture.Tests/DownloadRuntimeArchitectureTests.cs
+  guards:
+    - every command persists the exact aggregate before publishing its projection event
+    - invalid transitions do not persist or publish replacement state
+    - shutdown recovery preserves resume identity, transfer files, progress, and optimistic versions
+    - runtime state APIs accept DownloadTaskId rather than mutable UI task models
+    - DownloadTask.Restore remains limited to SQLite materialization and the legacy migration mapper
 
 test.application-lifetime:
   paths:

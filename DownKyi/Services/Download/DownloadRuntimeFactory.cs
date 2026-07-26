@@ -22,6 +22,7 @@ internal sealed class DownloadRuntimeFactory : IDownloadRuntimeFactory
     private readonly AriaRuntimeClientRegistry _ariaClientRegistry;
     private readonly AriaServer _ariaServer;
     private readonly DownloadTaskProjectionStore _projectionStore;
+    private readonly DownloadTaskStateWriter _stateWriter;
     private readonly IUserNotificationService _notificationService;
     private readonly DownloadDiagnosticLogger _diagnosticLogger;
     private readonly FfmpegProcessor _ffmpegProcessor;
@@ -33,6 +34,7 @@ internal sealed class DownloadRuntimeFactory : IDownloadRuntimeFactory
     public DownloadRuntimeFactory(
         DownloadListState downloadLists,
         DownloadTaskProjectionStore projectionStore,
+        DownloadTaskStateWriter stateWriter,
         IUserNotificationService notificationService,
         IUiDispatcher uiDispatcher,
         ISettingsStore settingsStore,
@@ -46,6 +48,7 @@ internal sealed class DownloadRuntimeFactory : IDownloadRuntimeFactory
         _downloadLists = downloadLists ?? throw new ArgumentNullException(nameof(downloadLists));
         _projectionStore = projectionStore
             ?? throw new ArgumentNullException(nameof(projectionStore));
+        _stateWriter = stateWriter ?? throw new ArgumentNullException(nameof(stateWriter));
         _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
@@ -95,13 +98,14 @@ internal sealed class DownloadRuntimeFactory : IDownloadRuntimeFactory
             return null;
         }
 
-        var stateWriter = new DownloadTaskStateWriter(
-            _projectionStore,
-            _loggerFactory.CreateLogger<DownloadTaskStateWriter>());
         var artifactWriter = new DownloadArtifactWriter(
             _wbiKeyProvider,
-            stateWriter,
+            _stateWriter,
             _loggerFactory.CreateLogger<DownloadArtifactWriter>());
+        var shutdownRecovery = new DownloadTaskShutdownRecovery(
+            _downloadLists,
+            _projectionStore,
+            _stateWriter);
         var pipeline = new DownloadPipeline(
                 _downloadLists,
                 _projectionStore,
@@ -112,12 +116,13 @@ internal sealed class DownloadRuntimeFactory : IDownloadRuntimeFactory
                 _diagnosticLogger,
                 _ffmpegProcessor,
                 artifactWriter,
-                stateWriter,
+                _stateWriter,
+                shutdownRecovery,
                 transferBackend,
                 _loggerFactory.CreateLogger<DownloadPipeline>());
         return new DownloadOrchestrator(
             pipeline,
-            stateWriter,
+            _stateWriter,
             _downloadLists,
             _settingsStore,
             _loggerFactory.CreateLogger<DownloadOrchestrator>());

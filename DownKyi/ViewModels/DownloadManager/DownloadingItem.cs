@@ -37,6 +37,12 @@ namespace DownKyi.ViewModels.DownloadManager
             {
                 ArgumentNullException.ThrowIfNull(value);
                 _downloading = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(DownloadContent));
+                OnPropertyChanged(nameof(DownloadStatusTitle));
+                OnPropertyChanged(nameof(Progress));
+                OnPropertyChanged(nameof(DownloadingFileSize));
+                OnPropertyChanged(nameof(SpeedDisplay));
                 RefreshControlPresentation(value.DownloadStatus);
             }
         }
@@ -135,27 +141,6 @@ namespace DownKyi.ViewModels.DownloadManager
         }
 
         #endregion
-
-        internal void ApplyControlStatus(DownloadStatus status)
-        {
-            Downloading.DownloadStatus = status;
-            DownloadStatusTitle = status switch
-            {
-                DownloadStatus.PauseStarted or DownloadStatus.Pause => DictionaryResource.GetString("Pausing"),
-                DownloadStatus.NotStarted or DownloadStatus.WaitForDownload => DictionaryResource.GetString("Waiting"),
-                DownloadStatus.Downloading => DictionaryResource.GetString("WhileDownloading"),
-                DownloadStatus.DownloadFailed => DictionaryResource.GetString("DownloadFailed"),
-                _ => DownloadStatusTitle
-            };
-            RefreshControlPresentation(status);
-        }
-
-        internal void RestoreControlStatus(DownloadStatus status, string? title)
-        {
-            Downloading.DownloadStatus = status;
-            DownloadStatusTitle = title;
-            RefreshControlPresentation(status);
-        }
 
         private void RefreshControlPresentation(DownloadStatus status)
         {

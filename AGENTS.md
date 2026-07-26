@@ -117,17 +117,21 @@ DownloadBootstrapHostedService
   -> DownloadPipeline                     task workflow and media stages
      -> ITransferBackend                  Builtin or Aria2
      -> DownloadArtifactWriter            cover, subtitle, danmaku, NFO
-     -> DownloadTaskStateWriter           projection persistence boundary
-  -> DownloadTaskProjectionStore
+     -> DownloadTaskStateWriter           typed command adapter
+  -> IDownloadTaskApplicationService      Domain load/transition/persist/event
   -> IDownloadTaskStore / SqliteDownloadTaskStore
+  -> DownloadTaskProjectionStore          committed Domain -> UI projection
 ```
 
-此鏈仍有已追蹤的過渡債：orchestrator 每 500 ms 掃描 UI download collection，channel 元素仍是 `DownloadingItem`，Domain aggregate 主要由 projection store 反向重建。這些不是穩定契約，必須依 live plan 改成 `DownloadTaskId` event-driven queue 與 Domain-authoritative state flow。
+Durable 下載狀態只能由 `IDownloadTaskApplicationService` 依 `DownloadTaskId` 載入 aggregate、執行 transition、persist，成功後才發布 projection event。`DownloadTaskProjectionStore` 不得從既有 UI 狀態反向重建 runtime Domain；`DownloadTask.Restore` 只允許 SQLite materializer 與明確 legacy migration adapter。
+
+此鏈仍有已追蹤的過渡債：orchestrator 每 500 ms 掃描 UI download collection，channel 元素仍是 `DownloadingItem`，pipeline 內部 media stage 仍讀取 projection。這些不是穩定契約，Gate 5/6 必須改成 `DownloadTaskId` event-driven queue 與 typed stages。
 
 穩定契約：
 
 - 未完成任務、GID、partial file map、已完成分段 key、pause/progress 與 optimistic version 必須跨重啟保存。
-- 關閉取消不能跳過 `Downloading -> WaitForDownload` 的恢復寫入。
+- 關閉取消不能跳過 `Downloading/Pausing -> Queued` 的 Domain 恢復寫入。
+- 使用者暫停必須先進入 `Pausing`；只有 transfer worker 真正停止且 partial/resume files 已保留後才能確認為 `Paused`。
 - DURL 依 `Order` 排序且每段 key 包含 order；多段輸出必須經 ffprobe 驗證 seek/decode。
 - 刪除下載中任務必須清除實體暫存與 sidecar；取消與失敗不得把空檔或錯誤頁標記為成功。
 - 進度寫入走 bounded write-behind；UI 通知與 SQLite 寫入不得退回每個 byte/chunk 一次。
@@ -199,8 +203,8 @@ dotnet build .\DownKyi.sln `
 dotnet test .\DownKyi.sln -c Release --no-restore --no-build
 dotnet format .\DownKyi.sln --no-restore --verify-no-changes
 git diff --check
-dotnet package list .\DownKyi.sln --vulnerable --include-transitive
-dotnet package list .\DownKyi.sln --deprecated
+dotnet package list --project .\DownKyi.sln --vulnerable --include-transitive
+dotnet package list --project .\DownKyi.sln --deprecated
 ```
 
 關鍵永久防線：

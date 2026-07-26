@@ -2,18 +2,24 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using DownKyi.ViewModels.DownloadManager;
+using DownKyi.Domain.Downloads;
+using Downloader;
 
 namespace DownKyi.Services.Download;
 
 internal sealed record DownloadTransferRequest(
-    DownloadingItem Download,
+    DownloadTaskId TaskId,
+    string? BackendIdentity,
     IReadOnlyList<string> Urls,
     string Directory,
     string FileName,
     long ExpectedBytes,
     Action EnsureActive,
-    Func<CancellationToken, Task> PersistStateAsync,
+    Func<bool> IsPauseRequested,
+    Action<DownloadProgress> PublishProgress,
+    Func<DownloadProgress, CancellationToken, Task> PersistProgressAsync,
+    Func<string?, CancellationToken, Task> SetBackendIdentityAsync,
+    Action<DownloadService?> SetBuiltinDownloadService,
     CancellationToken CancellationToken);
 
 internal interface ITransferBackend : IDisposable
