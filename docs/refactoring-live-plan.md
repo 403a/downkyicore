@@ -19,6 +19,7 @@ The previous `Status: complete` was incorrect.
 - Gate 5 and the authenticated read-only Bilibili audit passed Windows/Linux/macOS quality CI and CodeQL, then PR #88 was merged into `refactor/pr-30-32-release-hardening` as merge commit `fadd7eb3`.
 - The authenticated audit passed its `/nav` login gate and all 14 contract probes. Only the allowlisted sanitized diagnostics artifact is retained; the candidate-file Gitleaks scan reported zero findings.
 - Gate 6 stage extraction passed two complete Windows/Linux/macOS quality and CodeQL rounds, then PR #89 was merged into `refactor/pr-30-32-release-hardening` as merge commit `e288913f`.
+- Gate 6 retry policy is published as PR #90. Its implementation head passed Windows/Linux/macOS quality run `30187122186` and CodeQL run `30187122221`.
 - `version.txt` remains `1.0.32`; v1.1.0 has not passed its release gate.
 
 No release tag may be created while any release blocker below remains.
@@ -38,7 +39,7 @@ Current progress (2026-07-26):
 - Expired addresses can trigger one playback re-resolution. Rejected resume state clears only that transfer's file and sidecars before one same-address retry; invalid media moves to a backup after deleting corrupt output; retryable network failures preserve partial files and resume sidecars.
 - aria2 performs one physical RPC request per client call; error or empty envelopes fail immediately with typed diagnostics instead of consuming hidden retries. RPC-layer failure preserves the latest GID, while terminal aria2 task failure or an explicit not-found response clears stale identity.
 - Retry diagnostics record only backend, attempt, failure kind, sanitized error code, next action and bounded delay. They never record URL, path, GID or account data.
-- Strict `AnalysisMode=All` Release build has zero warnings and all 615 solution tests pass locally. Format verification, `git diff --check`, module-boundary audit and vulnerable/deprecated package audits are green; Gitleaks reports zero findings across 900 candidate files. Remote matrix and CodeQL remain required before integration.
+- Strict `AnalysisMode=All` Release build has zero warnings and all 615 solution tests pass locally. Format verification, `git diff --check`, module-boundary audit and vulnerable/deprecated package audits are green; Gitleaks reports zero findings across 900 candidate files. PR #90's implementation head passed the complete Windows/Linux/macOS quality matrix and CodeQL; the final documentation head must pass the same gates before integration.
 
 Scope:
 
