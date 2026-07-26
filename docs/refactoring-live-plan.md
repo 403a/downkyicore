@@ -37,7 +37,7 @@ Stage extraction progress (2026-07-26):
 - DURL ordering/key behavior, empty-DASH versus DURL selection, path/image helpers, mux output choice, injected completion clock, stage ordering, cancellation-token forwarding, first-failure short circuit, and output validation have deterministic tests.
 - The duplicate `VideoPlayUrlBasic` adapter is removed; `DownloadTransferKey` is the single stable key owner and selected DASH streams retain `ExpectedSize`.
 - The oversized-file and mutable-collection-consumer allowlists no longer include `DownloadPipeline`.
-- Strict Release build has zero warnings; all 574 solution tests, format verification, `git diff --check`, module-boundary audit, vulnerable/deprecated package audits, and the 894-candidate secret scan are green. Cross-platform CI and integration into the stacked release-hardening base remain for this PR.
+- Strict Release build has zero warnings; all 574 solution tests, format verification, `git diff --check`, module-boundary audit, vulnerable/deprecated package audits, and the 894-candidate secret scan are green. Draft PR #89 passed Windows/Linux/macOS quality CI and CodeQL; final documentation CI and integration into the stacked release-hardening base remain.
 
 Scope:
 
