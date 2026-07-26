@@ -16,6 +16,7 @@ permissions:
 env:
   DOTNET_CLI_TELEMETRY_OPTOUT: '1'
   DOTNET_NOLOGO: '1'
+  CODEQL_OVERLAY_DATABASE_MODE: 'none'
 
 jobs:
   analyze:
@@ -32,6 +33,7 @@ jobs:
         uses: github/codeql-action/init@v4
         with:
           languages: csharp
+          build-mode: manual
       - name: Restore
         run: dotnet restore ./DownKyi.sln
       - name: Build
