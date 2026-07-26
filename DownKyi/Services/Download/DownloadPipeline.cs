@@ -1,1001 +1,118 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.IO;
-using System.Linq;
-using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
-using DownKyi.Application.Desktop;
-using DownKyi.Core.BiliApi;
-using DownKyi.Core.BiliApi.BiliUtils;
-using DownKyi.Core.BiliApi.Sign;
-using DownKyi.Core.BiliApi.VideoStream;
-using DownKyi.Core.BiliApi.VideoStream.Models;
-using DownKyi.Core.FFMpeg;
 using DownKyi.Core.Logging;
-using DownKyi.Core.Settings;
-using DownKyi.Core.Storage;
-using DownKyi.Core.Utils;
 using DownKyi.Domain.Downloads;
-using DownKyi.Images;
-using DownKyi.Models;
-using DownKyi.Platform;
-using DownKyi.Utils;
-using DownKyi.ViewModels;
-using DownKyi.ViewModels.DownloadManager;
 using Microsoft.Extensions.Logging;
 
 namespace DownKyi.Services.Download;
 
 internal sealed class DownloadPipeline : IDownloadTaskExecutor
 {
-    private bool _disposed;
-    private string Tag => _transferBackend.Name;
-
-    private IUserNotificationService NotificationService { get; }
-    private DownloadListState DownloadLists { get; }
-    private ImmutableObservableCollection<DownloadingItem> DownloadingList { get; }
-    private ImmutableObservableCollection<DownloadedItem> DownloadedList { get; }
-    private DownloadTaskProjectionStore ProjectionStore { get; }
-    private IUiDispatcher UiDispatcher { get; }
-    private DownloadDiagnosticLogger DiagnosticLogger { get; }
-    private FfmpegProcessor FfmpegProcessor { get; }
-    private DownloadArtifactWriter ArtifactWriter { get; }
-    private DownloadTaskStateWriter StateWriter { get; }
-    private DownloadTaskShutdownRecovery ShutdownRecovery { get; }
-    private ISettingsStore SettingsStore { get; }
-    private IWbiKeyProvider WbiKeyProvider { get; }
-    private ILogger Logger { get; }
-
+    private readonly DownloadExecutionContextFactory _contextFactory;
+    private readonly IReadOnlyList<IDownloadPipelineStage> _stages;
+    private readonly DownloadTaskStateWriter _stateWriter;
+    private readonly DownloadTaskShutdownRecovery _shutdownRecovery;
     private readonly ITransferBackend _transferBackend;
+    private readonly ILogger _logger;
+    private bool _disposed;
 
-    private const int Retry = 5;
-    private const string NullMark = "<null>";
-
-    private void EnsureDownloadIsActive(
-        DownloadTaskId taskId,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(taskId);
-        cancellationToken.ThrowIfCancellationRequested();
-        var task = ProjectionStore.GetRequiredSnapshot(taskId);
-        if (task.Phase != DownloadPhase.Downloading)
-        {
-            throw new OperationCanceledException("Task is paused or deleted");
-        }
-    }
-
-    private bool IsDownloadedMediaFileUsable(
-        string? file,
-        long expectedBytes = 0,
-        long receivedBytes = 0,
-        long totalBytesToReceive = 0)
-    {
-        var result = DownloadFileIntegrity.Check(file, expectedBytes, receivedBytes, totalBytesToReceive);
-        if (!result.IsUsable)
-        {
-            Logger.LogInformationMessage(result.Reason ?? "Downloaded media file is not usable.");
-        }
-
-        return result.IsUsable;
-    }
-
-    private void DeleteInvalidDownloadedMediaFile(string? file)
-    {
-        if (string.IsNullOrWhiteSpace(file))
-        {
-            return;
-        }
-
-        foreach (var path in new[] { file, $"{file}.aria2", $"{file}.download" })
-        {
-            try
-            {
-                if (File.Exists(path))
-                {
-                    File.Delete(path);
-                }
-            }
-            catch (IOException e)
-            {
-                Logger.LogDebugMessage($"Delete invalid media file failed: {e.Message}");
-            }
-            catch (UnauthorizedAccessException e)
-            {
-                Logger.LogDebugMessage($"Delete invalid media file was denied: {e.Message}");
-            }
-        }
-    }
-
-    /// <summary>
-    /// 初始化
-    /// </summary>
-    /// <param name="downloadLists"></param>
-    /// <param name="projectionStore"></param>
-    /// <param name="dialogService"></param>
-    /// <returns></returns>
     public DownloadPipeline(
-        DownloadListState downloadLists,
-        DownloadTaskProjectionStore projectionStore,
-        IUserNotificationService notificationService,
-        IUiDispatcher uiDispatcher,
-        ISettingsStore settingsStore,
-        IWbiKeyProvider wbiKeyProvider,
-        DownloadDiagnosticLogger diagnosticLogger,
-        FfmpegProcessor ffmpegProcessor,
-        DownloadArtifactWriter artifactWriter,
+        DownloadExecutionContextFactory contextFactory,
+        IReadOnlyList<IDownloadPipelineStage> stages,
         DownloadTaskStateWriter stateWriter,
         DownloadTaskShutdownRecovery shutdownRecovery,
         ITransferBackend transferBackend,
         ILogger logger)
     {
-        DownloadLists = downloadLists ?? throw new ArgumentNullException(nameof(downloadLists));
-        ProjectionStore = projectionStore ?? throw new ArgumentNullException(nameof(projectionStore));
-        DownloadingList = downloadLists.Downloading;
-        DownloadedList = downloadLists.Downloaded;
-        NotificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
-        UiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
-        SettingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
-        WbiKeyProvider = wbiKeyProvider ?? throw new ArgumentNullException(nameof(wbiKeyProvider));
-        DiagnosticLogger = diagnosticLogger ?? throw new ArgumentNullException(nameof(diagnosticLogger));
-        FfmpegProcessor = ffmpegProcessor ?? throw new ArgumentNullException(nameof(ffmpegProcessor));
-        ArtifactWriter = artifactWriter ?? throw new ArgumentNullException(nameof(artifactWriter));
-        StateWriter = stateWriter ?? throw new ArgumentNullException(nameof(stateWriter));
-        ShutdownRecovery = shutdownRecovery ?? throw new ArgumentNullException(nameof(shutdownRecovery));
+        _contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
+        _stages = stages ?? throw new ArgumentNullException(nameof(stages));
+        _stateWriter = stateWriter ?? throw new ArgumentNullException(nameof(stateWriter));
+        _shutdownRecovery = shutdownRecovery
+            ?? throw new ArgumentNullException(nameof(shutdownRecovery));
         _transferBackend = transferBackend ?? throw new ArgumentNullException(nameof(transferBackend));
-        Logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    private static PlayUrlDashVideo? BaseDownloadAudio(DownloadingItem downloading)
-    {
-        ArgumentNullException.ThrowIfNull(downloading);
-
-        // 更新状态显示
-        downloading.DownloadStatusTitle = DictionaryResource.GetString("WhileDownloading");
-        downloading.DownloadContent = DictionaryResource.GetString("DownloadingAudio");
-        // 下载大小
-        downloading.DownloadingFileSize = string.Empty;
-        downloading.Progress = 0;
-        // 下载速度
-        downloading.SpeedDisplay = string.Empty;
-
-        // 如果没有Dash，返回null
-        if (downloading.PlayUrl?.Dash == null)
-        {
-            return null;
-        }
-
-        // 如果audio列表没有内容，则返回null
-        if (downloading.PlayUrl.Dash.Audio == null)
-        {
-            return null;
-        }
-        else if (downloading.PlayUrl.Dash.Audio.Count == 0)
-        {
-            return null;
-        }
-
-        // 根据音频id匹配
-        PlayUrlDashVideo? downloadAudio = null;
-        foreach (var audio in downloading.PlayUrl.Dash.Audio)
-        {
-            if (audio.Id == downloading.AudioCodec.Id)
-            {
-                downloadAudio = audio;
-                break;
-            }
-        }
-
-        if (downloading.AudioCodec.Id == 30250 &&
-            downloading.PlayUrl.Dash.Dolby?.Audio is { Count: > 0 } dolbyAudio)
-        {
-            downloadAudio = dolbyAudio[0];
-        }
-
-        if (downloading.AudioCodec.Id == 30251 && downloading.PlayUrl.Dash.Flac?.Audio is { } flacAudio)
-        {
-            downloadAudio = flacAudio;
-        }
-
-        return downloadAudio;
-    }
-
-    private static VideoPlayUrlBasic? BaseDownloadVideo(DownloadingItem downloading)
-    {
-        ArgumentNullException.ThrowIfNull(downloading);
-
-        // 更新状态显示
-        downloading.DownloadStatusTitle = DictionaryResource.GetString("WhileDownloading");
-        downloading.DownloadContent = DictionaryResource.GetString("DownloadingVideo");
-        // 下载大小
-        downloading.DownloadingFileSize = string.Empty;
-        downloading.Progress = 0;
-        // 下载速度
-        downloading.SpeedDisplay = string.Empty;
-
-        if (downloading.PlayUrl?.Dash?.Video?.Count > 0)
-        {
-            foreach (var video in downloading.PlayUrl.Dash.Video)
-            {
-                var codecs = Constant.GetCodecIds().FirstOrDefault(t => t.Id == video.CodecId);
-                if (video.Id == downloading.Resolution.Id && codecs?.Name == downloading.VideoCodecName)
-                {
-                    return new VideoPlayUrlBasic
-                    {
-                        BackupUrl = video.BackupUrl,
-                        Codecs = video.Codecs,
-                        Id = video.Id,
-                        BaseUrl = video.BaseAddress
-                    };
-                }
-            }
-        }
-
-        if (downloading?.PlayUrl?.Durl?.Count > 0)
-        {
-            return CreateDurlDownloadDescriptor(downloading.PlayUrl.Durl);
-        }
-
-        return null;
-    }
-
-    internal static VideoPlayUrlBasic? CreateDurlDownloadDescriptor(IEnumerable<PlayUrlDurl> durls)
-    {
-        ArgumentNullException.ThrowIfNull(durls);
-
-        var durl = durls.OrderBy(item => item.Order).FirstOrDefault();
-        if (durl == null)
-        {
-            return null;
-        }
-
-        return new VideoPlayUrlBasic
-        {
-            BackupUrl = durl.BackupUrl,
-            BaseUrl = durl.SourceAddress,
-            Codecs = "durl",
-            Id = durl.Order,
-            ExpectedSize = durl.Size
-        };
-    }
-
-    private Task<string?> DownloadAudioAsync(
-        DownloadingItem downloading,
-        ApplicationSettings settings,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(downloading);
-        return DownloadMediaAsync(
-            downloading,
-            BaseDownloadAudio(downloading),
-            settings,
-            cancellationToken);
-    }
-
-    private Task<string?> DownloadVideoAsync(
-        DownloadingItem downloading,
-        ApplicationSettings settings,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(downloading);
-        var descriptor = BaseDownloadVideo(downloading);
-        return descriptor == null
-            ? Task.FromResult<string?>(null)
-            : DownloadMediaAsync(downloading, new PlayUrlDashVideo
-            {
-                Id = descriptor.Id,
-                Codecs = descriptor.Codecs,
-                BaseAddress = descriptor.BaseUrl,
-                BackupUrl = descriptor.BackupUrl,
-                ExpectedSize = descriptor.ExpectedSize
-            }, settings, cancellationToken);
-    }
-
-    private async Task<string?> DownloadMediaAsync(
-        DownloadingItem downloading,
-        PlayUrlDashVideo? media,
-        ApplicationSettings settings,
-        CancellationToken cancellationToken)
-    {
-        if (media == null)
-        {
-            return null;
-        }
-
-        var taskId = new DownloadTaskId(downloading.DownloadBase.Id);
-        EnsureDownloadIsActive(taskId, cancellationToken);
-        var urls = new List<string>();
-        if (!string.IsNullOrWhiteSpace(media.BaseAddress))
-        {
-            urls.Add(media.BaseAddress);
-        }
-
-        urls.AddRange(media.BackupUrl.Where(url => !string.IsNullOrWhiteSpace(url)));
-        if (urls.Count == 0)
-        {
-            return NullMark;
-        }
-
-        var normalizedBasePath = downloading.DownloadBase.FilePath
-            .Replace('\\', Path.DirectorySeparatorChar)
-            .Replace('/', Path.DirectorySeparatorChar);
-        var path = Path.GetDirectoryName(normalizedBasePath);
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return NullMark;
-        }
-
-        var fileName = Guid.NewGuid().ToString("N");
-        var key = VideoPlayUrlBasic.CreateDownloadKey(media.Id, media.Codecs);
-        var snapshot = ProjectionStore.GetRequiredSnapshot(taskId);
-        if (snapshot.Plan.TransferFiles.TryGetValue(key, out var existingFileName))
-        {
-            fileName = existingFileName;
-            var cachedFile = Path.Combine(path, fileName);
-            if (snapshot.Transfer.CompletedFileKeys.Contains(key, StringComparer.Ordinal) &&
-                IsDownloadedMediaFileUsable(cachedFile, media.ExpectedSize))
-            {
-                return cachedFile;
-            }
-
-            if (snapshot.Transfer.CompletedFileKeys.Contains(key, StringComparer.Ordinal))
-            {
-                DeleteInvalidDownloadedMediaFile(cachedFile);
-                await StateWriter.InvalidateCompletedFileAsync(
-                    taskId,
-                    key,
-                    cancellationToken).ConfigureAwait(true);
-            }
-        }
-        else
-        {
-            await StateWriter.RecordTransferFileAsync(
-                taskId,
-                key,
-                fileName,
-                cancellationToken).ConfigureAwait(true);
-        }
-
-        NormalizeTransferSchemes(urls, settings.Network.UseSsl == AllowStatus.Yes);
-        var targetFile = Path.Combine(path, fileName);
-        var outcome = await TransferAsync(
-            taskId,
-            urls,
-            path,
-            fileName,
-            media.ExpectedSize,
-            cancellationToken).ConfigureAwait(true);
-        if (outcome == DownloadTransferOutcome.Succeeded &&
-            IsDownloadedMediaFileUsable(targetFile, media.ExpectedSize))
-        {
-            await StateWriter.CompleteTransferFileAsync(
-                taskId,
-                key,
-                cancellationToken).ConfigureAwait(true);
-            return targetFile;
-        }
-
-        if (outcome == DownloadTransferOutcome.Paused)
-        {
-            throw new OperationCanceledException("Download was paused.");
-        }
-
-        DeleteInvalidDownloadedMediaFile(targetFile);
-        await StateWriter.SetBackendIdentityAsync(
-            taskId,
-            null,
-            cancellationToken).ConfigureAwait(true);
-
-        return NullMark;
-    }
-
-    private static void NormalizeTransferSchemes(List<string> urls, bool useSsl)
-    {
-        for (var index = 0; index < urls.Count; index++)
-        {
-            var url = urls[index];
-            if (useSsl && url.StartsWith("http://", StringComparison.Ordinal))
-            {
-                urls[index] = "https://" + url["http://".Length..];
-            }
-            else if (!useSsl && url.StartsWith("https://", StringComparison.Ordinal))
-            {
-                urls[index] = "http://" + url["https://".Length..];
-            }
-        }
-    }
-
-    private async Task<string?> MixedFlowAsync(
-        DownloadingItem downloading,
-        string? audioUid,
-        string? videoUid,
-        VideoApplicationSettings videoSettings,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(downloading);
-        var taskId = new DownloadTaskId(downloading.DownloadBase.Id);
-        EnsureDownloadIsActive(taskId, cancellationToken);
-
-        // 更新状态显示
-        downloading.DownloadStatusTitle = DictionaryResource.GetString("MixedFlow");
-        downloading.DownloadContent = DictionaryResource.GetString("DownloadingVideo");
-        // 下载大小
-        downloading.DownloadingFileSize = string.Empty;
-        // 下载速度
-        downloading.SpeedDisplay = string.Empty;
-        await StateWriter.UpdateActivityAsync(
-            taskId,
-            downloading.DownloadContent,
-            downloading.DownloadStatusTitle,
-            cancellationToken).ConfigureAwait(true);
-
-        var finalFile = $"{downloading.DownloadBase.FilePath}.mp4";
-        if (videoUid == null)
-        {
-            finalFile = videoSettings.IsTranscodingAacToMp3 == AllowStatus.Yes
-                ? $"{downloading.DownloadBase.FilePath}.mp3"
-                : downloading.AudioCodec.Id == 30251
-                    ? $"{downloading.DownloadBase.FilePath}.flac"
-                    : $"{downloading.DownloadBase.FilePath}.aac";
-        }
-
-        // 合并音视频
-        var succeeded = await FfmpegProcessor
-            .MergeVideoAsync(videoSettings, audioUid, videoUid, finalFile, cancellationToken)
-            .ConfigureAwait(true);
-        downloading.FileSize = await DownloadOutputRecorder.RecordFileSizeAsync(
-            taskId,
-            succeeded ? finalFile : null,
-            StateWriter,
-            cancellationToken).ConfigureAwait(true);
-        return succeeded ? finalFile : null;
-    }
-
-
-    private async Task<FfmpegOperationResult> ConcatDurlVideosAsync(
-        DownloadingItem downloading,
-        IReadOnlyList<DurlDownloadResult> downloads,
-        VideoApplicationSettings videoSettings,
-        CancellationToken cancellationToken)
-    {
-        var taskId = new DownloadTaskId(downloading.DownloadBase.Id);
-        downloading.DownloadStatusTitle = DictionaryResource.GetString("ConcatVideos");
-        downloading.DownloadContent = DictionaryResource.GetString("DownloadingVideo");
-        downloading.DownloadingFileSize = string.Empty;
-        downloading.SpeedDisplay = string.Empty;
-        await StateWriter.UpdateActivityAsync(
-            taskId,
-            downloading.DownloadContent,
-            downloading.DownloadStatusTitle,
-            cancellationToken).ConfigureAwait(true);
-
-        var finalFile = $"{downloading.DownloadBase.FilePath}.mp4";
-        var segments = downloads
-            .OrderBy(download => download.Durl.Order)
-            .Select(download => new FfmpegConcatSegment(
-                download.Durl.Order,
-                download.FilePath,
-                TimeSpan.FromMilliseconds(download.Durl.Length)))
-            .ToArray();
-        var result = await FfmpegProcessor
-            .ConcatDurlVideosAsync(
-                videoSettings,
-                segments,
-                finalFile,
-                cancellationToken: cancellationToken)
-            .ConfigureAwait(true);
-        downloading.FileSize = await DownloadOutputRecorder.RecordFileSizeAsync(
-            taskId,
-            result.Succeeded ? result.OutputPath : null,
-            StateWriter,
-            cancellationToken).ConfigureAwait(true);
-
-        return result;
-    }
-
-    private sealed record DurlDownloadResult(PlayUrlDurl Durl, string FilePath);
-
-
-    private async Task ParseAsync(
-        DownloadTaskId taskId,
-        DownloadingItem downloading,
-        ApplicationSettings settings,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(downloading);
-
-        // 更新状态显示
-        downloading.DownloadStatusTitle = DictionaryResource.GetString("Parsing");
-        downloading.DownloadContent = string.Empty;
-        // 下载大小
-        downloading.DownloadingFileSize = string.Empty;
-        downloading.Progress = 0;
-        // 下载速度
-        downloading.SpeedDisplay = string.Empty;
-        await StateWriter.UpdateActivityAsync(
-            taskId,
-            downloading.DownloadContent,
-            downloading.DownloadStatusTitle,
-            cancellationToken).ConfigureAwait(true);
-
-        if (downloading.PlayUrl != null)
-        {
-            return;
-        }
-
-        PlayUrl? playUrl = null;
-        switch (downloading.Downloading.PlayStreamType)
-        {
-            case PlayStreamType.Video:
-                playUrl = await WbiRequestExecutor.ExecuteAsync(
-                    WbiKeyProvider,
-                    (keys, unixTimeSeconds) => settings.Video.VideoParseType switch
-                {
-                    0 => VideoStreamApi.GetVideoPlayUrl(keys, unixTimeSeconds, downloading.DownloadBase.Avid, downloading.DownloadBase.Bvid, downloading.DownloadBase.Cid,
-                        cancellationToken: cancellationToken),
-                    1 => VideoStreamApi.GetVideoPlayUrlWebPage(keys, unixTimeSeconds, downloading.DownloadBase.Avid, downloading.DownloadBase.Bvid, downloading.DownloadBase.Cid,
-                        downloading.DownloadBase.Page, cancellationToken),
-                    _ => throw new ArgumentException("Invalid video parse type. Valid values are: 0 (WebAPI) or 1 (WebPage).")
-                },
-                    TimeProvider.System,
-                    cancellationToken).ConfigureAwait(true);
-                break;
-            case PlayStreamType.Bangumi:
-                playUrl = VideoStreamApi.GetBangumiPlayUrl(downloading.DownloadBase.Avid, downloading.DownloadBase.Bvid,
-                    downloading.DownloadBase.Cid, cancellationToken: cancellationToken);
-                break;
-            case PlayStreamType.Cheese:
-                playUrl = VideoStreamApi.GetCheesePlayUrl(downloading.DownloadBase.Avid,
-                    downloading.DownloadBase.Bvid, downloading.DownloadBase.Cid,
-                    downloading.DownloadBase.EpisodeId, cancellationToken: cancellationToken);
-                break;
-            default:
-                break;
-        }
-
-        if (playUrl == null)
-        {
-            await MarkFailedAsync(taskId, cancellationToken).ConfigureAwait(true);
-            return;
-        }
-
-        downloading.PlayUrl = playUrl;
-    }
-
-    /// <summary>
-    /// 下载一个视频
-    /// </summary>
-    /// <param name="taskId"></param>
-    /// <returns></returns>
     public async Task ExecuteAsync(
         DownloadTaskId taskId,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(taskId);
-        var downloading = ProjectionStore.GetRequiredDownloadingProjection(taskId);
-        var settings = SettingsStore.Current;
-        downloading.DownloadBase.FilePath = downloading.DownloadBase.FilePath.Replace("\\", "/", StringComparison.Ordinal);
-        var path = GetDownloadDirectoryPath(downloading.DownloadBase.FilePath);
-
-        // 路径不存在则创建
-        if (!Directory.Exists(path))
-        {
-            try
-            {
-                Directory.CreateDirectory(path);
-            }
-            catch (IOException e)
-            {
-                Logger.LogDebugMessage(e.Message);
-
-                NotificationService.Show($"{path}{DictionaryResource.GetString("DirectoryError")}");
-                await MarkFailedAsync(taskId, cancellationToken).ConfigureAwait(true);
-                return;
-            }
-            catch (UnauthorizedAccessException e)
-            {
-                Logger.LogDebugMessage(e.Message);
-
-                NotificationService.Show($"{path}{DictionaryResource.GetString("DirectoryError")}");
-                await MarkFailedAsync(taskId, cancellationToken).ConfigureAwait(true);
-                return;
-            }
-        }
-
+        var context = _contextFactory.Create(taskId);
         try
         {
+            var run = await ExecuteStagesAsync(
+                _stages,
+                context,
+                cancellationToken).ConfigureAwait(true);
+            if (run.Result.IsSuccess)
             {
-                // 初始化
-                downloading.DownloadStatusTitle = string.Empty;
-                downloading.DownloadContent = string.Empty;
-
-                // 解析并依次下载音频、视频、弹幕、字幕、封面等内容
-                await ParseAsync(
-                    taskId,
-                    downloading,
-                    settings,
-                    cancellationToken).ConfigureAwait(true);
-
-                // 暂停
-                EnsureDownloadIsActive(taskId, cancellationToken);
-
-                var isMediaSuccess = true;
-
-                if (downloading.PlayUrl.Dash != null)
-                {
-                    string? audioUid = null;
-
-                    string? videoUid = null;
-                    // 如果需要下载音频
-                    if (downloading.DownloadBase.NeedDownloadContent["downloadAudio"])
-                    {
-                        for (var i = 0; i < Retry; i++)
-                        {
-                            audioUid = await DownloadAudioAsync(
-                                downloading,
-                                settings,
-                                cancellationToken).ConfigureAwait(true);
-                            if (audioUid != null && audioUid != NullMark)
-                            {
-                                break;
-                            }
-                        }
-                    }
-
-                    if (audioUid == NullMark)
-                    {
-                        await MarkFailedAsync(taskId, cancellationToken).ConfigureAwait(true);
-                        return;
-                    }
-
-                    EnsureDownloadIsActive(taskId, cancellationToken);
-
-
-                    // 如果需要下载视频
-                    if (downloading.DownloadBase.NeedDownloadContent["downloadVideo"])
-                    {
-                        //videoUid = DownloadVideo(downloading);
-                        for (var i = 0; i < Retry; i++)
-                        {
-                            videoUid = await DownloadVideoAsync(
-                                downloading,
-                                settings,
-                                cancellationToken).ConfigureAwait(true);
-                            if (videoUid != null && videoUid != NullMark)
-                            {
-                                break;
-                            }
-                        }
-                    }
-
-                    if (videoUid == NullMark)
-                    {
-                        await MarkFailedAsync(taskId, cancellationToken).ConfigureAwait(true);
-                        return;
-                    }
-
-                    EnsureDownloadIsActive(taskId, cancellationToken);
-
-                    // 混流
-                    var outputMedia = string.Empty;
-                    if (downloading.DownloadBase.NeedDownloadContent["downloadAudio"] ||
-                        downloading.DownloadBase.NeedDownloadContent["downloadVideo"])
-                    {
-                        outputMedia = await MixedFlowAsync(
-                            downloading,
-                            audioUid,
-                            videoUid,
-                            settings.Video,
-                            cancellationToken).ConfigureAwait(true);
-                    }
-
-                    // 检测音频、视频是否下载成功
-
-                    if (downloading.DownloadBase.NeedDownloadContent["downloadAudio"] ||
-                        downloading.DownloadBase.NeedDownloadContent["downloadVideo"])
-                    {
-                        // 只有下载音频不下载视频时才输出aac
-                        // 只要下载视频就输出mp4
-                        // 成功
-                        isMediaSuccess = File.Exists(outputMedia);
-                    }
-                }
-                else if (downloading.PlayUrl.Durl.Count > 0)
-                {
-                    if (downloading.DownloadBase.NeedDownloadContent["downloadAudio"] ||
-                        downloading.DownloadBase.NeedDownloadContent["downloadVideo"])
-                    {
-                        var durls = downloading.PlayUrl.Durl
-                            .OrderBy(durl => durl.Order)
-                            .ToList();
-                        var downloadStatus = durls
-                            .Select(durl => new DurlDownloadResult(durl, NullMark))
-                            .ToArray();
-                        var originalDurls = downloading.PlayUrl.Durl;
-                        try
-                        {
-                            for (var retryCount = 0; retryCount < Retry; retryCount++)
-                            {
-                                for (var index = 0; index < downloadStatus.Length; index++)
-                                {
-                                    if (downloadStatus[index].FilePath != NullMark)
-                                    {
-                                        continue;
-                                    }
-
-                                    downloading.PlayUrl.Durl = new[] { downloadStatus[index].Durl };
-                                    var result = await DownloadVideoAsync(
-                                        downloading,
-                                        settings,
-                                        cancellationToken).ConfigureAwait(true);
-                                    downloadStatus[index] = downloadStatus[index] with
-                                    {
-                                        FilePath = result ?? NullMark
-                                    };
-                                }
-
-                                if (downloadStatus.All(download => download.FilePath != NullMark))
-                                {
-                                    break;
-                                }
-
-                                await Task.Delay(
-                                        TimeSpan.FromSeconds(1),
-                                        cancellationToken)
-                                    .ConfigureAwait(true);
-                            }
-                        }
-                        finally
-                        {
-                            downloading.PlayUrl.Durl = originalDurls;
-                        }
-
-                        if (downloadStatus.Any(download => download.FilePath == NullMark))
-                        {
-                            await MarkFailedAsync(taskId, cancellationToken).ConfigureAwait(true);
-                            return;
-                        }
-
-                        EnsureDownloadIsActive(taskId, cancellationToken);
-
-                        if (durls.Count > 1)
-                        {
-                            var concatResult = await ConcatDurlVideosAsync(
-                                    downloading,
-                                    downloadStatus,
-                                    settings.Video,
-                                    cancellationToken)
-                                .ConfigureAwait(true);
-                            isMediaSuccess = concatResult.Succeeded;
-                        }
-                        else
-                        {
-                            var outputMedia = await MixedFlowAsync(
-                                downloading,
-                                null,
-                                downloadStatus[0].FilePath,
-                                settings.Video,
-                                cancellationToken).ConfigureAwait(true);
-                            isMediaSuccess = File.Exists(outputMedia);
-                        }
-                    }
-
-                    if (downloading.DownloadBase.NeedDownloadContent["downloadAudio"] &&
-                        !downloading.DownloadBase.NeedDownloadContent["downloadVideo"])
-                    {
-                        //音频分离？
-                    }
-
-                    EnsureDownloadIsActive(taskId, cancellationToken);
-                }
-                else
-                {
-                    await MarkFailedAsync(taskId, cancellationToken).ConfigureAwait(true);
-                    return;
-                }
-
-
-                //nfo
-                if (settings.Video.Content.GenerateMovieMetadata)
-                {
-                    ArtifactWriter.GenerateNfoFile(downloading);
-                }
-
-                string? outputDanmaku = null;
-                // 如果需要下载弹幕
-                if (downloading.DownloadBase.NeedDownloadContent["downloadDanmaku"])
-                {
-                    outputDanmaku = await ArtifactWriter.DownloadDanmakuAsync(
-                        downloading,
-                        settings.Danmaku,
-                        cancellationToken).ConfigureAwait(true);
-                }
-
-                // 暂停
-                EnsureDownloadIsActive(taskId, cancellationToken);
-
-                IReadOnlyList<string>? outputSubtitles = null;
-                // 如果需要下载字幕
-                if (downloading.DownloadBase.NeedDownloadContent["downloadSubtitle"])
-                {
-                    outputSubtitles = await ArtifactWriter.DownloadSubtitleAsync(
-                        downloading,
-                        cancellationToken).ConfigureAwait(true);
-                }
-
-                // 暂停
-                EnsureDownloadIsActive(taskId, cancellationToken);
-
-                string? outputCover = null;
-                string? outputPageCover = null;
-                // 如果需要下载封面
-                if (downloading.DownloadBase.NeedDownloadContent["downloadCover"])
-                {
-                    // page的封面
-                    var pageCoverFileName = $"{downloading.DownloadBase.FilePath}.{GetImageExtension(downloading.DownloadBase.PageCoverUrl)}";
-                    outputPageCover = await ArtifactWriter.DownloadCoverAsync(
-                        downloading,
-                        downloading.DownloadBase.PageCoverUrl,
-                        pageCoverFileName,
-                        cancellationToken).ConfigureAwait(true);
-
-
-                    var coverFileName = $"{downloading.DownloadBase.FilePath}.Cover.{GetImageExtension(downloading.DownloadBase.CoverUrl)}";
-                    // 封面
-                    outputCover = await ArtifactWriter.DownloadCoverAsync(
-                        downloading,
-                        downloading.DownloadBase.CoverUrl,
-                        coverFileName,
-                        cancellationToken).ConfigureAwait(true);
-                }
-
-                // 暂停
-                EnsureDownloadIsActive(taskId, cancellationToken);
-
-                // 检测弹幕是否下载成功
-                var isDanmakuSuccess = true;
-                if (downloading.DownloadBase.NeedDownloadContent["downloadDanmaku"])
-                {
-                    // 成功
-                    isDanmakuSuccess = File.Exists(outputDanmaku);
-                }
-
-                // 检测字幕是否下载成功
-                var isSubtitleSuccess = true;
-                if (downloading.DownloadBase.NeedDownloadContent["downloadSubtitle"])
-                {
-                    if (outputSubtitles == null)
-                    {
-                        // 为null时表示不存在字幕
-                    }
-                    else
-                    {
-                        foreach (var subtitle in outputSubtitles)
-                        {
-                            if (!File.Exists(subtitle))
-                            {
-                                // 如果有一个不存在则失败
-                                isSubtitleSuccess = false;
-                            }
-                        }
-                    }
-                }
-
-                // 检测封面是否下载成功
-                var isCover = true;
-                if (downloading.DownloadBase.NeedDownloadContent["downloadCover"])
-                {
-                    if (File.Exists(outputCover) || File.Exists(outputPageCover))
-                    {
-                        // 成功
-                        isCover = true;
-                    }
-                    else
-                    {
-                        isCover = false;
-                    }
-                }
-
-                if (!isMediaSuccess || !isDanmakuSuccess || !isSubtitleSuccess || !isCover)
-                {
-                    await MarkFailedAsync(taskId, cancellationToken).ConfigureAwait(true);
-                    return;
-                }
-
-                // 下载完成后处理
-                var downloaded = new Downloaded
-                {
-                    MaxSpeedDisplay = Format.FormatSpeedWithBandwidth(
-                        ProjectionStore.GetRequiredSnapshot(taskId).Transfer.MaximumBytesPerSecond),
-                };
-                // 设置完成时间
-                downloaded.SetFinishedTimestamp(new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds());
-
-                var completedTask = await StateWriter.CompleteAsync(
-                    taskId,
-                    new DownloadCompletion(
-                        downloaded.FinishedTimestamp,
-                        downloaded.FinishedTime,
-                        downloaded.MaxSpeedDisplay),
-                    cancellationToken).ConfigureAwait(true);
-                var downloadedItem = DownloadTaskProjectionStore.CreateDownloadedProjection(completedTask);
-                await UiDispatcher.InvokeAsync(() =>
-                {
-                    // 加入到下载完成list中，并从下载中list去除
-                    DownloadedList.Add(downloadedItem);
-                    DownloadingList.Remove(downloading);
-
-                    // 下载完成列表排序
-                    var finishedSort = settings.Basic.DownloadFinishedSort;
-                    DownloadLists.SortDownloaded(finishedSort);
-                }).ConfigureAwait(true);
+                return;
             }
+
+            _logger.LogWarningMessage(
+                $"Download stage {run.FailedStage ?? "unknown"} failed with " +
+                $"{run.Result.Error?.Code ?? "unknown"}.");
+            await MarkFailedAsync(taskId, cancellationToken).ConfigureAwait(true);
         }
-        catch (OperationCanceledException e)
+        catch (OperationCanceledException exception)
         {
-            Logger.LogDebugMessage(e.Message);
+            _logger.LogDebugMessage(exception.Message);
         }
     }
 
-    /// <summary>
-    /// 下载失败后的处理
-    /// </summary>
-    /// <param name="taskId"></param>
-    public async Task MarkFailedAsync(
+    public Task MarkFailedAsync(
         DownloadTaskId taskId,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(taskId);
-        await StateWriter.FailAsync(
+        return _stateWriter.FailAsync(
             taskId,
-            new DownloadFailure(
-                "download.runtime.failed",
-                DictionaryResource.GetString("DownloadFailed"),
-                true),
-            cancellationToken).ConfigureAwait(true);
+            DownloadActivityPresenter.CreateRetryableFailure(),
+            cancellationToken);
     }
 
-    /// <summary>
-    /// 获取图片的扩展名
-    /// </summary>
-    /// <param name="coverUrl"></param>
-    /// <returns></returns>
-    internal static string GetImageExtension(string? coverUrl)
+    public Task PersistShutdownStateAsync()
     {
-        if (string.IsNullOrWhiteSpace(coverUrl))
+        return _shutdownRecovery.PersistAsync();
+    }
+
+    internal static async Task<DownloadStageRunResult> ExecuteStagesAsync(
+        IReadOnlyList<IDownloadPipelineStage> stages,
+        DownloadExecutionContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(stages);
+        ArgumentNullException.ThrowIfNull(context);
+        foreach (var stage in stages)
         {
-            return string.Empty;
+            var result = await stage.ExecuteAsync(context, cancellationToken)
+                .ConfigureAwait(true);
+            if (!result.IsSuccess)
+            {
+                return new DownloadStageRunResult(result, stage.Name);
+            }
         }
 
-        var candidate = coverUrl.StartsWith("//", StringComparison.Ordinal)
-            ? $"{Uri.UriSchemeHttps}:{coverUrl}"
-            : coverUrl;
-        var path = Uri.TryCreate(candidate, UriKind.Absolute, out var uri)
-            ? uri.AbsolutePath
-            : coverUrl.Split('?', '#')[0];
-        return Path.GetExtension(path).TrimStart('.');
+        return new DownloadStageRunResult(
+            DownloadStageResult.Success(nameof(DownloadPipeline)),
+            FailedStage: null);
     }
 
-    internal static string GetDownloadDirectoryPath(string filePath)
+    public Task StartAsync(CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
-        return Path.GetDirectoryName(filePath)
-               ?? throw new ArgumentException("Download file path must include a directory.", nameof(filePath));
+        cancellationToken.ThrowIfCancellationRequested();
+        return _transferBackend.StartAsync(cancellationToken);
     }
 
-    public async Task PersistShutdownStateAsync()
+    public Task StopAsync(CancellationToken cancellationToken = default)
     {
-        await ShutdownRecovery.PersistAsync().ConfigureAwait(true);
+        return _transferBackend.StopAsync(cancellationToken);
     }
 
     public void Dispose()
-    {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
-
-    private void Dispose(bool disposing)
     {
         if (_disposed)
         {
@@ -1003,49 +120,6 @@ internal sealed class DownloadPipeline : IDownloadTaskExecutor
         }
 
         _disposed = true;
-        if (!disposing)
-        {
-            return;
-        }
-
         _transferBackend.Dispose();
     }
-
-    private Task<DownloadTransferOutcome> TransferAsync(
-        DownloadTaskId taskId,
-        IReadOnlyList<string> urls,
-        string path,
-        string localFileName,
-        long expectedBytes,
-        CancellationToken cancellationToken)
-    {
-        return _transferBackend.TransferAsync(DownloadTransferRequestFactory.Create(
-            taskId,
-            urls,
-            path,
-            localFileName,
-            expectedBytes,
-            ProjectionStore,
-            StateWriter,
-            () => EnsureDownloadIsActive(taskId, cancellationToken),
-            cancellationToken));
-    }
-
-    public async Task StartAsync(CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        await _transferBackend.StartAsync(cancellationToken).ConfigureAwait(true);
-    }
-
-    public async Task StopAsync(CancellationToken cancellationToken = default)
-    {
-        await _transferBackend.StopAsync(cancellationToken).ConfigureAwait(true);
-    }
-}
-
-internal enum DownloadTransferOutcome
-{
-    Failed,
-    Succeeded,
-    Paused
 }

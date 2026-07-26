@@ -109,16 +109,40 @@ internal sealed class DownloadRuntimeFactory : IDownloadRuntimeFactory
         var shutdownRecovery = new DownloadTaskShutdownRecovery(
             _tasks,
             _stateWriter);
-        var pipeline = new DownloadPipeline(
-                _downloadLists,
-                _projectionStore,
+        var presenter = new DownloadActivityPresenter(_stateWriter);
+        var contextFactory = new DownloadExecutionContextFactory(
+            _projectionStore,
+            _settingsStore);
+        var completionProjector = new DownloadCompletionProjector(
+            _downloadLists,
+            _uiDispatcher);
+        IDownloadPipelineStage[] stages =
+        [
+            new ResolvePlaybackStage(
                 _notificationService,
-                _uiDispatcher,
-                _settingsStore,
+                presenter,
                 _wbiKeyProvider,
-                _diagnosticLogger,
+                _loggerFactory.CreateLogger<ResolvePlaybackStage>()),
+            new DownloadMediaStage(
+                _projectionStore,
+                _stateWriter,
+                transferBackend,
+                _loggerFactory.CreateLogger<DownloadMediaStage>()),
+            new DownloadArtifactsStage(artifactWriter),
+            new MuxStage(
+                presenter,
                 _ffmpegProcessor,
-                artifactWriter,
+                _stateWriter),
+            new ValidateStage(),
+            new FinalizeStage(
+                _projectionStore,
+                _stateWriter,
+                completionProjector,
+                TimeProvider.System)
+        ];
+        var pipeline = new DownloadPipeline(
+                contextFactory,
+                stages,
                 _stateWriter,
                 shutdownRecovery,
                 transferBackend,

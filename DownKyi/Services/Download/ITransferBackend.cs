@@ -32,3 +32,10 @@ internal interface ITransferBackend : IDisposable
 
     Task<DownloadTransferOutcome> TransferAsync(DownloadTransferRequest request);
 }
+
+internal enum DownloadTransferOutcome
+{
+    Failed,
+    Succeeded,
+    Paused
+}
