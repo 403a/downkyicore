@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using DownKyi.Application.Downloads;
 using DownKyi.Infrastructure.Downloads;
 using DownKyi.Infrastructure.Time;
 using DownKyi.Services.Download;
@@ -15,10 +16,12 @@ internal static class DownloadRestoreScenario
     {
         Directory.CreateDirectory(dataRoot);
         var databasePath = Path.Combine(dataRoot, "restore.db");
+        var clock = new SystemClock();
         var store = new SqliteDownloadTaskStore(
             new SqliteDownloadTaskStoreOptions(databasePath),
-            new SystemClock());
-        var projection = new DownloadTaskProjectionStore(store, new SystemClock());
+            clock);
+        var tasks = new DownloadTaskApplicationService(store, clock);
+        var projection = new DownloadTaskProjectionStore(tasks, clock);
         try
         {
             await store.InitializeAsync(cancellationToken).ConfigureAwait(false);
@@ -85,6 +88,7 @@ internal static class DownloadRestoreScenario
         finally
         {
             projection.Dispose();
+            tasks.Dispose();
             store.Dispose();
             SqliteConnection.ClearAllPools();
         }

@@ -41,7 +41,7 @@ flowchart TD
 - `DownKyi.exe` 同時是啟動入口、Avalonia Desktop 層與多數 runtime implementation owner。
 - `DownKyi.Desktop` 只含 Host builder，尚未形成完整 Desktop assembly boundary。
 - `DownKyi.Core` 仍直接依賴 Avalonia QR bitmap 與 XAML resources，尚未是 headless core。
-- `DownKyi.Domain.DownloadTask` 目前主要出現在 store/projection 邊界，下載 worker 仍操作 `DownloadingItem`。
+- `DownKyi.Domain.DownloadTask` 已是持久化狀態轉換的權威；worker 與 pipeline 入口使用 `DownloadTaskId`，但 orchestrator channel 與部分 media stage 仍暫時持有 UI projection。
 - `DownKyi.Application` 和 `DownKyi.Infrastructure` 已建立正確的依賴方向，但只承接部分實際產品責任。
 - Prism、DryIoc、EventAggregator、RegionManager 和 ContainerLocator 已從 production source 移除，不得重新引入。
 
@@ -87,19 +87,26 @@ Main region 的返回操作必須先縮減 `AvaloniaNavigationService` 的既有
 
 ```mermaid
 flowchart LR
-    Add["AddToDownloadService"] --> UiList["DownloadingItem collection"]
-    Add --> Projection["DownloadTaskProjectionStore"]
-    Projection --> Domain["Domain DownloadTask"]
-    Domain --> Store["IDownloadTaskStore / SQLite"]
+    Add["AddToDownloadService"] --> NewProjection["new DownloadingItem input"]
+    NewProjection --> Projection["DownloadTaskProjectionStore"]
+    Projection --> Commands["IDownloadTaskApplicationService"]
+    Commands --> Domain["Domain DownloadTask transitions"]
+    Commands --> Store["IDownloadTaskStore / SQLite"]
+    Commands -->|"committed TaskChanged"| Projection
+    Projection --> UiList["DownloadingItem collection"]
     UiList --> Poll["500 ms polling dispatcher"]
     Poll --> Channel["bounded Channel<DownloadingItem>"]
-    Channel --> Pipeline["DownloadPipeline"]
+    Channel --> Worker["worker extracts DownloadTaskId"]
+    Worker --> Commands
+    Worker --> Pipeline["DownloadPipeline(DownloadTaskId)"]
     Pipeline --> Backend["Builtin or aria2 backend"]
     Pipeline --> Ffmpeg["FFmpeg / validation"]
-    Pipeline --> Projection
+    Pipeline --> Commands
 ```
 
-這條流程可運作且保留既有資料相容性，但它不是目標架構。主要缺口是 UI projection 仍是 runtime source of truth，Domain aggregate 只在持久化前後參與轉換。
+目前所有 durable command 都先載入 Domain aggregate、執行合法 transition、以 optimistic version 寫入 SQLite，再發布 committed snapshot。一般 runtime 不再從 mutable UI model 反向重建 Domain；`DownloadTask.Restore` 只允許出現在 SQLite materializer 與 legacy migration adapter。
+
+這條流程仍不是最終架構。`DownloadOrchestrator` 會每 500 ms 掃描 UI collection，channel 元素仍是 `DownloadingItem`，而 pipeline 內部 media stage 仍以 projection 作為播放流和畫面上下文。Gate 5 會把 queue 改成事件驅動 `DownloadTaskId`；Gate 6/8 分別拆 stage 與建立 UI dispatcher/projector owner。
 
 ## 目標拓樸
 
@@ -187,6 +194,7 @@ FinalizeStage
 
 - 不依賴 Avalonia 或 `DownKyi.ViewModels`。
 - command/query/coordinator contract 使用 Domain 或 Application DTO。
+- `DownloadTaskApplicationService` 是下載狀態命令的唯一 owner；事件只能在 store 成功後發布 committed snapshot。
 - cancellation、錯誤分類及 retry decision 必須可測。
 
 ### Infrastructure

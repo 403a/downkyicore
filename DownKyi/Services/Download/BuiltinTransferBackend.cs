@@ -9,10 +9,10 @@ using DownKyi.Core.BiliApi.Login;
 using DownKyi.Core.Logging;
 using DownKyi.Core.Settings;
 using DownKyi.Core.Utils;
+using DownKyi.Domain.Downloads;
 using DownKyi.Utils;
 using Downloader;
 using Microsoft.Extensions.Logging;
-using DownloadStatus = DownKyi.Models.DownloadStatus;
 
 namespace DownKyi.Services.Download;
 
@@ -49,7 +49,6 @@ internal sealed class BuiltinTransferBackend : ITransferBackend
     public async Task<DownloadTransferOutcome> TransferAsync(DownloadTransferRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var downloading = request.Download;
         var urls = request.Urls;
         var path = request.Directory;
         var localFileName = request.FileName;
@@ -92,6 +91,7 @@ internal sealed class BuiltinTransferBackend : ITransferBackend
             var progressUpdater = new DownloadProgressUiUpdater(
                 TimeProvider.System,
                 DownloadProgressUiUpdater.DefaultMinimumInterval);
+            DownloadProgress? lastProgress = null;
             var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             _diagnosticLogger.LogBuiltInTaskStart(
                 Name,
@@ -101,7 +101,7 @@ internal sealed class BuiltinTransferBackend : ITransferBackend
                 configuration.ParallelCount,
                 network);
 
-            var downloader = new Downloader.DownloadService(configuration);
+            using var downloader = new Downloader.DownloadService(configuration);
             downloader.DownloadStarted += (_, args) =>
             {
                 if (args.TotalBytesToReceive > 0)
@@ -118,13 +118,15 @@ internal sealed class BuiltinTransferBackend : ITransferBackend
                 }
 
                 var speed = (long)args.BytesPerSecondSpeed;
-                if (progressUpdater.TryUpdate(
-                        downloading,
+                if (progressUpdater.TryCreate(
                         args.ProgressPercentage,
                         args.ReceivedBytesSize,
                         args.TotalBytesToReceive,
-                        speed))
+                        speed,
+                        out var progress))
                 {
+                    lastProgress = progress;
+                    request.PublishProgress(progress);
                     _diagnosticLogger.LogSpeed(
                         Name,
                         localFileName,
@@ -147,41 +149,102 @@ internal sealed class BuiltinTransferBackend : ITransferBackend
                                     expectedBytes,
                                     receivedBytes,
                                     totalBytesToReceive);
-                downloading.DownloadService = null;
+                request.SetBuiltinDownloadService(null);
                 completion.TrySetResult(succeeded);
             };
 
-            downloading.DownloadService = downloader;
-            var transferTask = RunDownloadAsync(
-                downloader,
+            request.SetBuiltinDownloadService(downloader);
+            var transferTask = downloader.DownloadFileTaskAsync(
                 url,
                 targetFile,
                 request.CancellationToken);
-            while (!completion.Task.IsCompleted && !transferTask.IsCompleted)
+            var taskSucceeded = false;
+            try
             {
-                request.EnsureActive();
-                if (downloading.Downloading.DownloadStatus == DownloadStatus.Pause)
+                while (!completion.Task.IsCompleted && !transferTask.IsCompleted)
                 {
-                    downloader.Pause();
-                    downloader.CancelAsync();
-                    downloading.DownloadService = null;
-                    throw new OperationCanceledException("Download was paused.");
+                    if (request.IsPauseRequested())
+                    {
+                        downloader.Pause();
+                        downloader.CancelAsync();
+                        request.SetBuiltinDownloadService(null);
+                        if (lastProgress != null)
+                        {
+                            await request.PersistProgressAsync(lastProgress, CancellationToken.None)
+                                .ConfigureAwait(true);
+                        }
+
+                        throw new OperationCanceledException("Download was paused.");
+                    }
+
+                    request.EnsureActive();
+
+                    await Task.Delay(
+                        TimeSpan.FromMilliseconds(100),
+                        request.CancellationToken).ConfigureAwait(true);
                 }
 
-                await Task.Delay(
-                    TimeSpan.FromMilliseconds(100),
-                    request.CancellationToken).ConfigureAwait(true);
+                await transferTask.ConfigureAwait(true);
+                taskSucceeded = true;
+            }
+            catch (OperationCanceledException) when (request.CancellationToken.IsCancellationRequested)
+            {
+                downloader.CancelAsync();
+                request.SetBuiltinDownloadService(null);
+                try
+                {
+                    await transferTask.ConfigureAwait(true);
+                }
+                catch (OperationCanceledException)
+                {
+                    taskSucceeded = false;
+                }
+
+                throw;
+            }
+            catch (OperationCanceledException)
+            {
+                downloader.CancelAsync();
+                try
+                {
+                    await transferTask.ConfigureAwait(true);
+                }
+                catch (OperationCanceledException)
+                {
+                    taskSucceeded = false;
+                }
+
+                taskSucceeded = false;
+            }
+            catch (Exception e) when (e is IOException or HttpRequestException or InvalidOperationException)
+            {
+                _logger.LogErrorMessage("Built-in transfer failed.", e);
+                taskSucceeded = false;
+            }
+            finally
+            {
+                request.SetBuiltinDownloadService(null);
             }
 
-            var taskSucceeded = await transferTask.ConfigureAwait(true);
             completion.TrySetResult(taskSucceeded && IsDownloadedMediaFileUsable(
                 targetFile,
                 expectedBytes,
                 receivedBytes,
                 totalBytesToReceive));
+            if (lastProgress != null)
+            {
+                await request.PersistProgressAsync(lastProgress, CancellationToken.None)
+                    .ConfigureAwait(true);
+            }
+
             if (await completion.Task.ConfigureAwait(true))
             {
                 return DownloadTransferOutcome.Succeeded;
+            }
+
+            if (request.IsPauseRequested())
+            {
+                return DownloadTransferOutcome.Paused;
             }
 
             DeleteInvalidDownloadedMediaFile(targetFile);
@@ -189,32 +252,6 @@ internal sealed class BuiltinTransferBackend : ITransferBackend
         }
 
         return DownloadTransferOutcome.Failed;
-    }
-
-    private async Task<bool> RunDownloadAsync(
-        Downloader.DownloadService downloader,
-        string url,
-        string targetFile,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await downloader.DownloadFileTaskAsync(url, targetFile, cancellationToken).ConfigureAwait(false);
-            return true;
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (OperationCanceledException)
-        {
-            return false;
-        }
-        catch (Exception e) when (e is IOException or HttpRequestException or InvalidOperationException)
-        {
-            _logger.LogErrorMessage("Built-in transfer failed.", e);
-            return false;
-        }
     }
 
     public void Dispose()

@@ -200,6 +200,92 @@ public sealed class DownloadTask
             now));
     }
 
+    public OperationResult<DownloadTask> UpdatePlan(
+        DownloadPlan plan,
+        DownloadTransferState transfer,
+        DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(transfer);
+        if (Phase is DownloadPhase.Completed or DownloadPhase.Canceled or DownloadPhase.Deleted)
+        {
+            return OperationResult.Failure<DownloadTask>(new OperationError(
+                "download.plan.terminal",
+                $"Cannot update the download plan after a download reaches {Phase}.",
+                OperationErrorKind.Conflict));
+        }
+
+        EnsureTimestampDoesNotMoveBackward(now);
+        return OperationResult.Success(new DownloadTask(
+            Id,
+            Metadata,
+            plan,
+            Output,
+            Phase,
+            Progress,
+            transfer,
+            Failure,
+            Completion,
+            checked(Version + 1),
+            CreatedAtUtc,
+            now));
+    }
+
+    public OperationResult<DownloadTask> UpdateOutput(DownloadOutput output, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        if (Phase is DownloadPhase.Completed or DownloadPhase.Canceled or DownloadPhase.Deleted)
+        {
+            return OperationResult.Failure<DownloadTask>(new OperationError(
+                "download.output.terminal",
+                $"Cannot update output after a download reaches {Phase}.",
+                OperationErrorKind.Conflict));
+        }
+
+        EnsureTimestampDoesNotMoveBackward(now);
+        return OperationResult.Success(new DownloadTask(
+            Id,
+            Metadata,
+            Plan,
+            output,
+            Phase,
+            Progress,
+            Transfer,
+            Failure,
+            Completion,
+            checked(Version + 1),
+            CreatedAtUtc,
+            now));
+    }
+
+    public OperationResult<DownloadTask> UpdateProgressAndTransfer(
+        DownloadProgress progress,
+        DownloadTransferState transfer,
+        DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(progress);
+        ArgumentNullException.ThrowIfNull(transfer);
+        if (Phase is not (DownloadPhase.Downloading or DownloadPhase.Pausing))
+        {
+            return InvalidTransition(Phase);
+        }
+
+        EnsureTimestampDoesNotMoveBackward(now);
+        return OperationResult.Success(new DownloadTask(
+            Id,
+            Metadata,
+            Plan,
+            Output,
+            Phase,
+            progress,
+            transfer,
+            Failure,
+            Completion,
+            checked(Version + 1),
+            CreatedAtUtc,
+            now));
+    }
+
     public OperationResult<DownloadTask> UpdateTransferState(DownloadTransferState transfer, DateTimeOffset now)
     {
         ArgumentNullException.ThrowIfNull(transfer);
@@ -225,6 +311,15 @@ public sealed class DownloadTask
             checked(Version + 1),
             CreatedAtUtc,
             now));
+    }
+
+    public OperationResult<DownloadTask> RecoverInterrupted(DateTimeOffset now)
+    {
+        return Phase switch
+        {
+            DownloadPhase.Downloading or DownloadPhase.Pausing => TransitionTo(DownloadPhase.Queued, now),
+            _ => InvalidTransition(DownloadPhase.Queued)
+        };
     }
 
     private OperationResult<DownloadTask> TransitionTo(
@@ -269,7 +364,7 @@ public sealed class DownloadTask
         {
             DownloadPhase.Queued => target is DownloadPhase.Downloading or DownloadPhase.Paused
                 or DownloadPhase.Failed or DownloadPhase.Canceled or DownloadPhase.Deleted,
-            DownloadPhase.Downloading => target is DownloadPhase.Pausing or DownloadPhase.Completed
+            DownloadPhase.Downloading => target is DownloadPhase.Queued or DownloadPhase.Pausing or DownloadPhase.Completed
                 or DownloadPhase.Failed or DownloadPhase.Canceled or DownloadPhase.Deleted,
             DownloadPhase.Pausing => target is DownloadPhase.Paused or DownloadPhase.Queued
                 or DownloadPhase.Failed or DownloadPhase.Canceled or DownloadPhase.Deleted,

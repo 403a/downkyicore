@@ -6,7 +6,6 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using DownKyi.Core.Logging;
-using DownKyi.Models;
 using DownKyi.ViewModels.DownloadManager;
 using Microsoft.Extensions.Logging;
 
@@ -34,8 +33,6 @@ internal sealed class DownloadTaskFileService
     {
         ArgumentNullException.ThrowIfNull(downloading);
 
-        downloading.Downloading.DownloadStatus = DownloadStatus.Pause;
-
         try
         {
             downloading.DownloadService?.CancelAsync();
@@ -55,7 +52,6 @@ internal sealed class DownloadTaskFileService
             return;
         }
 
-        var removed = false;
         var ariaClient = _ariaClientRegistry.Current;
         if (ariaClient == null)
         {
@@ -67,7 +63,6 @@ internal sealed class DownloadTaskFileService
         {
             await ariaClient.RemoveAsync(gid).WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
             await ariaClient.RemoveDownloadResultAsync(gid).WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-            removed = true;
         }
         catch (TimeoutException e)
         {
@@ -76,13 +71,6 @@ internal sealed class DownloadTaskFileService
         catch (HttpRequestException e)
         {
             _logger.LogDebugMessage($"Cancel aria downloader failed: {e.Message}");
-        }
-        finally
-        {
-            if (removed)
-            {
-                downloading.Downloading.Gid = null;
-            }
         }
     }
 

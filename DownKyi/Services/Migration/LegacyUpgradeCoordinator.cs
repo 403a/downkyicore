@@ -7,11 +7,13 @@ using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
+using DownKyi.Application.Time;
 using DownKyi.Core.BiliApi.BiliUtils;
 using DownKyi.Core.BiliApi.Login;
 using DownKyi.Core.Logging;
 using DownKyi.Core.Storage;
 using DownKyi.Core.Storage.Database;
+using DownKyi.Domain.Downloads;
 using DownKyi.Models;
 using DownKyi.Services.Download;
 using DownKyi.ViewModels.DownloadManager;
@@ -45,14 +47,17 @@ internal sealed class LegacyUpgradeCoordinator : ILegacyUpgradeCoordinator
 {
     private const int BatchSize = 200;
     private readonly DownloadTaskProjectionStore _projectionStore;
+    private readonly IClock _clock;
     private readonly ILogger<LegacyUpgradeCoordinator> _logger;
 
     public LegacyUpgradeCoordinator(
         DownloadTaskProjectionStore projectionStore,
+        IClock clock,
         ILogger<LegacyUpgradeCoordinator> logger)
     {
         _projectionStore = projectionStore
             ?? throw new ArgumentNullException(nameof(projectionStore));
+        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -332,7 +337,7 @@ internal sealed class LegacyUpgradeCoordinator : ILegacyUpgradeCoordinator
         IProgress<LegacyUpgradeProgress> progress,
         CancellationToken cancellationToken)
     {
-        var batch = new List<Downloaded>(Math.Min(BatchSize, records.Count));
+        var batch = new List<DownloadTask>(Math.Min(BatchSize, records.Count));
         var visited = 0;
         foreach (var item in records.Values)
         {
@@ -343,7 +348,7 @@ internal sealed class LegacyUpgradeCoordinator : ILegacyUpgradeCoordinator
                 var downloaded = ConvertDownload(item);
                 if (downloaded != null)
                 {
-                    batch.Add(downloaded);
+                    batch.Add(LegacyDownloadTaskMapper.RestoreCompleted(downloaded, _clock.UtcNow));
                 }
             }
             catch (Exception e) when (IsLegacyRecordException(e) || e is SqliteException)
@@ -354,9 +359,7 @@ internal sealed class LegacyUpgradeCoordinator : ILegacyUpgradeCoordinator
 
             if (batch.Count >= BatchSize)
             {
-                await _projectionStore
-                    .AddDownloadedBatchAsync(batch, cancellationToken)
-                    .ConfigureAwait(false);
+                await PersistBatchAsync(batch, cancellationToken).ConfigureAwait(false);
                 batch.Clear();
             }
 
@@ -368,8 +371,18 @@ internal sealed class LegacyUpgradeCoordinator : ILegacyUpgradeCoordinator
 
         if (batch.Count > 0)
         {
+            await PersistBatchAsync(batch, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task PersistBatchAsync(
+        IEnumerable<DownloadTask> batch,
+        CancellationToken cancellationToken)
+    {
+        foreach (var task in batch)
+        {
             await _projectionStore
-                .AddDownloadedBatchAsync(batch, cancellationToken)
+                .AddMigratedCompletedAsync(task, cancellationToken)
                 .ConfigureAwait(false);
         }
     }
@@ -395,7 +408,7 @@ internal sealed class LegacyUpgradeCoordinator : ILegacyUpgradeCoordinator
             {
                 NeedDownloadContent = needDownloadContentRecord == null
                     ? new Dictionary<string, bool>()
-                    : ReadNeedDownloadContent(needDownloadContentRecord),
+                    : LegacyDownloadTaskMapper.ReadRequestedAssets(needDownloadContentRecord),
                 Bvid = ReadString(record, nameof(DownloadBase.Bvid)),
                 Avid = record.GetInt64($"<{nameof(DownloadBase.Avid)}>k__BackingField"),
                 Cid = record.GetInt64($"<{nameof(DownloadBase.Cid)}>k__BackingField"),
@@ -415,20 +428,6 @@ internal sealed class LegacyUpgradeCoordinator : ILegacyUpgradeCoordinator
                 Page = record.GetInt32($"<{nameof(DownloadBase.Page)}>k__BackingField")
             }
         };
-    }
-
-    private static Dictionary<string, bool> ReadNeedDownloadContent(ClassRecord record)
-    {
-        var values = record
-            .GetArrayRecord("KeyValuePairs")?
-            .GetArray(typeof(KeyValuePair<string, bool>[]));
-        var result = new Dictionary<string, bool>(StringComparer.Ordinal);
-        foreach (var item in values?.Cast<ClassRecord>() ?? Array.Empty<ClassRecord>())
-        {
-            result[item.GetString("key") ?? string.Empty] = item.GetBoolean("value");
-        }
-
-        return result;
     }
 
     private static Quality ReadQuality(ClassRecord? record)

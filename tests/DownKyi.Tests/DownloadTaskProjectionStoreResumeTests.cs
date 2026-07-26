@@ -1,4 +1,6 @@
 using System.Text.Json;
+using DownKyi.Application.Downloads;
+using DownKyi.Domain.Downloads;
 using DownKyi.Infrastructure.Downloads;
 using DownKyi.Infrastructure.Time;
 using DownKyi.Models;
@@ -27,30 +29,60 @@ public sealed class DownloadTaskProjectionStoreResumeTests : IDisposable
             Downloading = new Downloading
             {
                 Id = taskId,
-                Gid = ariaGid,
-                DownloadStatus = DownloadStatus.Pause,
-                Progress = 42.5f
+                DownloadStatus = DownloadStatus.WaitForDownload
             }
         };
-        item.Downloading.DownloadFiles["video"] = "video.m4s";
-        item.Downloading.DownloadFiles["audio"] = "audio.m4s";
-        item.Downloading.DownloadedFiles.Add("cover");
         item.DownloadBase.Id = taskId;
         item.DownloadBase.FilePath = Path.Combine(_directory, "episode-01");
 
         using (var store = new SqliteDownloadTaskStore(
                    new SqliteDownloadTaskStoreOptions(database),
                    new SystemClock()))
-        using (var storage = new DownloadTaskProjectionStore(store, new SystemClock()))
         {
+            var clock = new SystemClock();
+            using var tasks = new DownloadTaskApplicationService(store, clock);
+            using var storage = new DownloadTaskProjectionStore(tasks, clock);
+            var stateWriter = new DownloadTaskStateWriter(tasks);
             await storage.AddDownloadingAsync(item, TestContext.Current.CancellationToken);
+            var id = new DownloadTaskId(taskId);
+            await stateWriter.StartAsync(id, TestContext.Current.CancellationToken);
+            await stateWriter.RecordTransferFileAsync(
+                id,
+                "video",
+                "video.m4s",
+                TestContext.Current.CancellationToken);
+            await stateWriter.RecordTransferFileAsync(
+                id,
+                "audio",
+                "audio.m4s",
+                TestContext.Current.CancellationToken);
+            await stateWriter.CompleteTransferFileAsync(
+                id,
+                "cover",
+                TestContext.Current.CancellationToken);
+            await stateWriter.SetBackendIdentityAsync(
+                id,
+                ariaGid,
+                TestContext.Current.CancellationToken);
+            await stateWriter.UpdateProgressAsync(
+                id,
+                new DownloadProgress(42.5),
+                TestContext.Current.CancellationToken);
+            await stateWriter.UpdateOutputFileSizeAsync(
+                id,
+                "6 GB",
+                TestContext.Current.CancellationToken);
+            await stateWriter.PauseAsync(id, TestContext.Current.CancellationToken);
+            await stateWriter.ConfirmPausedAsync(id, TestContext.Current.CancellationToken);
         }
 
         using (var store = new SqliteDownloadTaskStore(
                    new SqliteDownloadTaskStoreOptions(database),
                    new SystemClock()))
-        using (var reopenedStorage = new DownloadTaskProjectionStore(store, new SystemClock()))
         {
+            var clock = new SystemClock();
+            using var tasks = new DownloadTaskApplicationService(store, clock);
+            using var reopenedStorage = new DownloadTaskProjectionStore(tasks, clock);
             var restored = Assert.Single(
                 await reopenedStorage.GetDownloadingAsync(TestContext.Current.CancellationToken));
             Assert.Equal(ariaGid, restored.Downloading.Gid);
@@ -59,6 +91,7 @@ public sealed class DownloadTaskProjectionStoreResumeTests : IDisposable
             Assert.Equal("cover", Assert.Single(restored.Downloading.DownloadedFiles));
             Assert.Equal(DownloadStatus.Pause, restored.Downloading.DownloadStatus);
             Assert.Equal(42.5f, restored.Downloading.Progress);
+            Assert.Equal("6 GB", restored.DownloadBase.FileSize);
         }
 
         using var connection = new SqliteConnection($"Data Source={database};Mode=ReadOnly");
@@ -95,43 +128,100 @@ public sealed class DownloadTaskProjectionStoreResumeTests : IDisposable
             Downloading = new Downloading
             {
                 Id = "complete-task-01",
-                DownloadStatus = DownloadStatus.Downloading,
-                Progress = 100
-            }
-        };
-        var downloadedItem = new DownloadedItem
-        {
-            DownloadBase = downloadingItem.DownloadBase,
-            Downloaded = new Downloaded
-            {
-                Id = "complete-task-01",
-                FinishedTimestamp = 1234,
-                FinishedTime = "finished",
-                MaxSpeedDisplay = "24 Mbps"
+                DownloadStatus = DownloadStatus.WaitForDownload
             }
         };
         using (var store = new SqliteDownloadTaskStore(
                    new SqliteDownloadTaskStoreOptions(database),
                    new SystemClock()))
-        using (var storage = new DownloadTaskProjectionStore(store, new SystemClock()))
         {
+            var clock = new SystemClock();
+            using var tasks = new DownloadTaskApplicationService(store, clock);
+            using var storage = new DownloadTaskProjectionStore(tasks, clock);
+            var stateWriter = new DownloadTaskStateWriter(tasks);
             await storage.AddDownloadingAsync(downloadingItem, TestContext.Current.CancellationToken);
-            await storage.RemoveDownloadingAsync(
-                downloadingItem,
-                cascadeRemove: false,
-                cancellationToken: TestContext.Current.CancellationToken);
-            await storage.AddDownloadedAsync(downloadedItem, TestContext.Current.CancellationToken);
+            var id = new DownloadTaskId(downloadingItem.DownloadBase.Id);
+            await stateWriter.StartAsync(id, TestContext.Current.CancellationToken);
+            await stateWriter.UpdateProgressAsync(
+                id,
+                new DownloadProgress(100),
+                TestContext.Current.CancellationToken);
+            await stateWriter.CompleteAsync(
+                id,
+                new DownloadCompletion(1234, "finished", "24 Mbps"),
+                TestContext.Current.CancellationToken);
         }
 
         using var reopenedStore = new SqliteDownloadTaskStore(
             new SqliteDownloadTaskStoreOptions(database),
             new SystemClock());
-        using var reopened = new DownloadTaskProjectionStore(reopenedStore, new SystemClock());
+        var reopenedClock = new SystemClock();
+        using var reopenedTasks = new DownloadTaskApplicationService(reopenedStore, reopenedClock);
+        using var reopened = new DownloadTaskProjectionStore(reopenedTasks, reopenedClock);
         Assert.Empty(await reopened.GetDownloadingAsync(TestContext.Current.CancellationToken));
         var restored = Assert.Single(
             await reopened.GetDownloadedAsync(TestContext.Current.CancellationToken));
         Assert.Equal("complete-task-01", restored.DownloadBase.Id);
         Assert.Equal(1234, restored.Downloaded.FinishedTimestamp);
+    }
+
+    [Fact]
+    public async Task PersistedDomainChangesNotifyEveryAffectedUiBinding()
+    {
+        Directory.CreateDirectory(_directory);
+        var database = Path.Combine(_directory, "projection-notifications.db");
+        var item = new DownloadingItem
+        {
+            DownloadBase = new DownloadBase
+            {
+                Id = "projection-notifications",
+                Name = "Projection",
+                FilePath = Path.Combine(_directory, "projection")
+            },
+            Downloading = new Downloading
+            {
+                Id = "projection-notifications",
+                DownloadStatus = DownloadStatus.WaitForDownload
+            }
+        };
+        using var store = new SqliteDownloadTaskStore(
+            new SqliteDownloadTaskStoreOptions(database),
+            new SystemClock());
+        var clock = new SystemClock();
+        using var tasks = new DownloadTaskApplicationService(store, clock);
+        using var storage = new DownloadTaskProjectionStore(tasks, clock);
+        var stateWriter = new DownloadTaskStateWriter(tasks);
+        await storage.AddDownloadingAsync(item, TestContext.Current.CancellationToken);
+        var notifications = new List<string?>();
+        item.PropertyChanged += (_, args) => notifications.Add(args.PropertyName);
+        var id = new DownloadTaskId(item.DownloadBase.Id);
+
+        await stateWriter.StartAsync(id, TestContext.Current.CancellationToken);
+        await stateWriter.UpdateActivityAsync(
+            id,
+            "video",
+            "downloading",
+            TestContext.Current.CancellationToken);
+        await stateWriter.UpdateProgressAsync(
+            id,
+            new DownloadProgress(50, 500, 1000, 3_000_000, "500 B/1 KB", "24 Mbps"),
+            TestContext.Current.CancellationToken);
+        await stateWriter.UpdateOutputFileSizeAsync(
+            id,
+            "1 KB",
+            TestContext.Current.CancellationToken);
+
+        Assert.Contains(nameof(DownloadingItem.DownloadContent), notifications);
+        Assert.Contains(nameof(DownloadingItem.DownloadStatusTitle), notifications);
+        Assert.Contains(nameof(DownloadingItem.Progress), notifications);
+        Assert.Contains(nameof(DownloadingItem.DownloadingFileSize), notifications);
+        Assert.Contains(nameof(DownloadingItem.SpeedDisplay), notifications);
+        Assert.Contains(nameof(DownloadingItem.FileSize), notifications);
+        Assert.Equal("video", item.DownloadContent);
+        Assert.Equal("downloading", item.DownloadStatusTitle);
+        Assert.Equal(50, item.Progress);
+        Assert.Equal("24 Mbps", item.SpeedDisplay);
+        Assert.Equal("1 KB", item.FileSize);
     }
 
     public void Dispose()

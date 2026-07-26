@@ -39,20 +39,27 @@ internal static class UiProgressNotificationScenario
         var publishedUpdates = 0;
         for (var sample = 0; sample < sourceSamplesPerSecond; sample++)
         {
-            if (updater.TryUpdate(
-                    item,
+            if (updater.TryCreate(
                     sample * 100d / sourceSamplesPerSecond,
                     sample,
                     sourceSamplesPerSecond,
-                    1_000_000))
+                    1_000_000,
+                    out var progress))
             {
+                DownloadTaskProjectionMapper.ApplyLiveProgress(progress, item);
                 publishedUpdates++;
             }
 
             clock.Advance(interval);
         }
 
-        updater.TryUpdate(item, 100, sourceSamplesPerSecond, sourceSamplesPerSecond, 1_000_000);
+        updater.TryCreate(
+            100,
+            sourceSamplesPerSecond,
+            sourceSamplesPerSecond,
+            1_000_000,
+            out var completed);
+        DownloadTaskProjectionMapper.ApplyLiveProgress(completed, item);
         publishedUpdates++;
         return new SystemBenchmarkResult(
             "ui_progress_notifications",

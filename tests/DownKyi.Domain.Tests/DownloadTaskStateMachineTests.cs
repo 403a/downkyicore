@@ -132,6 +132,27 @@ public sealed class DownloadTaskStateMachineTests
         Assert.Equal("download.transfer.terminal", result.Error?.Code);
     }
 
+    [Fact]
+    public void InterruptedDownloadReturnsToQueueWithoutLosingResumeState()
+    {
+        var transfer = new DownloadTransferState(
+            "aria-gid",
+            ["video-segment-1"],
+            "video",
+            "Downloading",
+            4_000_000);
+        var downloading = CreateTask()
+            .Start(Epoch.AddSeconds(1)).RequireValue()
+            .UpdateTransferState(transfer, Epoch.AddSeconds(2)).RequireValue();
+
+        var recovered = downloading.RecoverInterrupted(Epoch.AddSeconds(3)).RequireValue();
+
+        Assert.Equal(DownloadPhase.Queued, recovered.Phase);
+        Assert.Same(transfer, recovered.Transfer);
+        Assert.Equal("aria-gid", recovered.Transfer.BackendIdentity);
+        Assert.Equal("video-segment-1", Assert.Single(recovered.Transfer.CompletedFileKeys));
+    }
+
     [Theory]
     [InlineData(-0.01)]
     [InlineData(100.01)]

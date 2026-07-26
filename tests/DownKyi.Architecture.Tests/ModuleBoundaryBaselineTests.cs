@@ -263,28 +263,24 @@ public sealed class ModuleBoundaryBaselineTests
     }
 
     [Fact]
-    public void DomainToLegacyReconstructionCannotSpreadBeyondTheProjectionStore()
+    public void DomainRestoreIsRestrictedToPersistenceAndMigrationAdapters()
     {
-        var downloadRoot = Path.Combine(RepositoryRoot, "DownKyi", "Services", "Download");
-        var actual = Directory
-            .EnumerateFiles(downloadRoot, "*.cs", SearchOption.AllDirectories)
+        var actual = EnumerateProductionFiles("*.cs")
             .Where(path =>
             {
                 var source = File.ReadAllText(path);
-                return source.Contains("DomainDownloadTask.Restore", StringComparison.Ordinal) ||
-                       source.Contains("CreateUnfinishedTask", StringComparison.Ordinal) ||
-                       source.Contains("ToLegacyStatus", StringComparison.Ordinal);
+                return source.Contains("DownloadTask.Restore", StringComparison.Ordinal) ||
+                       source.Contains("DomainDownloadTask.Restore", StringComparison.Ordinal);
             })
             .Select(Relative)
             .ToArray();
 
-        AssertSubset(
-            actual,
-            new HashSet<string>(StringComparer.Ordinal)
-            {
-                "DownKyi/Services/Download/DownloadTaskProjectionStore.cs"
-            },
-            "domain-to-legacy reconstruction owner");
+        Assert.Equal(
+            [
+                "DownKyi/Services/Migration/LegacyDownloadTaskMapper.cs",
+                "src/DownKyi.Infrastructure/Downloads/SqliteDownloadTaskStore.cs"
+            ],
+            actual.Order(StringComparer.Ordinal));
     }
 
     [Fact]

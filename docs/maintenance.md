@@ -31,14 +31,18 @@ Current analyzer result: zero unhandled CA diagnostics. All 77 cleaned rules are
 ## Download Persistence Policy
 
 - `src/DownKyi.Domain/Downloads` owns immutable task identity, lifecycle, progress, transfer, output, failure, and completion state.
+- `IDownloadTaskApplicationService` / `DownloadTaskApplicationService` is the only normal runtime command/query owner. It loads by `DownloadTaskId`, invokes a Domain transition, persists with the current optimistic version, and publishes the committed snapshot only after a successful store operation.
 - `IDownloadTaskStore` is the only durable download contract. Infrastructure implementations must use async APIs and honor cancellation.
 - `SqliteDownloadTaskStore` is the sole owner of download SQL and storage JSON. `DownloadTaskProjectionStore` maps immutable stored tasks to existing `DownloadingItem` / `DownloadedItem` UI projections without owning SQL.
+- Runtime code must not rebuild a Domain task from a mutable UI projection. `DownloadTask.Restore` is limited to `SqliteDownloadTaskStore` materialization and `LegacyDownloadTaskMapper` migration; architecture tests enforce that allowlist.
 - Use short pooled connections, WAL, optimistic task versions, and transactions. Never restore a process-wide SQLite connection, global database lock, `Task.Run` database wrapper, or offset-based history scan.
 - Every schema migration must create a SQLite backup before DDL, execute in one transaction, update `user_version` only on success, and have a rollback test.
 - Malformed rows are quarantined individually. Diagnostics may include source table, record ID, field, and a fixed reason; never include raw JSON, full paths, cookies, or URLs.
 - Startup loads every unfinished task and the newest 100 history records after shell creation. Remaining history uses keyset pages outside the first-screen path.
-- State transitions persist immediately. High-rate progress may use `DownloadProgressWriteBehind`, whose pending task count and wake channel are bounded and whose shutdown path flushes accepted writes.
+- State transitions persist immediately and UI projection follows the committed event. High-rate live progress may be projected without a durable write for every sample; accepted persistence uses bounded/coalesced writes and shutdown recovery preserves the last durable resume state.
 - The SQLite native bundle is `SQLite3MC.PCLRaw.bundle`. Any update must pass `LegacySqlCipherCompatibilityTests` against the committed SQLCipher v4 fixture before merge.
+
+Gate 4 local result: strict `AnalysisMode=All` Release build completed with zero warnings, all 552 solution tests passed, format changed 0/750 files, `git diff --check` and the module-boundary audit passed, and NuGet reported no vulnerable or deprecated packages. Tests cover legal state transitions, optimistic conflicts, one-way projection, legacy NRBF/SQLite materialization, pause confirmation, retryable deletion, shutdown recovery, GID/partial-file/completed-key persistence, progress and output-size reopen, and the architecture allowlist for `DownloadTask.Restore`.
 
 PR 03-06 result: legacy GID, partial-file maps, completed asset keys, paused state, progress, task identity, and history survive reopen. Completion moves from active state to history in one transaction. The removed deprecated SQLCipher provider was replaced only after the current cross-platform provider opened the old encrypted fixture and rejected a wrong password. Release build, all tests, isolated App startup/close, Linux x64/arm64 and macOS x64/arm64 cross-RID builds, deprecated-package audit, and vulnerable-package audit passed locally.
 
@@ -46,8 +50,9 @@ PR 03-06 result: legacy GID, partial-file maps, completed asset keys, paused sta
 
 - Queue consumption uses a bounded Channel and fixed workers. Do not restore per-item task spawning or synchronous persistence callbacks.
 - Built-in and aria2 transfers share key, resume, integrity, and persistence behavior. Custom aria2 is a backend selection, not a copied workflow.
-- `DownloadArtifactWriter` owns cover, subtitle, danmaku, and NFO output. `DownloadTaskStateWriter` owns projection persistence and recovery writes; do not move these details back into `DownloadPipeline`.
-- Pause and process shutdown preserve partial/resume files. Explicit task deletion removes generated media and `.aria2` / `.download` sidecars.
+- `DownloadArtifactWriter` owns cover, subtitle, danmaku, and NFO output. `DownloadTaskStateWriter` adapts runtime calls to typed Application commands; it cannot accept `DownloadingItem` or persist reconstructed UI state.
+- Pause first persists `Pausing`; built-in/aria2 backends preserve partial files and return a paused outcome; the worker confirms `Paused` only after transfer teardown. Process shutdown returns active `Downloading`/`Pausing` tasks to `Queued` without dropping GID, partial-file maps, completed keys, progress, output size, or optimistic version.
+- Explicit task deletion persists `Canceled`, stops the physical backend, removes generated media and `.aria2` / `.download` sidecars, then deletes the row. A cleanup failure leaves a retryable canceled record rather than pretending deletion succeeded.
 - Multi-segment DURL identity includes `DURL.Order`, input is sorted by that order, and concat never starts with stream copy.
 - FFmpeg operations use `FfmpegProcessRunner`, bounded concurrency, cancellation, timeout, captured stderr, and process-tree cleanup. Hardware encoding is attempted when available, with CPU fallback kept for success rate.
 - A multi-segment output is complete only after ffprobe confirms a video stream, expected duration, and successful middle/tail seek decoding. Invalid partial output is deleted.

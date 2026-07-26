@@ -1,4 +1,11 @@
+using DownKyi.Application.Downloads;
+using DownKyi.Domain.Downloads;
+using DownKyi.Infrastructure.Downloads;
+using DownKyi.Infrastructure.Time;
+using DownKyi.Models;
 using DownKyi.Services.Download;
+using DownKyi.ViewModels.DownloadManager;
+using Microsoft.Data.Sqlite;
 
 namespace DownKyi.Tests;
 
@@ -66,5 +73,72 @@ public sealed class DownloadShutdownCoordinatorTests
 
         Assert.Same(failure, exception);
         Assert.True(recovered);
+    }
+
+    [Fact]
+    public async Task ShutdownRecoveryQueuesActiveDomainTaskAndPreservesResumeData()
+    {
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            "downkyi-shutdown-recovery-tests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            using var store = new SqliteDownloadTaskStore(
+                new SqliteDownloadTaskStoreOptions(Path.Combine(directory, "download.db")),
+                new SystemClock());
+            var clock = new SystemClock();
+            using var tasks = new DownloadTaskApplicationService(store, clock);
+            using var projections = new DownloadTaskProjectionStore(tasks, clock);
+            var stateWriter = new DownloadTaskStateWriter(tasks);
+            var lists = new DownloadListState();
+            var item = new DownloadingItem
+            {
+                DownloadBase = new DownloadBase
+                {
+                    Id = "shutdown-resume",
+                    FilePath = Path.Combine(directory, "episode")
+                },
+                Downloading = new Downloading
+                {
+                    Id = "shutdown-resume",
+                    DownloadStatus = DownloadStatus.WaitForDownload
+                }
+            };
+            await projections.AddDownloadingAsync(item, TestContext.Current.CancellationToken);
+            lists.Downloading.Add(item);
+            var taskId = new DownloadTaskId(item.DownloadBase.Id);
+            await stateWriter.StartAsync(taskId, TestContext.Current.CancellationToken);
+            await stateWriter.RecordTransferFileAsync(
+                taskId,
+                "video",
+                "video.m4s",
+                TestContext.Current.CancellationToken);
+            await stateWriter.SetBackendIdentityAsync(
+                taskId,
+                "aria-gid",
+                TestContext.Current.CancellationToken);
+            await stateWriter.UpdateProgressAsync(
+                taskId,
+                new DownloadProgress(45, 450, 1000, 2_000_000),
+                TestContext.Current.CancellationToken);
+            var recovery = new DownloadTaskShutdownRecovery(lists, projections, stateWriter);
+
+            await recovery.PersistAsync();
+
+            var restored = Assert.IsType<DownloadTask>(
+                await store.FindAsync(taskId, TestContext.Current.CancellationToken));
+            Assert.Equal(DownloadPhase.Queued, restored.Phase);
+            Assert.Equal("aria-gid", restored.Transfer.BackendIdentity);
+            Assert.Equal("video.m4s", restored.Plan.TransferFiles["video"]);
+            Assert.Equal(45, restored.Progress.Percentage);
+            Assert.Equal(450, restored.Progress.DownloadedBytes);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            Directory.Delete(directory, recursive: true);
+        }
     }
 }

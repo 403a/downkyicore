@@ -1,58 +1,51 @@
-using DownKyi.Models;
 using DownKyi.Services.Download;
-using DownKyi.ViewModels.DownloadManager;
 
 namespace DownKyi.Tests;
 
 public sealed class DownloadProgressUiUpdaterTests
 {
     [Fact]
-    public void ProgressEventsAreBoundedAndCompletionIsAlwaysPublished()
+    public void ProgressSamplesAreBoundedAndCompletionIsAlwaysPublished()
     {
         var clock = new ManualTimeProvider(DateTimeOffset.UnixEpoch);
         var updater = new DownloadProgressUiUpdater(clock, TimeSpan.FromMilliseconds(100));
-        var item = new DownloadingItem { Downloading = new Downloading() };
-        var notifications = 0;
-        item.PropertyChanged += (_, args) =>
-        {
-            if (args.PropertyName is nameof(DownloadingItem.Progress)
-                or nameof(DownloadingItem.DownloadingFileSize)
-                or nameof(DownloadingItem.SpeedDisplay))
-            {
-                notifications++;
-            }
-        };
-
-        var published = 0;
+        var published = new List<DownKyi.Domain.Downloads.DownloadProgress>();
         for (var millisecond = 0; millisecond < 1000; millisecond++)
         {
-            if (updater.TryUpdate(item, millisecond / 10d, millisecond, 1000, millisecond))
+            if (updater.TryCreate(
+                    millisecond / 10d,
+                    millisecond,
+                    1000,
+                    millisecond,
+                    out var progress))
             {
-                published++;
+                published.Add(progress);
             }
 
             clock.Advance(TimeSpan.FromMilliseconds(1));
         }
 
-        Assert.True(updater.TryUpdate(item, 100, 1000, 1000, 5000));
-        Assert.Equal(11, published + 1);
-        Assert.Equal(33, notifications);
-        Assert.Equal(100, item.Progress);
-        Assert.Equal(5000, item.Downloading.MaxSpeed);
+        Assert.True(updater.TryCreate(100, 1000, 1000, 5000, out var completed));
+        published.Add(completed);
+
+        Assert.Equal(11, published.Count);
+        Assert.Equal(100, completed.Percentage);
+        Assert.Equal(5000, completed.BytesPerSecond);
+        Assert.Equal(1000, completed.DownloadedBytes);
+        Assert.Equal(1000, completed.TotalBytes);
     }
 
     [Fact]
-    public void SuppressedUiSamplesStillTrackMaximumSpeed()
+    public void SuppressedSamplesDoNotReplaceLastPublishedDomainProgress()
     {
         var clock = new ManualTimeProvider(DateTimeOffset.UnixEpoch);
         var updater = new DownloadProgressUiUpdater(clock, TimeSpan.FromSeconds(1));
-        var item = new DownloadingItem { Downloading = new Downloading() };
 
-        Assert.True(updater.TryUpdate(item, 1, 1, 100, 100));
-        Assert.False(updater.TryUpdate(item, 2, 2, 100, 10_000));
+        Assert.True(updater.TryCreate(1, 1, 100, 100, out var first));
+        Assert.False(updater.TryCreate(2, 2, 100, 10_000, out _));
 
-        Assert.Equal(10_000, item.Downloading.MaxSpeed);
-        Assert.Equal(1, item.Progress);
+        Assert.Equal(100, first.BytesPerSecond);
+        Assert.Equal(1, first.Percentage);
     }
 
     private sealed class ManualTimeProvider(DateTimeOffset utcNow) : TimeProvider

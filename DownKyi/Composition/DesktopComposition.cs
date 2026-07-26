@@ -73,7 +73,9 @@ internal static class DesktopComposition
         services.AddSingleton<IWbiKeyProvider, WbiKeyProvider>();
         services.AddSingleton<FfmpegProcessor>();
         services.AddSingleton<IDownloadTaskStore, SqliteDownloadTaskStore>();
+        services.AddSingleton<IDownloadTaskApplicationService, DownloadTaskApplicationService>();
         services.AddSingleton<DownloadTaskProjectionStore>();
+        services.AddSingleton<DownloadTaskStateWriter>();
         services.AddSingleton<DownloadListState>();
         services.AddSingleton<DownloadTaskFileService>();
         services.AddSingleton<AriaRuntimeClientRegistry>();

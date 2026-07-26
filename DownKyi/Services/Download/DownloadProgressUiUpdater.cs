@@ -1,7 +1,7 @@
 using System;
 using System.Threading;
 using DownKyi.Core.Utils;
-using DownKyi.ViewModels.DownloadManager;
+using DownKyi.Domain.Downloads;
 
 namespace DownKyi.Services.Download;
 
@@ -20,18 +20,14 @@ internal sealed class DownloadProgressUiUpdater
         _minimumInterval = minimumInterval;
     }
 
-    public bool TryUpdate(
-        DownloadingItem downloading,
+    public bool TryCreate(
         double progressPercentage,
         double receivedBytes,
         double totalBytes,
-        long bytesPerSecond)
+        long bytesPerSecond,
+        out DownloadProgress progress)
     {
-        ArgumentNullException.ThrowIfNull(downloading);
         bytesPerSecond = Math.Max(0, bytesPerSecond);
-        downloading.Downloading.MaxSpeed = Math.Max(
-            downloading.Downloading.MaxSpeed,
-            bytesPerSecond);
         var nowUtc = _timeProvider.GetUtcNow().ToUniversalTime();
         lock (_sync)
         {
@@ -40,16 +36,22 @@ internal sealed class DownloadProgressUiUpdater
                 && nowUtc >= lastPublishedAtUtc
                 && nowUtc - lastPublishedAtUtc < _minimumInterval)
             {
+                progress = DownloadProgress.None;
                 return false;
             }
 
             _lastPublishedAtUtc = nowUtc;
         }
 
-        downloading.Progress = checked((float)progressPercentage);
-        downloading.DownloadingFileSize =
-            $"{Format.FormatFileSize(NormalizeByteCount(receivedBytes))}/{Format.FormatFileSize(NormalizeByteCount(totalBytes))}";
-        downloading.SpeedDisplay = Format.FormatSpeedWithBandwidth(bytesPerSecond);
+        var downloadedBytes = NormalizeByteCount(receivedBytes);
+        var totalByteCount = NormalizeByteCount(totalBytes);
+        progress = new DownloadProgress(
+            Math.Clamp(progressPercentage, 0, 100),
+            downloadedBytes,
+            Math.Max(downloadedBytes, totalByteCount),
+            bytesPerSecond,
+            $"{Format.FormatFileSize(downloadedBytes)}/{Format.FormatFileSize(totalByteCount)}",
+            Format.FormatSpeedWithBandwidth(bytesPerSecond));
         return true;
     }
 

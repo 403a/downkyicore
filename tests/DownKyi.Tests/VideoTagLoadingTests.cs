@@ -224,6 +224,7 @@ public sealed class VideoTagLoadingTests : IDisposable
     private sealed class DownloadTestContext : IDisposable
     {
         private readonly DownKyi.Core.Settings.SettingsStore _settings;
+        private readonly DownloadTaskApplicationService _taskService;
         private readonly DownloadTaskProjectionStore _projectionStore;
 
         public DownloadTestContext(string settingsPath, bool generateMetadata)
@@ -240,7 +241,9 @@ public sealed class VideoTagLoadingTests : IDisposable
                 }
             });
             Store = new RecordingDownloadTaskStore();
-            _projectionStore = new DownloadTaskProjectionStore(Store, new SystemClock());
+            var clock = new SystemClock();
+            _taskService = new DownloadTaskApplicationService(Store, clock);
+            _projectionStore = new DownloadTaskProjectionStore(_taskService, clock);
             ListState = new DownloadListState();
             Logger = new RecordingLogger<AddToDownloadService>();
             var desktop = new TestDesktopInteractionContext();
@@ -287,6 +290,7 @@ public sealed class VideoTagLoadingTests : IDisposable
         public void Dispose()
         {
             _projectionStore.Dispose();
+            _taskService.Dispose();
             _settings.Dispose();
         }
     }

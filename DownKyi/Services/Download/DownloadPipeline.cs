@@ -17,6 +17,7 @@ using DownKyi.Core.Logging;
 using DownKyi.Core.Settings;
 using DownKyi.Core.Storage;
 using DownKyi.Core.Utils;
+using DownKyi.Domain.Downloads;
 using DownKyi.Images;
 using DownKyi.Models;
 using DownKyi.Platform;
@@ -42,6 +43,7 @@ internal sealed class DownloadPipeline : IDisposable
     private FfmpegProcessor FfmpegProcessor { get; }
     private DownloadArtifactWriter ArtifactWriter { get; }
     private DownloadTaskStateWriter StateWriter { get; }
+    private DownloadTaskShutdownRecovery ShutdownRecovery { get; }
     private ISettingsStore SettingsStore { get; }
     private IWbiKeyProvider WbiKeyProvider { get; }
     private ILogger Logger { get; }
@@ -52,11 +54,16 @@ internal sealed class DownloadPipeline : IDisposable
     private const int Retry = 5;
     private const string NullMark = "<null>";
 
-    private void EnsureDownloadIsActive(DownloadingItem downloading)
+    private void EnsureDownloadIsActive(DownloadTaskId taskId)
     {
-        ArgumentNullException.ThrowIfNull(downloading);
+        ArgumentNullException.ThrowIfNull(taskId);
         CancellationToken?.ThrowIfCancellationRequested();
-        if (downloading.Downloading.DownloadStatus == DownloadStatus.Pause || !DownloadingList.Contains(downloading))
+        var task = ProjectionStore.GetRequiredSnapshot(taskId);
+        if (task.Phase != DownloadPhase.Downloading ||
+            !DownloadingList.Any(item => string.Equals(
+                item.DownloadBase.Id,
+                taskId.Value,
+                StringComparison.Ordinal)))
         {
             throw new OperationCanceledException("Task is paused or deleted");
         }
@@ -122,6 +129,7 @@ internal sealed class DownloadPipeline : IDisposable
         FfmpegProcessor ffmpegProcessor,
         DownloadArtifactWriter artifactWriter,
         DownloadTaskStateWriter stateWriter,
+        DownloadTaskShutdownRecovery shutdownRecovery,
         ITransferBackend transferBackend,
         ILogger logger)
     {
@@ -137,6 +145,7 @@ internal sealed class DownloadPipeline : IDisposable
         FfmpegProcessor = ffmpegProcessor ?? throw new ArgumentNullException(nameof(ffmpegProcessor));
         ArtifactWriter = artifactWriter ?? throw new ArgumentNullException(nameof(artifactWriter));
         StateWriter = stateWriter ?? throw new ArgumentNullException(nameof(stateWriter));
+        ShutdownRecovery = shutdownRecovery ?? throw new ArgumentNullException(nameof(shutdownRecovery));
         _transferBackend = transferBackend ?? throw new ArgumentNullException(nameof(transferBackend));
         Logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -290,7 +299,8 @@ internal sealed class DownloadPipeline : IDisposable
             return null;
         }
 
-        EnsureDownloadIsActive(downloading);
+        var taskId = new DownloadTaskId(downloading.DownloadBase.Id);
+        EnsureDownloadIsActive(taskId);
         var urls = new List<string>();
         if (!string.IsNullOrWhiteSpace(media.BaseAddress))
         {
@@ -314,37 +324,39 @@ internal sealed class DownloadPipeline : IDisposable
 
         var fileName = Guid.NewGuid().ToString("N");
         var key = VideoPlayUrlBasic.CreateDownloadKey(media.Id, media.Codecs);
-        downloading.Downloading.DownloadedFiles ??= [];
-        if (downloading.Downloading.DownloadFiles.TryGetValue(key, out var existingFileName))
+        var snapshot = ProjectionStore.GetRequiredSnapshot(taskId);
+        if (snapshot.Plan.TransferFiles.TryGetValue(key, out var existingFileName))
         {
             fileName = existingFileName;
             var cachedFile = Path.Combine(path, fileName);
-            if (downloading.Downloading.DownloadedFiles.Contains(key) &&
+            if (snapshot.Transfer.CompletedFileKeys.Contains(key, StringComparer.Ordinal) &&
                 IsDownloadedMediaFileUsable(cachedFile, media.ExpectedSize))
             {
                 return cachedFile;
             }
 
-            if (downloading.Downloading.DownloadedFiles.Remove(key))
+            if (snapshot.Transfer.CompletedFileKeys.Contains(key, StringComparer.Ordinal))
             {
                 DeleteInvalidDownloadedMediaFile(cachedFile);
-                await StateWriter.UpdateAsync(
-                    downloading,
+                await StateWriter.InvalidateCompletedFileAsync(
+                    taskId,
+                    key,
                     CancellationToken.GetValueOrDefault()).ConfigureAwait(true);
             }
         }
-        else if (downloading.Downloading.DownloadFiles.TryAdd(key, fileName))
+        else
         {
-            downloading.Downloading.Gid = null;
-            await StateWriter.UpdateAsync(
-                downloading,
+            await StateWriter.RecordTransferFileAsync(
+                taskId,
+                key,
+                fileName,
                 CancellationToken.GetValueOrDefault()).ConfigureAwait(true);
         }
 
         NormalizeTransferSchemes(urls, settings.Network.UseSsl == AllowStatus.Yes);
         var targetFile = Path.Combine(path, fileName);
         var outcome = await TransferAsync(
-            downloading,
+            taskId,
             urls,
             path,
             fileName,
@@ -352,26 +364,23 @@ internal sealed class DownloadPipeline : IDisposable
         if (outcome == DownloadTransferOutcome.Succeeded &&
             IsDownloadedMediaFileUsable(targetFile, media.ExpectedSize))
         {
-            if (!downloading.Downloading.DownloadedFiles.Contains(key))
-            {
-                downloading.Downloading.DownloadedFiles.Add(key);
-            }
-
-            downloading.Downloading.Gid = null;
-            await StateWriter.UpdateAsync(
-                downloading,
+            await StateWriter.CompleteTransferFileAsync(
+                taskId,
+                key,
                 CancellationToken.GetValueOrDefault()).ConfigureAwait(true);
             return targetFile;
         }
 
-        if (outcome != DownloadTransferOutcome.Paused)
+        if (outcome == DownloadTransferOutcome.Paused)
         {
-            downloading.Downloading.Gid = null;
-            DeleteInvalidDownloadedMediaFile(targetFile);
-            await StateWriter.UpdateAsync(
-                downloading,
-                CancellationToken.GetValueOrDefault()).ConfigureAwait(true);
+            throw new OperationCanceledException("Download was paused.");
         }
+
+        DeleteInvalidDownloadedMediaFile(targetFile);
+        await StateWriter.SetBackendIdentityAsync(
+            taskId,
+            null,
+            CancellationToken.GetValueOrDefault()).ConfigureAwait(true);
 
         return NullMark;
     }
@@ -400,7 +409,8 @@ internal sealed class DownloadPipeline : IDisposable
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(downloading);
-        EnsureDownloadIsActive(downloading);
+        var taskId = new DownloadTaskId(downloading.DownloadBase.Id);
+        EnsureDownloadIsActive(taskId);
 
         // 更新状态显示
         downloading.DownloadStatusTitle = DictionaryResource.GetString("MixedFlow");
@@ -409,6 +419,11 @@ internal sealed class DownloadPipeline : IDisposable
         downloading.DownloadingFileSize = string.Empty;
         // 下载速度
         downloading.SpeedDisplay = string.Empty;
+        await StateWriter.UpdateActivityAsync(
+            taskId,
+            downloading.DownloadContent,
+            downloading.DownloadStatusTitle,
+            cancellationToken).ConfigureAwait(true);
 
         var finalFile = $"{downloading.DownloadBase.FilePath}.mp4";
         if (videoUid == null)
@@ -424,24 +439,12 @@ internal sealed class DownloadPipeline : IDisposable
         var succeeded = await FfmpegProcessor
             .MergeVideoAsync(videoSettings, audioUid, videoUid, finalFile, cancellationToken)
             .ConfigureAwait(true);
-        if (!succeeded)
-        {
-            downloading.FileSize = Format.FormatFileSize(0);
-            return null;
-        }
-
-        // 获取文件大小
-        if (File.Exists(finalFile))
-        {
-            var info = new FileInfo(finalFile);
-            downloading.FileSize = Format.FormatFileSize(info.Length);
-        }
-        else
-        {
-            downloading.FileSize = Format.FormatFileSize(0);
-        }
-
-        return finalFile;
+        downloading.FileSize = await DownloadOutputRecorder.RecordFileSizeAsync(
+            taskId,
+            succeeded ? finalFile : null,
+            StateWriter,
+            cancellationToken).ConfigureAwait(true);
+        return succeeded ? finalFile : null;
     }
 
 
@@ -451,10 +454,16 @@ internal sealed class DownloadPipeline : IDisposable
         VideoApplicationSettings videoSettings,
         CancellationToken cancellationToken)
     {
+        var taskId = new DownloadTaskId(downloading.DownloadBase.Id);
         downloading.DownloadStatusTitle = DictionaryResource.GetString("ConcatVideos");
         downloading.DownloadContent = DictionaryResource.GetString("DownloadingVideo");
         downloading.DownloadingFileSize = string.Empty;
         downloading.SpeedDisplay = string.Empty;
+        await StateWriter.UpdateActivityAsync(
+            taskId,
+            downloading.DownloadContent,
+            downloading.DownloadStatusTitle,
+            cancellationToken).ConfigureAwait(true);
 
         var finalFile = $"{downloading.DownloadBase.FilePath}.mp4";
         var segments = downloads
@@ -471,15 +480,11 @@ internal sealed class DownloadPipeline : IDisposable
                 finalFile,
                 cancellationToken: cancellationToken)
             .ConfigureAwait(true);
-        if (result.Succeeded && result.OutputPath != null)
-        {
-            var info = new FileInfo(result.OutputPath);
-            downloading.FileSize = Format.FormatFileSize(info.Length);
-        }
-        else
-        {
-            downloading.FileSize = Format.FormatFileSize(0);
-        }
+        downloading.FileSize = await DownloadOutputRecorder.RecordFileSizeAsync(
+            taskId,
+            result.Succeeded ? result.OutputPath : null,
+            StateWriter,
+            cancellationToken).ConfigureAwait(true);
 
         return result;
     }
@@ -488,6 +493,7 @@ internal sealed class DownloadPipeline : IDisposable
 
 
     private async Task ParseAsync(
+        DownloadTaskId taskId,
         DownloadingItem downloading,
         ApplicationSettings settings)
     {
@@ -501,23 +507,22 @@ internal sealed class DownloadPipeline : IDisposable
         downloading.Progress = 0;
         // 下载速度
         downloading.SpeedDisplay = string.Empty;
+        await StateWriter.UpdateActivityAsync(
+            taskId,
+            downloading.DownloadContent,
+            downloading.DownloadStatusTitle,
+            CancellationToken.GetValueOrDefault()).ConfigureAwait(true);
 
-        if (downloading.PlayUrl != null && downloading.Downloading.DownloadStatus == DownloadStatus.NotStarted)
+        if (downloading.PlayUrl != null)
         {
-            // 设置下载状态
-            downloading.Downloading.DownloadStatus = DownloadStatus.Downloading;
-
             return;
         }
-
-        // 设置下载状态
-        downloading.Downloading.DownloadStatus = DownloadStatus.Downloading;
 
         PlayUrl? playUrl = null;
         switch (downloading.Downloading.PlayStreamType)
         {
             case PlayStreamType.Video:
-                playUrl = downloading.PlayUrl ?? await WbiRequestExecutor.ExecuteAsync(
+                playUrl = await WbiRequestExecutor.ExecuteAsync(
                     WbiKeyProvider,
                     (keys, unixTimeSeconds) => settings.Video.VideoParseType switch
                 {
@@ -531,11 +536,11 @@ internal sealed class DownloadPipeline : IDisposable
                     CancellationToken.GetValueOrDefault()).ConfigureAwait(true);
                 break;
             case PlayStreamType.Bangumi:
-                playUrl = downloading.PlayUrl ?? VideoStreamApi.GetBangumiPlayUrl(downloading.DownloadBase.Avid, downloading.DownloadBase.Bvid,
+                playUrl = VideoStreamApi.GetBangumiPlayUrl(downloading.DownloadBase.Avid, downloading.DownloadBase.Bvid,
                     downloading.DownloadBase.Cid, cancellationToken: CancellationToken.GetValueOrDefault());
                 break;
             case PlayStreamType.Cheese:
-                playUrl = downloading.PlayUrl ?? VideoStreamApi.GetCheesePlayUrl(downloading.DownloadBase.Avid,
+                playUrl = VideoStreamApi.GetCheesePlayUrl(downloading.DownloadBase.Avid,
                     downloading.DownloadBase.Bvid, downloading.DownloadBase.Cid,
                     downloading.DownloadBase.EpisodeId, cancellationToken: CancellationToken.GetValueOrDefault());
                 break;
@@ -545,7 +550,7 @@ internal sealed class DownloadPipeline : IDisposable
 
         if (playUrl == null)
         {
-            await MarkFailedAsync(downloading).ConfigureAwait(true);
+            await MarkFailedAsync(taskId).ConfigureAwait(true);
             return;
         }
 
@@ -555,12 +560,14 @@ internal sealed class DownloadPipeline : IDisposable
     /// <summary>
     /// 下载一个视频
     /// </summary>
-    /// <param name="downloading"></param>
+    /// <param name="taskId"></param>
     /// <returns></returns>
     internal async Task ExecuteAsync(
-        DownloadingItem downloading,
+        DownloadTaskId taskId,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(taskId);
+        var downloading = ProjectionStore.GetRequiredDownloadingProjection(taskId);
         CancellationToken = cancellationToken;
         var settings = SettingsStore.Current;
         downloading.DownloadBase.FilePath = downloading.DownloadBase.FilePath.Replace("\\", "/", StringComparison.Ordinal);
@@ -578,7 +585,7 @@ internal sealed class DownloadPipeline : IDisposable
                 Logger.LogDebugMessage(e.Message);
 
                 NotificationService.Show($"{path}{DictionaryResource.GetString("DirectoryError")}");
-
+                await MarkFailedAsync(taskId).ConfigureAwait(true);
                 return;
             }
             catch (UnauthorizedAccessException e)
@@ -586,7 +593,7 @@ internal sealed class DownloadPipeline : IDisposable
                 Logger.LogDebugMessage(e.Message);
 
                 NotificationService.Show($"{path}{DictionaryResource.GetString("DirectoryError")}");
-
+                await MarkFailedAsync(taskId).ConfigureAwait(true);
                 return;
             }
         }
@@ -599,10 +606,10 @@ internal sealed class DownloadPipeline : IDisposable
                 downloading.DownloadContent = string.Empty;
 
                 // 解析并依次下载音频、视频、弹幕、字幕、封面等内容
-                await ParseAsync(downloading, settings).ConfigureAwait(true);
+                await ParseAsync(taskId, downloading, settings).ConfigureAwait(true);
 
                 // 暂停
-                EnsureDownloadIsActive(downloading);
+                EnsureDownloadIsActive(taskId);
 
                 var isMediaSuccess = true;
 
@@ -626,11 +633,11 @@ internal sealed class DownloadPipeline : IDisposable
 
                     if (audioUid == NullMark)
                     {
-                        await MarkFailedAsync(downloading).ConfigureAwait(true);
+                        await MarkFailedAsync(taskId).ConfigureAwait(true);
                         return;
                     }
 
-                    EnsureDownloadIsActive(downloading);
+                    EnsureDownloadIsActive(taskId);
 
 
                     // 如果需要下载视频
@@ -649,11 +656,11 @@ internal sealed class DownloadPipeline : IDisposable
 
                     if (videoUid == NullMark)
                     {
-                        await MarkFailedAsync(downloading).ConfigureAwait(true);
+                        await MarkFailedAsync(taskId).ConfigureAwait(true);
                         return;
                     }
 
-                    EnsureDownloadIsActive(downloading);
+                    EnsureDownloadIsActive(taskId);
 
                     // 混流
                     var outputMedia = string.Empty;
@@ -730,11 +737,11 @@ internal sealed class DownloadPipeline : IDisposable
 
                         if (downloadStatus.Any(download => download.FilePath == NullMark))
                         {
-                            await MarkFailedAsync(downloading).ConfigureAwait(true);
+                            await MarkFailedAsync(taskId).ConfigureAwait(true);
                             return;
                         }
 
-                        EnsureDownloadIsActive(downloading);
+                        EnsureDownloadIsActive(taskId);
 
                         if (durls.Count > 1)
                         {
@@ -764,11 +771,11 @@ internal sealed class DownloadPipeline : IDisposable
                         //音频分离？
                     }
 
-                    EnsureDownloadIsActive(downloading);
+                    EnsureDownloadIsActive(taskId);
                 }
                 else
                 {
-                    await MarkFailedAsync(downloading).ConfigureAwait(true);
+                    await MarkFailedAsync(taskId).ConfigureAwait(true);
                     return;
                 }
 
@@ -790,7 +797,7 @@ internal sealed class DownloadPipeline : IDisposable
                 }
 
                 // 暂停
-                EnsureDownloadIsActive(downloading);
+                EnsureDownloadIsActive(taskId);
 
                 IReadOnlyList<string>? outputSubtitles = null;
                 // 如果需要下载字幕
@@ -802,7 +809,7 @@ internal sealed class DownloadPipeline : IDisposable
                 }
 
                 // 暂停
-                EnsureDownloadIsActive(downloading);
+                EnsureDownloadIsActive(taskId);
 
                 string? outputCover = null;
                 string? outputPageCover = null;
@@ -828,7 +835,7 @@ internal sealed class DownloadPipeline : IDisposable
                 }
 
                 // 暂停
-                EnsureDownloadIsActive(downloading);
+                EnsureDownloadIsActive(taskId);
 
                 // 检测弹幕是否下载成功
                 var isDanmakuSuccess = true;
@@ -876,27 +883,27 @@ internal sealed class DownloadPipeline : IDisposable
 
                 if (!isMediaSuccess || !isDanmakuSuccess || !isSubtitleSuccess || !isCover)
                 {
-                    await MarkFailedAsync(downloading).ConfigureAwait(true);
+                    await MarkFailedAsync(taskId).ConfigureAwait(true);
                     return;
                 }
 
                 // 下载完成后处理
                 var downloaded = new Downloaded
                 {
-                    MaxSpeedDisplay = Format.FormatSpeedWithBandwidth(downloading.Downloading.MaxSpeed),
+                    MaxSpeedDisplay = Format.FormatSpeedWithBandwidth(
+                        ProjectionStore.GetRequiredSnapshot(taskId).Transfer.MaximumBytesPerSecond),
                 };
                 // 设置完成时间
                 downloaded.SetFinishedTimestamp(new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds());
 
-                var downloadedItem = new DownloadedItem
-                {
-                    DownloadBase = downloading.DownloadBase,
-                    Downloaded = downloaded
-                };
-
-                await ProjectionStore
-                    .AddDownloadedAsync(downloadedItem, cancellationToken)
-                    .ConfigureAwait(true);
+                var completedTask = await StateWriter.CompleteAsync(
+                    taskId,
+                    new DownloadCompletion(
+                        downloaded.FinishedTimestamp,
+                        downloaded.FinishedTime,
+                        downloaded.MaxSpeedDisplay),
+                    cancellationToken).ConfigureAwait(true);
+                var downloadedItem = DownloadTaskProjectionStore.CreateDownloadedProjection(completedTask);
                 await UiDispatcher.InvokeAsync(() =>
                 {
                     // 加入到下载完成list中，并从下载中list去除
@@ -912,31 +919,22 @@ internal sealed class DownloadPipeline : IDisposable
         catch (OperationCanceledException e)
         {
             Logger.LogDebugMessage(e.Message);
-            await StateWriter.UpdateAsync(
-                downloading,
-                System.Threading.CancellationToken.None).ConfigureAwait(true);
         }
     }
 
     /// <summary>
     /// 下载失败后的处理
     /// </summary>
-    /// <param name="downloading"></param>
-    internal async Task MarkFailedAsync(DownloadingItem downloading)
+    /// <param name="taskId"></param>
+    internal async Task MarkFailedAsync(DownloadTaskId taskId)
     {
-        ArgumentNullException.ThrowIfNull(downloading);
-
-        downloading.DownloadStatusTitle = DictionaryResource.GetString("DownloadFailed");
-        downloading.DownloadContent = string.Empty;
-        downloading.DownloadingFileSize = string.Empty;
-        downloading.SpeedDisplay = string.Empty;
-        downloading.Progress = 0;
-
-        downloading.Downloading.DownloadStatus = DownloadStatus.DownloadFailed;
-        downloading.StartOrPause = ButtonIcon.Instance().Retry;
-        downloading.StartOrPause.Fill = DictionaryResource.GetColor("ColorPrimary");
-        await StateWriter.UpdateAsync(
-            downloading,
+        ArgumentNullException.ThrowIfNull(taskId);
+        await StateWriter.FailAsync(
+            taskId,
+            new DownloadFailure(
+                "download.runtime.failed",
+                DictionaryResource.GetString("DownloadFailed"),
+                true),
             CancellationToken.GetValueOrDefault()).ConfigureAwait(true);
     }
 
@@ -968,32 +966,14 @@ internal sealed class DownloadPipeline : IDisposable
                ?? throw new ArgumentException("Download file path must include a directory.", nameof(filePath));
     }
 
+    internal DownloadPhase GetTaskPhase(DownloadTaskId taskId)
+    {
+        return ProjectionStore.GetRequiredSnapshot(taskId).Phase;
+    }
+
     internal async Task PersistShutdownStateAsync()
     {
-        foreach (var item in DownloadingList)
-        {
-            switch (item.Downloading.DownloadStatus)
-            {
-                case DownloadStatus.NotStarted:
-                case DownloadStatus.WaitForDownload:
-                case DownloadStatus.PauseStarted:
-                case DownloadStatus.Pause:
-                    break;
-                case DownloadStatus.Downloading:
-                    item.Downloading.DownloadStatus = DownloadStatus.WaitForDownload;
-                    break;
-                case DownloadStatus.DownloadSucceed:
-                case DownloadStatus.DownloadFailed:
-                default:
-                    break;
-            }
-
-            item.SpeedDisplay = string.Empty;
-
-            await StateWriter.UpdateAsync(
-                item,
-                System.Threading.CancellationToken.None).ConfigureAwait(true);
-        }
+        await ShutdownRecovery.PersistAsync().ConfigureAwait(true);
     }
 
     public void Dispose()
@@ -1019,22 +999,21 @@ internal sealed class DownloadPipeline : IDisposable
     }
 
     private Task<DownloadTransferOutcome> TransferAsync(
-        DownloadingItem downloading,
+        DownloadTaskId taskId,
         IReadOnlyList<string> urls,
         string path,
         string localFileName,
         long expectedBytes)
     {
-        return _transferBackend.TransferAsync(new DownloadTransferRequest(
-            downloading,
+        return _transferBackend.TransferAsync(DownloadTransferRequestFactory.Create(
+            taskId,
             urls,
             path,
             localFileName,
             expectedBytes,
-            () => EnsureDownloadIsActive(downloading),
-            cancellationToken => StateWriter.UpdateAsync(
-                downloading,
-                cancellationToken),
+            ProjectionStore,
+            StateWriter,
+            () => EnsureDownloadIsActive(taskId),
             CancellationToken.GetValueOrDefault()));
     }
 
