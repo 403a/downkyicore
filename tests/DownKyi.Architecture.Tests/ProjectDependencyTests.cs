@@ -57,6 +57,7 @@ public sealed class ProjectDependencyTests
             ["DownKyi.Desktop"] = new(StringComparer.OrdinalIgnoreCase)
             {
                 "DownKyi.Application",
+                "DownKyi.Core",
                 "DownKyi.Domain",
                 "DownKyi.Infrastructure"
             }
@@ -185,20 +186,48 @@ public sealed class ProjectDependencyTests
     public void PrismPackagesAndLegacyCompositionBridgesAreRemoved()
     {
         var projectSource = File.ReadAllText(Path.Combine(RepositoryRoot, "DownKyi", "DownKyi.csproj"));
+        var desktopRoot = Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop");
         var packageSource = File.ReadAllText(Path.Combine(RepositoryRoot, "Directory.Packages.props"));
 
         Assert.DoesNotContain("Prism", projectSource, StringComparison.Ordinal);
         Assert.DoesNotContain("Prism", packageSource, StringComparison.Ordinal);
         Assert.False(File.Exists(Path.Combine(
-            RepositoryRoot,
-            "DownKyi",
+            desktopRoot,
             "Composition",
             "LegacyDesktopComposition.cs")));
         Assert.False(File.Exists(Path.Combine(
-            RepositoryRoot,
-            "DownKyi",
+            desktopRoot,
             "Composition",
             "LegacyPrismComposition.cs")));
+    }
+
+    [Fact]
+    public void ExecutableProjectIsOnlyTheDesktopBootstrap()
+    {
+        var executableRoot = Path.Combine(RepositoryRoot, "DownKyi");
+        var projectPath = Path.Combine(executableRoot, "DownKyi.csproj");
+        var sourceFiles = Directory
+            .EnumerateFiles(executableRoot, "*.cs", SearchOption.AllDirectories)
+            .Where(path => !IsUnderDirectory(path, "bin"))
+            .Where(path => !IsUnderDirectory(path, "obj"))
+            .Select(path => Path.GetRelativePath(executableRoot, path).Replace('\\', '/'))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        var project = XDocument.Load(projectPath);
+        var references = project
+            .Descendants("ProjectReference")
+            .Select(element => (string?)element.Attribute("Include"))
+            .Where(include => !string.IsNullOrWhiteSpace(include))
+            .Cast<string>()
+            .Select(include => include.Replace('\\', '/'))
+            .Select(Path.GetFileNameWithoutExtension)
+            .Cast<string>()
+            .ToArray();
+
+        Assert.Equal(["Program.cs"], sourceFiles);
+        Assert.Equal(["DownKyi.Desktop"], references);
+        Assert.Empty(project.Descendants("PackageReference"));
+        Assert.Empty(project.Descendants("AvaloniaResource"));
     }
 
     private static string GetTargetProjectPath(string projectName)

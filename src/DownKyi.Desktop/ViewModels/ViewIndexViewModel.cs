@@ -108,7 +108,7 @@ internal class ViewIndexViewModel : ViewModelBase
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _loginPanelVisibility = true;
-        Header = "avares://DownKyi/Resources/default_header.jpg";
+        Header = "avares://DownKyi.Desktop/Resources/default_header.jpg";
 
         TextLogo = LogoIcon.Instance().TextLogo;
         TextLogo.Fill = DictionaryResource.GetColor("ColorPrimary");
@@ -267,7 +267,7 @@ internal class ViewIndexViewModel : ViewModelBase
             if (!snapshot.HasLoginFile)
             {
                 LoginPanelVisibility = true;
-                Header = "avares://DownKyi/Resources/default_header.jpg";
+                Header = "avares://DownKyi.Desktop/Resources/default_header.jpg";
                 UserName = null;
                 return;
             }
@@ -276,13 +276,13 @@ internal class ViewIndexViewModel : ViewModelBase
 
             if (snapshot.UserInfo != null)
             {
-                Header = snapshot.UserInfo.Face ?? "avares://DownKyi/Resources/default_header.jpg";
+                Header = snapshot.UserInfo.Face ?? "avares://DownKyi.Desktop/Resources/default_header.jpg";
 
                 UserName = snapshot.UserInfo.Name;
             }
             else
             {
-                Header = "avares://DownKyi/Resources/default_header.jpg";
+                Header = "avares://DownKyi.Desktop/Resources/default_header.jpg";
                 UserName = null;
             }
         }

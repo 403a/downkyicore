@@ -9,7 +9,7 @@ public sealed class UserSpaceArchitectureTests
     {
         var source = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "ViewModels",
             "ViewUserSpaceViewModel.cs"));
 
@@ -27,13 +27,13 @@ public sealed class UserSpaceArchitectureTests
     {
         var viewModel = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "ViewModels",
             "UserSpace",
             "ViewFavoritesViewModel.cs"));
         var view = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Views",
             "UserSpace",
             "ViewFavorites.axaml"));

@@ -184,16 +184,16 @@ internal sealed class UserSpacePageCoordinator : IUserSpacePageCoordinator
         return new MySpaceProfileSnapshot(
             settings?.Toutu?.Limg is { Length: > 0 } background
                 ? $"https://i0.hdslb.com/{background}"
-                : "avares://DownKyi/Resources/backgound/9-绿荫秘境.png",
+                : "avares://DownKyi.Desktop/Resources/backgound/9-绿荫秘境.png",
             info.Face,
             info.Name,
             info.Sex switch
             {
-                "男" => "avares://DownKyi/Resources/sex/male.png",
-                "女" => "avares://DownKyi/Resources/sex/female.png",
+                "男" => "avares://DownKyi.Desktop/Resources/sex/male.png",
+                "女" => "avares://DownKyi.Desktop/Resources/sex/female.png",
                 _ => null
             },
-            $"avares://DownKyi/Resources/level/lv{info.Level}.png",
+            $"avares://DownKyi.Desktop/Resources/level/lv{info.Level}.png",
             !string.IsNullOrEmpty(info.Vip.Label?.Text),
             info.Vip.Label?.Text ?? string.Empty,
             info.Sign,
@@ -283,7 +283,7 @@ internal sealed class UserSpacePageCoordinator : IUserSpacePageCoordinator
     {
         if (string.IsNullOrEmpty(address))
         {
-            return "avares://DownKyi/Resources/video-placeholder.png";
+            return "avares://DownKyi.Desktop/Resources/video-placeholder.png";
         }
 
         return address.StartsWith("http", StringComparison.OrdinalIgnoreCase)

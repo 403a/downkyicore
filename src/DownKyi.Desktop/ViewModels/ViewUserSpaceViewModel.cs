@@ -391,14 +391,14 @@ internal partial class ViewUserSpaceViewModel : ViewModelBase
             UserName = userInfo.Name;
             var sexUri = userInfo.Sex switch
             {
-                "男" => new Uri("avares://DownKyi/Resources/sex/male.png"),
-                "女" => new Uri("avares://DownKyi/Resources/sex/female.png"),
+                "男" => new Uri("avares://DownKyi.Desktop/Resources/sex/male.png"),
+                "女" => new Uri("avares://DownKyi.Desktop/Resources/sex/female.png"),
                 _ => null
             };
             // 性别
             Sex = sexUri == null ? null : ImageHelper.LoadFromResource(sexUri);
             // 等级
-            Level = ImageHelper.LoadFromResource(new Uri($"avares://DownKyi/Resources/level/lv{userInfo.Level}.png"));
+            Level = ImageHelper.LoadFromResource(new Uri($"avares://DownKyi.Desktop/Resources/level/lv{userInfo.Level}.png"));
             VipType = userInfo.Vip?.Label?.Text ?? string.Empty;
             VipTypeVisibility = !string.IsNullOrEmpty(VipType);
             Sign = userInfo.Sign;
@@ -410,7 +410,7 @@ internal partial class ViewUserSpaceViewModel : ViewModelBase
             TopNavigationBg = DictionaryResource.GetColor("ColorMask100");
             Background = snapshot.Settings != null
                 ? $"https://i0.hdslb.com/{snapshot.Settings.Toutu.Limg}"
-                : "avares://DownKyi/Resources/backgound/9-绿荫秘境.png";
+                : "avares://DownKyi.Desktop/Resources/backgound/9-绿荫秘境.png";
 
             ViewVisibility = true;
             LoadingVisibility = false;

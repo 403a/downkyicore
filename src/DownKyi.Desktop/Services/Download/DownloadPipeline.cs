@@ -43,18 +43,18 @@ internal sealed class DownloadPipeline : IDownloadTaskExecutor
         var context = _contextFactory.Create(taskId);
         try
         {
-            var run = await ExecuteStagesAsync(
+            var (stageResult, failedStage) = await ExecuteStagesAsync(
                 _stages,
                 context,
                 cancellationToken).ConfigureAwait(true);
-            if (run.Result.IsSuccess)
+            if (stageResult.IsSuccess)
             {
                 return;
             }
 
             _logger.LogWarningMessage(
-                $"Download stage {run.FailedStage ?? "unknown"} failed with " +
-                $"{run.Result.Error?.Code ?? "unknown"}.");
+                $"Download stage {failedStage ?? "unknown"} failed with " +
+                $"{stageResult.Error?.Code ?? "unknown"}.");
             await MarkFailedAsync(taskId, cancellationToken).ConfigureAwait(true);
         }
         catch (OperationCanceledException exception)

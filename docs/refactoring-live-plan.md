@@ -2,8 +2,8 @@
 
 Status: active
 Last updated: 2026-07-26
-Current group: Gate 7 HTTP and Infrastructure ownership
-Current branch: `refactor/async-bilibili-infrastructure`
+Current group: Gate 8 Desktop boundary and UI projection ownership
+Current branch: `refactor/desktop-boundary`
 
 This file contains only unfinished or not-yet-integrated work. Completed PR 02-32 items are not restored. Design rationale belongs in `design-docs`; product acceptance belongs in `product-specs`.
 
@@ -20,46 +20,12 @@ The previous `Status: complete` was incorrect.
 - The authenticated audit passed its `/nav` login gate and all 14 contract probes. Only the allowlisted sanitized diagnostics artifact is retained; the candidate-file Gitleaks scan reported zero findings.
 - Gate 6 stage extraction passed two complete Windows/Linux/macOS quality and CodeQL rounds, then PR #89 was merged into `refactor/pr-30-32-release-hardening` as merge commit `e288913f`.
 - Gate 6 retry policy passed three complete remote rounds. Final Windows/Linux/macOS quality run `30187455431` and CodeQL run `30187455441` had zero check annotations, then PR #90 was merged into `refactor/pr-30-32-release-hardening` as merge commit `ba0a928e`.
+- Gate 7 async Bilibili Infrastructure ownership passed Windows/Linux/macOS quality run `30189537538`, protobuf run `30189537553`, and CodeQL run `30189537541`, then PR #91 was merged into `refactor/pr-30-32-release-hardening` as merge commit `55070903`.
 - `version.txt` remains `1.0.32`; v1.1.0 has not passed its release gate.
 
 No release tag may be created while any release blocker below remains.
 
 ## Execution Order
-
-### Gate 7: Finish HTTP And Infrastructure Ownership
-
-Owner branch: `refactor/async-bilibili-infrastructure`.
-
-Scope:
-
-- Define injected `IBilibiliApiClient`, `IBuvidProvider` and existing `IWbiKeyProvider` ports.
-- Move implementation to Infrastructure.
-- Use `SendAsync`, async content/stream reads and `Task.Delay`.
-- Remove static `WebClient` state and `Configure()`.
-- Move aria2, FFmpeg, file system and logging sink configuration toward Infrastructure in test-protected steps.
-
-Verification:
-
-- cancellation during request/backoff propagates immediately.
-- retry exhaustion preserves typed HTTP/API error.
-- all Bilibili fixtures remain green.
-- architecture tests reject static client facades and sync network IO.
-
-Local result:
-
-- Strict Release build passed with zero warnings and zero errors.
-- All 606 solution tests passed, including 32 Infrastructure transport/DI tests and 176 architecture tests.
-- `dotnet format --verify-no-changes`, package vulnerability/deprecation audits, module-boundary audit and `git diff --check` passed.
-- Candidate-file Gitleaks scan inspected 922 files and reported zero findings.
-- Remote Windows/Linux/macOS quality and CodeQL gates remain required before this gate is integrated.
-
-Completion:
-
-- Application and Desktop depend on ports, not Core static facades.
-
-Rollback:
-
-- Keep endpoint adapters behavior-compatible until all callers migrate; remove facade only in the final commit.
 
 ### Gate 8: Complete Desktop Boundary And UI Projection Ownership
 

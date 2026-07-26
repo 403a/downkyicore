@@ -11,7 +11,7 @@
         <type fullname="*" />
     </assembly>
 
-    <assembly fullname="DownKyi">
+    <assembly fullname="DownKyi.Desktop">
         <type fullname="*" />
     </assembly>
 

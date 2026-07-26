@@ -60,7 +60,7 @@ public sealed class LegacyPatternArchitectureTests
     [Fact]
     public void ViewModelsCannotOffloadWorkWithTaskRun()
     {
-        var violations = EnumerateSourceFiles(Path.Combine(RepositoryRoot, "DownKyi", "ViewModels"))
+        var violations = EnumerateSourceFiles(Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "ViewModels"))
             .Where(path => File.ReadAllText(path).Contains("Task.Run", StringComparison.Ordinal))
             .Select(Relative)
             .Order(StringComparer.Ordinal)
@@ -175,7 +175,7 @@ public sealed class LegacyPatternArchitectureTests
     {
         var files = EnumerateProductionSourceFiles()
             .Concat(Directory.EnumerateFiles(
-                Path.Combine(RepositoryRoot, "DownKyi"),
+                Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop"),
                 "*.axaml",
                 SearchOption.AllDirectories))
             .Concat(Directory.EnumerateFiles(RepositoryRoot, "*.csproj", SearchOption.AllDirectories)

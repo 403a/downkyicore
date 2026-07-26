@@ -7,10 +7,10 @@ public sealed class UiThemeArchitectureTests
     [Fact]
     public void DesktopUsesOneFluentThemeAndCentralDesignTokens()
     {
-        var appSource = ReadSource("DownKyi", "App.axaml");
-        var themeSource = ReadSource("DownKyi", "Themes", "ThemeDefault.axaml");
-        var tokenSource = ReadSource("DownKyi", "Themes", "DesignTokens.axaml");
-        var projectSource = ReadSource("DownKyi", "DownKyi.csproj");
+        var appSource = ReadSource("src", "DownKyi.Desktop", "App.axaml");
+        var themeSource = ReadSource("src", "DownKyi.Desktop", "Themes", "ThemeDefault.axaml");
+        var tokenSource = ReadSource("src", "DownKyi.Desktop", "Themes", "DesignTokens.axaml");
+        var projectSource = ReadSource("src", "DownKyi.Desktop", "DownKyi.Desktop.csproj");
 
         Assert.Contains("<FluentTheme />", appSource, StringComparison.Ordinal);
         Assert.Contains("Themes/Fluent.xaml", appSource, StringComparison.Ordinal);
@@ -37,14 +37,14 @@ public sealed class UiThemeArchitectureTests
             .Select(path => Path.GetRelativePath(RepositoryRoot, path).Replace('\\', '/'))
             .ToArray();
 
-        Assert.Equal(["DownKyi/DownKyi.csproj"], consumers);
+        Assert.Equal(["src/DownKyi.Desktop/DownKyi.Desktop.csproj"], consumers);
     }
 
     [Theory]
-    [InlineData("DownKyi", "Views", "DownloadManager", "ViewDownloading.axaml")]
-    [InlineData("DownKyi", "Views", "DownloadManager", "ViewDownloadFinished.axaml")]
-    [InlineData("DownKyi", "Views", "ViewMyHistory.axaml")]
-    [InlineData("DownKyi", "Views", "ViewPublicFavorites.axaml")]
+    [InlineData("src", "DownKyi.Desktop", "Views", "DownloadManager", "ViewDownloading.axaml")]
+    [InlineData("src", "DownKyi.Desktop", "Views", "DownloadManager", "ViewDownloadFinished.axaml")]
+    [InlineData("src", "DownKyi.Desktop", "Views", "ViewMyHistory.axaml")]
+    [InlineData("src", "DownKyi.Desktop", "Views", "ViewPublicFavorites.axaml")]
     public void LargeListsKeepVirtualizingPanels(params string[] pathParts)
     {
         Assert.Contains("VirtualizingStackPanel", ReadSource(pathParts), StringComparison.Ordinal);

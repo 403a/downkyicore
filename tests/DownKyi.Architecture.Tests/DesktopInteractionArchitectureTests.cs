@@ -26,8 +26,8 @@ public sealed class DesktopInteractionArchitectureTests
     [Fact]
     public void ShellAndSearchUseTypedDesktopInteractions()
     {
-        var shellSource = ReadSource("DownKyi", "ViewModels", "MainWindowViewModel.cs");
-        var searchSource = ReadSource("DownKyi", "Services", "SearchService.cs");
+        var shellSource = ReadSource("src", "DownKyi.Desktop", "ViewModels", "MainWindowViewModel.cs");
+        var searchSource = ReadSource("src", "DownKyi.Desktop", "Services", "SearchService.cs");
 
         Assert.Contains("IUserNotificationService", shellSource, StringComparison.Ordinal);
         Assert.Contains("IAppNavigationService", shellSource, StringComparison.Ordinal);
@@ -46,15 +46,15 @@ public sealed class DesktopInteractionArchitectureTests
     public void TypedInteractionsUseAvaloniaAdaptersWithoutCompatibilityBridges()
     {
         var compositionSource = ReadSource(
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Composition",
             "DesktopComposition.cs");
         var navigationAdapter = ReadSource(
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Platform",
             "AvaloniaNavigationService.cs");
         var dialogAdapter = ReadSource(
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Platform",
             "AvaloniaDialogService.cs");
 
@@ -77,7 +77,7 @@ public sealed class DesktopInteractionArchitectureTests
     {
         var pageItemDirectory = Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "ViewModels",
             "PageViewModels");
         var pageItemNames = new[]
@@ -97,10 +97,10 @@ public sealed class DesktopInteractionArchitectureTests
             Environment.NewLine,
             new[]
             {
-                ReadSource("DownKyi", "Services", "Download", "IAddToDownloadSession.cs"),
-                ReadSource("DownKyi", "Services", "Download", "AddToDownloadService.cs"),
-                ReadSource("DownKyi", "Services", "Media", "ContentDownloadCoordinator.cs"),
-                ReadSource("DownKyi", "Services", "Video", "VideoDetailDownloadCoordinator.cs")
+                ReadSource("src", "DownKyi.Desktop", "Services", "Download", "IAddToDownloadSession.cs"),
+                ReadSource("src", "DownKyi.Desktop", "Services", "Download", "AddToDownloadService.cs"),
+                ReadSource("src", "DownKyi.Desktop", "Services", "Media", "ContentDownloadCoordinator.cs"),
+                ReadSource("src", "DownKyi.Desktop", "Services", "Video", "VideoDetailDownloadCoordinator.cs")
             });
 
         Assert.Contains("IAppNavigationService", pageItemSource, StringComparison.Ordinal);
@@ -115,7 +115,7 @@ public sealed class DesktopInteractionArchitectureTests
     [Fact]
     public void NonDialogViewModelsCannotRegainLegacyInteractionDependencies()
     {
-        var viewModelDirectory = Path.Combine(RepositoryRoot, "DownKyi", "ViewModels");
+        var viewModelDirectory = Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "ViewModels");
         var dialogDirectory = Path.Combine(viewModelDirectory, "Dialogs") + Path.DirectorySeparatorChar;
         var forbiddenTokens = new[]
         {
@@ -148,11 +148,11 @@ public sealed class DesktopInteractionArchitectureTests
             Environment.NewLine,
             new[]
             {
-                ReadSource("DownKyi", "Services", "Download", "DownloadRuntimeFactory.cs"),
-                ReadSource("DownKyi", "Services", "Download", "DownloadOrchestrator.cs"),
-                ReadSource("DownKyi", "Services", "Download", "DownloadPipeline.cs"),
-                ReadSource("DownKyi", "Services", "Download", "Aria2TransferBackend.cs"),
-                ReadSource("DownKyi", "Services", "Download", "BuiltinTransferBackend.cs")
+                ReadSource("src", "DownKyi.Desktop", "Services", "Download", "DownloadRuntimeFactory.cs"),
+                ReadSource("src", "DownKyi.Desktop", "Services", "Download", "DownloadOrchestrator.cs"),
+                ReadSource("src", "DownKyi.Desktop", "Services", "Download", "DownloadPipeline.cs"),
+                ReadSource("src", "DownKyi.Desktop", "Services", "Download", "Aria2TransferBackend.cs"),
+                ReadSource("src", "DownKyi.Desktop", "Services", "Download", "BuiltinTransferBackend.cs")
             });
 
         Assert.Contains("IUserNotificationService", runtimeSource, StringComparison.Ordinal);

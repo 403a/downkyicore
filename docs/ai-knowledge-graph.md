@@ -75,17 +75,17 @@ tests:
 ```mermaid
 flowchart TD
     Program["app.program\nDownKyi/Program.cs"]
-    App["app.application\nDownKyi/App.axaml.cs"]
+    App["app.application\nsrc/DownKyi.Desktop/DesktopApplication.cs + App.axaml.cs"]
     Lifecycle["service.application-lifecycle\nIApplicationLifecycle + Avalonia adapter"]
     Host["app.host-composition\nsrc/DownKyi.Desktop/Composition/DownKyiHost.cs"]
     Domain["core.domain-contracts\nsrc/DownKyi.Domain"]
     ApplicationLayer["service.application-contracts\nsrc/DownKyi.Application"]
     Infrastructure["core.infrastructure\nsrc/DownKyi.Infrastructure"]
-    MainWindow["ui.main-window\nDownKyi/Views/MainWindow.axaml"]
+    MainWindow["ui.main-window\nsrc/DownKyi.Desktop/Views/MainWindow.axaml"]
     Navigation["service.typed-navigation\nAvaloniaNavigationService"]
     UiTheme["ui.desktop-theme\nFluentTheme + DesignTokens.axaml"]
     AsyncImage["ui.async-image-loader\nCustomControl/AsyncImageLoader"]
-    MainVm["viewmodel.main-window\nDownKyi/ViewModels/MainWindowViewModel.cs"]
+    MainVm["viewmodel.main-window\nsrc/DownKyi.Desktop/ViewModels/MainWindowViewModel.cs"]
     IndexVm["viewmodel.index\nViewIndexViewModel.cs"]
     LoginVm["viewmodel.login\nViewLoginViewModel.cs"]
     AccountSession["service.account-session\nServices/Account"]
@@ -100,13 +100,13 @@ flowchart TD
     UserSpacePageVms["viewmodel.user-space-pages\nPublication/My-space ViewModels"]
     UserSpacePages["service.user-space-pages\nUserSpacePageCoordinator.cs"]
     UserSpaceVm["viewmodel.user-space\nUserSpace + public favorites"]
-    VideoVm["viewmodel.video-detail\nDownKyi/ViewModels/ViewVideoDetailViewModel.cs"]
+    VideoVm["viewmodel.video-detail\nsrc/DownKyi.Desktop/ViewModels/ViewVideoDetailViewModel.cs"]
     SettingsVms["viewmodel.settings-pages\nSettings ViewModels"]
     NetworkSettings["service.network-settings\nNetworkSettingsCoordinator.cs"]
     BiliHelperVm["viewmodel.bili-helper\nViewBiliHelperViewModel.cs"]
     BiliHelper["service.bili-helper\nBiliHelperCoordinator.cs"]
     Resolver["service.video-input-resolver\nsrc/DownKyi.Application/Media"]
-    Parser["service.video-parse-coordinator\nDownKyi/Services/Video/VideoParseCoordinator.cs"]
+    Parser["service.video-parse-coordinator\nsrc/DownKyi.Desktop/Services/Video/VideoParseCoordinator.cs"]
     InfoServices["service.info-services\nVideo/Bangumi/Cheese services"]
     VideoTags["service.video-tag-provider\nVideoTagProvider + VideoPage.LoadTagsAsync"]
     WbiProvider["core.wbi-key-provider\nIWbiKeyProvider + WbiKeyProvider"]
@@ -253,14 +253,14 @@ id: app.program
 type: app
 paths:
   - DownKyi/Program.cs
-responsibility: Runs the internal restart-helper mode when requested, otherwise builds the Avalonia AppBuilder and starts the classic desktop lifetime.
+responsibility: Keeps the executable project as a minimal process entry and delegates all desktop startup behavior to DownKyi.Desktop.
 inbound:
   - external.os-process
 outbound:
   - app.application
 contracts:
-  - Do not run Avalonia-dependent code before AppMain/lifetime initialization.
-  - Restart-helper mode waits asynchronously for the old process, relaunches without helper arguments, and never initializes Avalonia or acquires the single-instance guard.
+  - The executable project references only DownKyi.Desktop and owns no UI, service, package, resource, or lifecycle implementation.
+  - Program delegates to DesktopApplication.RunAsync without constructing application services.
   - Debug-only developer tooling must not enter Release output.
 hazards:
   - Avalonia major upgrades often change AppBuilder extension methods.
@@ -275,9 +275,10 @@ tests:
 id: app.application
 type: app
 paths:
-  - DownKyi/App.axaml.cs
-  - DownKyi/Composition/DesktopComposition.cs
-responsibility: Keeps App focused on XAML initialization, Host attachment, shell creation, observed startup, and final resource disposal while DesktopComposition owns registrations.
+  - src/DownKyi.Desktop/DesktopApplication.cs
+  - src/DownKyi.Desktop/App.axaml.cs
+  - src/DownKyi.Desktop/Composition/DesktopComposition.cs
+responsibility: Owns restart-helper handling, Avalonia startup, XAML initialization, Host attachment, shell creation, observed startup, final resource disposal, and Desktop registrations.
 inbound:
   - app.program
 outbound:
@@ -318,10 +319,10 @@ tests:
 id: ui.desktop-theme
 type: ui
 paths:
-  - DownKyi/App.axaml
-  - DownKyi/Themes/DesignTokens.axaml
-  - DownKyi/Themes/ThemeDefault.axaml
-  - DownKyi/Themes/Styles
+  - src/DownKyi.Desktop/App.axaml
+  - src/DownKyi.Desktop/Themes/DesignTokens.axaml
+  - src/DownKyi.Desktop/Themes/ThemeDefault.axaml
+  - src/DownKyi.Desktop/Themes/Styles
 responsibility: Applies one Fluent control theme plus centralized design tokens while preserving the existing light/dark color resources and large-list virtualization.
 inbound:
   - app.application
@@ -351,10 +352,10 @@ id: service.application-lifecycle
 type: service
 paths:
   - src/DownKyi.Application/Lifetime/IApplicationLifecycle.cs
-  - DownKyi/Platform/AvaloniaApplicationLifecycle.cs
-  - DownKyi/Platform/AvaloniaDesktopContext.cs
-  - DownKyi/Platform/ProcessRestartLauncher.cs
-  - DownKyi/Platform/SingleInstanceGuard.cs
+  - src/DownKyi.Desktop/Platform/AvaloniaApplicationLifecycle.cs
+  - src/DownKyi.Desktop/Platform/AvaloniaDesktopContext.cs
+  - src/DownKyi.Desktop/Platform/ProcessRestartLauncher.cs
+  - src/DownKyi.Desktop/Platform/SingleInstanceGuard.cs
 responsibility: Owns idempotent Host startup/shutdown, bounded cleanup, settings/log flush, desktop exit, restart handoff, attached main-window access, and per-install single-instance guarding.
 inbound:
   - app.program
@@ -391,7 +392,7 @@ id: app.host-composition
 type: app
 paths:
   - src/DownKyi.Desktop/Composition/DownKyiHost.cs
-  - DownKyi/Composition/DesktopComposition.cs
+  - src/DownKyi.Desktop/Composition/DesktopComposition.cs
 responsibility: Builds the single Microsoft.Extensions.Hosting composition root and owns application-wide service lifetime.
 inbound:
   - app.application
@@ -539,7 +540,7 @@ tests:
 id: viewmodel.main-window
 type: viewmodel
 paths:
-  - DownKyi/ViewModels/MainWindowViewModel.cs
+  - src/DownKyi.Desktop/ViewModels/MainWindowViewModel.cs
 responsibility: Owns main window commands, clipboard debounce, navigation entry points, and window close behavior.
 inbound:
   - ui.main-window
@@ -569,7 +570,7 @@ tests:
 id: viewmodel.index
 type: viewmodel
 paths:
-  - DownKyi/ViewModels/ViewIndexViewModel.cs
+  - src/DownKyi.Desktop/ViewModels/ViewIndexViewModel.cs
 responsibility: Binds the home search entry, user header state, and navigation commands without performing account network work.
 inbound:
   - viewmodel.main-window
@@ -596,7 +597,7 @@ tests:
 id: viewmodel.login
 type: viewmodel
 paths:
-  - DownKyi/ViewModels/ViewLoginViewModel.cs
+  - src/DownKyi.Desktop/ViewModels/ViewLoginViewModel.cs
 responsibility: Projects QR login state, messages, and navigation while delegating blocking account operations.
 inbound:
   - viewmodel.index
@@ -618,8 +619,8 @@ tests:
 id: service.account-session
 type: service
 paths:
-  - DownKyi/Services/Account/UserSessionCoordinator.cs
-  - DownKyi/Services/Account/LoginCoordinator.cs
+  - src/DownKyi.Desktop/Services/Account/UserSessionCoordinator.cs
+  - src/DownKyi.Desktop/Services/Account/LoginCoordinator.cs
 responsibility: Runs injected asynchronous account API operations and isolated cookie persistence away from the UI thread, returning cancellable snapshots/results.
 inbound:
   - viewmodel.index
@@ -646,8 +647,8 @@ tests:
 id: viewmodel.friend-relations
 type: viewmodel
 paths:
-  - DownKyi/ViewModels/Friends/ViewFollowingViewModel.cs
-  - DownKyi/ViewModels/Friends/ViewFollowerViewModel.cs
+  - src/DownKyi.Desktop/ViewModels/Friends/ViewFollowingViewModel.cs
+  - src/DownKyi.Desktop/ViewModels/Friends/ViewFollowerViewModel.cs
 responsibility: Projects following groups, following/follower pages, pager state, loading state, and user navigation.
 inbound:
   - typed or legacy navigation
@@ -673,7 +674,7 @@ tests:
 id: service.friend-relations
 type: service
 paths:
-  - DownKyi/Services/Friends/FriendRelationCoordinator.cs
+  - src/DownKyi.Desktop/Services/Friends/FriendRelationCoordinator.cs
 responsibility: Loads relation overview, private groups, following pages, and follower pages as cancellation-aware snapshots.
 inbound:
   - viewmodel.friend-relations
@@ -696,7 +697,7 @@ tests:
 id: viewmodel.seasons-series
 type: viewmodel
 paths:
-  - DownKyi/ViewModels/ViewSeasonsSeriesViewModel.cs
+  - src/DownKyi.Desktop/ViewModels/ViewSeasonsSeriesViewModel.cs
 responsibility: Projects one season/series page, selection state, pager state, navigation, and add-to-download results.
 inbound:
   - viewmodel.user-space
@@ -723,7 +724,7 @@ tests:
 id: service.seasons-series
 type: service
 paths:
-  - DownKyi/Services/UserSpace/SeasonsSeriesCoordinator.cs
+  - src/DownKyi.Desktop/Services/UserSpace/SeasonsSeriesCoordinator.cs
 responsibility: Loads season/series archive snapshots and delegates legacy per-video parse/add work to the shared media coordinator.
 inbound:
   - viewmodel.seasons-series
@@ -748,12 +749,12 @@ tests:
 id: viewmodel.favorites
 type: viewmodel
 paths:
-  - DownKyi/ViewModels/ViewMyFavoritesViewModel.cs
-  - DownKyi/ViewModels/ViewMyFavoritesViewModel.Search.cs
-  - DownKyi/ViewModels/ViewPublicFavoritesViewModel.cs
-  - DownKyi/ViewModels/FavoritesSelectionPolicy.cs
-  - DownKyi/Views/ViewMyFavorites.axaml
-  - DownKyi/Views/ViewPublicFavorites.axaml
+  - src/DownKyi.Desktop/ViewModels/ViewMyFavoritesViewModel.cs
+  - src/DownKyi.Desktop/ViewModels/ViewMyFavoritesViewModel.Search.cs
+  - src/DownKyi.Desktop/ViewModels/ViewPublicFavoritesViewModel.cs
+  - src/DownKyi.Desktop/ViewModels/FavoritesSelectionPolicy.cs
+  - src/DownKyi.Desktop/Views/ViewMyFavorites.axaml
+  - src/DownKyi.Desktop/Views/ViewPublicFavorites.axaml
 responsibility: Projects private/public favorite folders and media snapshots, selection, pager, navigation, and add-to-download results.
 inbound:
   - viewmodel.user-space
@@ -787,9 +788,9 @@ tests:
 id: service.favorites
 type: service
 paths:
-  - DownKyi/Services/FavoritesCoordinator.cs
-  - DownKyi/Services/FavoritesService.cs
-  - DownKyi/Services/IFavoritesService.cs
+  - src/DownKyi.Desktop/Services/FavoritesCoordinator.cs
+  - src/DownKyi.Desktop/Services/FavoritesService.cs
+  - src/DownKyi.Desktop/Services/IFavoritesService.cs
 responsibility: Loads favorite folders, metadata, and media off the UI thread and returns fully mapped read-only snapshots.
 inbound:
   - viewmodel.favorites
@@ -815,10 +816,10 @@ tests:
 id: viewmodel.personal-media
 type: viewmodel
 paths:
-  - DownKyi/ViewModels/ViewMyHistoryViewModel.cs
-  - DownKyi/ViewModels/ViewMyToViewVideoViewModel.cs
-  - DownKyi/Views/ViewMyHistory.axaml
-  - DownKyi/Views/ViewMyToViewVideo.axaml
+  - src/DownKyi.Desktop/ViewModels/ViewMyHistoryViewModel.cs
+  - src/DownKyi.Desktop/ViewModels/ViewMyToViewVideoViewModel.cs
+  - src/DownKyi.Desktop/Views/ViewMyHistory.axaml
+  - src/DownKyi.Desktop/Views/ViewMyToViewVideo.axaml
 responsibility: Projects history/watch-later snapshots, history cursor state, selection, navigation, and add-to-download results.
 inbound:
   - viewmodel.user-space
@@ -847,7 +848,7 @@ tests:
 id: service.personal-media
 type: service
 paths:
-  - DownKyi/Services/Media/PersonalMediaCoordinator.cs
+  - src/DownKyi.Desktop/Services/Media/PersonalMediaCoordinator.cs
   - DownKyi.Core/BiliApi/History/ToView.cs
 responsibility: Loads and maps history/watch-later API data into read-only UI snapshots away from the UI thread.
 inbound:
@@ -871,9 +872,9 @@ tests:
 id: viewmodel.video-detail
 type: viewmodel
 paths:
-  - DownKyi/ViewModels/ViewVideoDetailViewModel.cs
-  - DownKyi/ViewModels/UiState/VideoDetailUiState.cs
-  - DownKyi/Views/ViewVideoDetail.axaml
+  - src/DownKyi.Desktop/ViewModels/ViewVideoDetailViewModel.cs
+  - src/DownKyi.Desktop/ViewModels/UiState/VideoDetailUiState.cs
+  - src/DownKyi.Desktop/Views/ViewVideoDetail.axaml
 responsibility: Wires video-detail commands, navigation, and UI result projection while one CommunityToolkit state object exposes mutually consistent bindings.
 inbound:
   - viewmodel.main-window
@@ -912,12 +913,12 @@ tests:
 id: viewmodel.settings-pages
 type: viewmodel
 paths:
-  - DownKyi/ViewModels/Settings/ViewBasicViewModel.cs
-  - DownKyi/ViewModels/Settings/ViewNetworkViewModel.cs
-  - DownKyi/ViewModels/Settings/ViewNetworkViewModel.State.cs
-  - DownKyi/ViewModels/Settings/ViewVideoViewModel.cs
-  - DownKyi/ViewModels/Settings/ViewDanmakuViewModel.cs
-  - DownKyi/ViewModels/Settings/ViewAboutViewModel.cs
+  - src/DownKyi.Desktop/ViewModels/Settings/ViewBasicViewModel.cs
+  - src/DownKyi.Desktop/ViewModels/Settings/ViewNetworkViewModel.cs
+  - src/DownKyi.Desktop/ViewModels/Settings/ViewNetworkViewModel.State.cs
+  - src/DownKyi.Desktop/ViewModels/Settings/ViewVideoViewModel.cs
+  - src/DownKyi.Desktop/ViewModels/Settings/ViewDanmakuViewModel.cs
+  - src/DownKyi.Desktop/ViewModels/Settings/ViewAboutViewModel.cs
 responsibility: Projects current settings into Avalonia binding state and wires commands to typed settings owners.
 inbound:
   - typed navigation through the Avalonia router
@@ -940,7 +941,7 @@ tests:
 id: service.network-settings
 type: coordinator
 paths:
-  - DownKyi/Services/Settings/NetworkSettingsCoordinator.cs
+  - src/DownKyi.Desktop/Services/Settings/NetworkSettingsCoordinator.cs
 responsibility: Owns immutable option catalogs, validated network-setting updates, localized feedback, restart confirmation, and asynchronous restart requests.
 inbound:
   - viewmodel.settings-pages
@@ -970,7 +971,7 @@ id: service.video-input-resolver
 type: service
 paths:
   - src/DownKyi.Application/Media/VideoInputResolver.cs
-  - DownKyi/Services/Video/VideoInputResolver.cs
+  - src/DownKyi.Desktop/Services/Video/VideoInputResolver.cs
 responsibility: Classifies and normalizes BV/AV, video URL, bangumi, and cheese/course entry inputs.
 inbound:
   - viewmodel.video-detail
@@ -991,7 +992,7 @@ tests:
 id: service.video-detail-workflow
 type: coordinator
 paths:
-  - DownKyi/Services/Video/VideoDetailWorkflowCoordinator.cs
+  - src/DownKyi.Desktop/Services/Video/VideoDetailWorkflowCoordinator.cs
 responsibility: Owns the current normalized input, cancellable operation generation, parse-service lifetime, and shallow search source for the video-detail page.
 inbound:
   - viewmodel.video-detail
@@ -1018,7 +1019,7 @@ id: service.desktop-platform-boundaries
 type: service
 paths:
   - src/DownKyi.Application/Desktop
-  - DownKyi/Platform
+  - src/DownKyi.Desktop/Platform
 responsibility: Keeps lifecycle, notifications, dialogs, typed navigation, clipboard, file/folder picker, and external launch contracts independent of Avalonia while Desktop adapters own framework integration and diagnostics.
 inbound:
   - viewmodel.video-detail
@@ -1060,8 +1061,8 @@ type: service
 paths:
   - src/DownKyi.Application/Desktop/IAppNavigationService.cs
   - src/DownKyi.Application/Desktop/PublicationNavigationPayload.cs
-  - DownKyi/Platform/AvaloniaNavigationService.cs
-  - DownKyi/ViewModels/ViewModelBase.cs
+  - src/DownKyi.Desktop/Platform/AvaloniaNavigationService.cs
+  - src/DownKyi.Desktop/ViewModels/ViewModelBase.cs
 responsibility: Maps typed routes to DI-created ViewModels, owns bounded main-region instance history, and provides history-first back navigation with typed parent fallback.
 inbound:
   - application ViewModels
@@ -1088,7 +1089,7 @@ tests:
 id: viewmodel.bili-helper
 type: viewmodel
 paths:
-  - DownKyi/ViewModels/Toolbox/ViewBiliHelperViewModel.cs
+  - src/DownKyi.Desktop/ViewModels/Toolbox/ViewBiliHelperViewModel.cs
 responsibility: Binds AV/BV conversion, danmaku sender lookup, and external navigation results to the Bili Helper page.
 inbound:
   - typed navigation
@@ -1111,7 +1112,7 @@ tests:
 id: service.bili-helper
 type: service
 paths:
-  - DownKyi/Services/Toolbox/BiliHelperCoordinator.cs
+  - src/DownKyi.Desktop/Services/Toolbox/BiliHelperCoordinator.cs
   - DownKyi.Core/BiliApi/BiliUtils/BvId.cs
   - DownKyi.Core/BiliApi/BiliUtils/DanmakuSender.cs
 responsibility: Validates AV/BV conversion inputs and runs the expensive danmaku-sender reverse lookup outside the UI thread with cancellation.
@@ -1137,11 +1138,11 @@ tests:
 id: viewmodel.user-space
 type: viewmodel
 paths:
-  - DownKyi/ViewModels/ViewUserSpaceViewModel.cs
-  - DownKyi/ViewModels/ViewUserSpaceViewModel.Favorites.cs
-  - DownKyi/ViewModels/UserSpace/ViewFavoritesViewModel.cs
-  - DownKyi/Views/UserSpace/ViewFavorites.axaml
-  - DownKyi/Services/UserSpace/UserSpaceLoadCoordinator.cs
+  - src/DownKyi.Desktop/ViewModels/ViewUserSpaceViewModel.cs
+  - src/DownKyi.Desktop/ViewModels/ViewUserSpaceViewModel.Favorites.cs
+  - src/DownKyi.Desktop/ViewModels/UserSpace/ViewFavoritesViewModel.cs
+  - src/DownKyi.Desktop/Views/UserSpace/ViewFavorites.axaml
+  - src/DownKyi.Desktop/Services/UserSpace/UserSpaceLoadCoordinator.cs
 responsibility: Projects one injected, background-loaded user-space snapshot into profile, publication, collection, public favorites, relation, and statistics UI state.
 inbound:
   - typed navigation
@@ -1169,12 +1170,12 @@ tests:
 id: viewmodel.user-space-pages
 type: viewmodel
 paths:
-  - DownKyi/ViewModels/ViewPublicationViewModel.cs
-  - DownKyi/ViewModels/ViewPublicationViewModel.Search.cs
-  - DownKyi/ViewModels/ViewMySpaceViewModel.cs
-  - DownKyi/ViewModels/ViewMyBangumiFollowViewModel.cs
-  - DownKyi/Views/ViewPublication.axaml
-  - DownKyi/Views/ViewMyBangumiFollow.axaml
+  - src/DownKyi.Desktop/ViewModels/ViewPublicationViewModel.cs
+  - src/DownKyi.Desktop/ViewModels/ViewPublicationViewModel.Search.cs
+  - src/DownKyi.Desktop/ViewModels/ViewMySpaceViewModel.cs
+  - src/DownKyi.Desktop/ViewModels/ViewMyBangumiFollowViewModel.cs
+  - src/DownKyi.Desktop/Views/ViewPublication.axaml
+  - src/DownKyi.Desktop/Views/ViewMyBangumiFollow.axaml
 responsibility: Projects publication pages and the signed-in user's profile/statistics while owning pager, selection, navigation, and visibility state.
 inbound:
   - viewmodel.user-space
@@ -1206,7 +1207,7 @@ tests:
 id: service.user-space-pages
 type: service
 paths:
-  - DownKyi/Services/UserSpace/UserSpacePageCoordinator.cs
+  - src/DownKyi.Desktop/Services/UserSpace/UserSpacePageCoordinator.cs
   - DownKyi.Core/BiliApi/Users/UserSpace.cs
   - DownKyi.Core/BiliApi/Users/UserInfo.cs
   - DownKyi.Core/BiliApi/Users/UserStatus.cs
@@ -1236,10 +1237,10 @@ tests:
 id: service.video-parse-coordinator
 type: service
 paths:
-  - DownKyi/Services/Video/VideoParseCoordinator.cs
-  - DownKyi/Services/VideoInfoService.cs
-  - DownKyi/Services/BangumiInfoService.cs
-  - DownKyi/Services/CheeseInfoService.cs
+  - src/DownKyi.Desktop/Services/Video/VideoParseCoordinator.cs
+  - src/DownKyi.Desktop/Services/VideoInfoService.cs
+  - src/DownKyi.Desktop/Services/BangumiInfoService.cs
+  - src/DownKyi.Desktop/Services/CheeseInfoService.cs
 responsibility: Chooses the correct info service, builds complete detail/stream results in background work, and owns one cancellable operation generation plus search-source lifetime before UI projection.
 inbound:
   - service.video-detail-workflow
@@ -1268,9 +1269,9 @@ tests:
 id: service.info-services
 type: service
 paths:
-  - DownKyi/Services/VideoInfoService.cs
-  - DownKyi/Services/BangumiInfoService.cs
-  - DownKyi/Services/CheeseInfoService.cs
+  - src/DownKyi.Desktop/Services/VideoInfoService.cs
+  - src/DownKyi.Desktop/Services/BangumiInfoService.cs
+  - src/DownKyi.Desktop/Services/CheeseInfoService.cs
 responsibility: Maps ordinary-video, bangumi, and cheese endpoint models into shared video detail/page/stream projections without owning UI state.
 inbound:
   - service.video-parse-coordinator
@@ -1299,10 +1300,10 @@ tests:
 id: service.video-tag-provider
 type: service
 paths:
-  - DownKyi/Services/Video/VideoTagProvider.cs
-  - DownKyi/ViewModels/PageViewModels/VideoPage.cs
-  - DownKyi/Services/VideoInfoService.cs
-  - DownKyi/Services/BangumiInfoService.cs
+  - src/DownKyi.Desktop/Services/Video/VideoTagProvider.cs
+  - src/DownKyi.Desktop/ViewModels/PageViewModels/VideoPage.cs
+  - src/DownKyi.Desktop/Services/VideoInfoService.cs
+  - src/DownKyi.Desktop/Services/BangumiInfoService.cs
 responsibility: Loads optional video tags on demand with the token owned by the current caller and provides immutable local tag snapshots for media types that already include styles.
 inbound:
   - service.video-parse-coordinator
@@ -1329,7 +1330,7 @@ tests:
 id: service.video-selection-state
 type: service
 paths:
-  - DownKyi/Services/Video/VideoSelectionState.cs
+  - src/DownKyi.Desktop/Services/Video/VideoSelectionState.cs
 responsibility: Applies section/page selection, all-selected checks, and parse-scope page selection rules.
 inbound:
   - viewmodel.video-detail
@@ -1349,9 +1350,9 @@ tests:
 id: ui.video-page-selection
 type: behavior
 paths:
-  - DownKyi/CustomAction/VideoPageSelectionBehavior.cs
-  - DownKyi/CustomAction/ResetGridSplitterBehavior.cs
-  - DownKyi/Views/ViewVideoDetail.axaml
+  - src/DownKyi.Desktop/CustomAction/VideoPageSelectionBehavior.cs
+  - src/DownKyi.Desktop/CustomAction/ResetGridSplitterBehavior.cs
+  - src/DownKyi.Desktop/Views/ViewVideoDetail.axaml
 responsibility: Maps pointer, keyboard, checkbox, select-all, section changes, and splitter reset bindings to Avalonia controls.
 inbound:
   - viewmodel.video-detail
@@ -1375,7 +1376,7 @@ tests:
 id: service.video-search-state
 type: service
 paths:
-  - DownKyi/Services/Video/VideoSearchState.cs
+  - src/DownKyi.Desktop/Services/Video/VideoSearchState.cs
 responsibility: Maintains the original page references for each video section and applies a visible search projection without cloning the media graph.
 inbound:
   - viewmodel.video-detail
@@ -1535,7 +1536,7 @@ paths:
   - src/DownKyi.Infrastructure/Bilibili/BilibiliHttpTransport.cs
   - src/DownKyi.Infrastructure/Bilibili/BilibiliBuvidProvider.cs
   - src/DownKyi.Infrastructure/Bilibili/BilibiliServiceCollectionExtensions.cs
-  - DownKyi/Services/Account/BilibiliCookieProvider.cs
+  - src/DownKyi.Desktop/Services/Account/BilibiliCookieProvider.cs
 responsibility: Implements injected async Bilibili transport, credential and buvid composition, bounded cancellation-aware retries, response stream ownership, and atomic file downloads.
 inbound:
   - core.bili-api
@@ -1567,12 +1568,12 @@ tests:
 id: service.download-add
 type: service
 paths:
-  - DownKyi/Services/Download/AddToDownloadService.cs
-  - DownKyi/Services/Download/AddToDownloadServiceFactory.cs
-  - DownKyi/Services/Download/IAddToDownloadSession.cs
+  - src/DownKyi.Desktop/Services/Download/AddToDownloadService.cs
+  - src/DownKyi.Desktop/Services/Download/AddToDownloadServiceFactory.cs
+  - src/DownKyi.Desktop/Services/Download/IAddToDownloadSession.cs
   - src/DownKyi.Application/Downloads/DownloadAddCoordinator.cs
-  - DownKyi/Services/Video/VideoDetailDownloadCoordinator.cs
-  - DownKyi/Services/Media/ContentDownloadCoordinator.cs
+  - src/DownKyi.Desktop/Services/Video/VideoDetailDownloadCoordinator.cs
+  - src/DownKyi.Desktop/Services/Media/ContentDownloadCoordinator.cs
 responsibility: Converts immutable selected-media snapshots into download tasks, centralizes directory selection and cancellable per-item parsing, handles duplicate decisions, and writes queue state.
 inbound:
   - viewmodel.video-detail
@@ -1614,10 +1615,10 @@ tests:
 id: service.download-list-state
 type: ui-state
 paths:
-  - DownKyi/Services/Download/DownloadListState.cs
-  - DownKyi/Services/Download/DownloadManagerCoordinator.cs
-  - DownKyi/Services/Download/DownloadTaskFileService.cs
-  - DownKyi/ViewModels/DownloadManager
+  - src/DownKyi.Desktop/Services/Download/DownloadListState.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadManagerCoordinator.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadTaskFileService.cs
+  - src/DownKyi.Desktop/ViewModels/DownloadManager
 responsibility: Owns stable observable downloading/history projections and coordinates download-manager pause, resume, retry, deletion, history, and artifact-open operations outside ViewModels.
 inbound:
   - service.download-bootstrap
@@ -1652,9 +1653,9 @@ tests:
 id: service.legacy-upgrade
 type: migration-service
 paths:
-  - DownKyi/Services/Migration/LegacyUpgradeCoordinator.cs
-  - DownKyi/Services/Migration/LegacyDownloadTaskMapper.cs
-  - DownKyi/ViewModels/Dialogs/ViewUpgradingDialogViewModel.cs
+  - src/DownKyi.Desktop/Services/Migration/LegacyUpgradeCoordinator.cs
+  - src/DownKyi.Desktop/Services/Migration/LegacyDownloadTaskMapper.cs
+  - src/DownKyi.Desktop/ViewModels/Dialogs/ViewUpgradingDialogViewModel.cs
 responsibility: Converts legacy NRBF login/download data into current storage while the dialog owns only progress, cancellation, result projection, and restart state.
 inbound:
   - app.application
@@ -1686,11 +1687,11 @@ tests:
 id: service.download-bootstrap
 type: hosted-service
 paths:
-  - DownKyi/Services/Download/DownloadBootstrapHostedService.cs
-  - DownKyi/Services/Download/DownloadRuntimeFactory.cs
-  - DownKyi/Services/Download/DownloadTaskQueueGateway.cs
-  - DownKyi/Platform/IUiDispatcher.cs
-  - DownKyi/Platform/AvaloniaUiDispatcher.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadBootstrapHostedService.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadRuntimeFactory.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadTaskQueueGateway.cs
+  - src/DownKyi.Desktop/Platform/IUiDispatcher.cs
+  - src/DownKyi.Desktop/Platform/AvaloniaUiDispatcher.cs
 responsibility: Restores persisted download projections, pages history, selects the configured backend, and owns download runtime start/stop inside the Host lifecycle.
 inbound:
   - app.host-composition
@@ -1724,42 +1725,42 @@ tests:
 id: service.download-runtime
 type: service
 paths:
-  - DownKyi/Services/Download/DownloadRuntimeFactory.cs
-  - DownKyi/Services/Download/DownloadOrchestrator.cs
-  - DownKyi/Services/Download/DownloadTaskAdmissionService.cs
-  - DownKyi/Services/Download/DownloadTaskQueueGateway.cs
-  - DownKyi/Services/Download/IDownloadTaskExecutor.cs
-  - DownKyi/Services/Download/DownloadPipeline.cs
-  - DownKyi/Services/Download/IDownloadPipelineStage.cs
-  - DownKyi/Services/Download/DownloadExecutionContext.cs
-  - DownKyi/Services/Download/DownloadExecutionContextFactory.cs
-  - DownKyi/Services/Download/DownloadTransferKey.cs
-  - DownKyi/Services/Download/DownloadPlaybackResolver.cs
-  - DownKyi/Services/Download/ITransferBackend.cs
-  - DownKyi/Services/Download/DownloadTransferCoordinator.cs
-  - DownKyi/Services/Download/DownloadRetryPolicy.cs
-  - DownKyi/Services/Download/DownloadTransferFileCleanup.cs
-  - DownKyi/Services/Download/ResolvePlaybackStage.cs
-  - DownKyi/Services/Download/DownloadMediaStage.cs
-  - DownKyi/Services/Download/DownloadArtifactsStage.cs
-  - DownKyi/Services/Download/MuxStage.cs
-  - DownKyi/Services/Download/ValidateStage.cs
-  - DownKyi/Services/Download/FinalizeStage.cs
-  - DownKyi/Services/Download/DownloadActivityPresenter.cs
-  - DownKyi/Services/Download/DownloadCompletionProjector.cs
-  - DownKyi/Services/Download/BuiltinTransferBackend.cs
-  - DownKyi/Services/Download/Aria2TransferBackend.cs
-  - DownKyi/Services/Download/Aria2TransferFailureClassifier.cs
-  - DownKyi/Services/Download/AriaRuntimeClientRegistry.cs
-  - DownKyi/Services/Download/DownloadArtifactWriter.cs
-  - DownKyi/Services/Download/DownloadTaskStateWriter.cs
-  - DownKyi/Services/Download/DownloadTaskShutdownRecovery.cs
-  - DownKyi/Services/Download/DownloadTransferRequestFactory.cs
-  - DownKyi/Services/Download/DownloadOutputRecorder.cs
-  - DownKyi/Services/Download/DownloadTaskFileService.cs
-  - DownKyi/Services/Download/DownloadFileIntegrity.cs
-  - DownKyi/Services/Download/DownloadDiagnosticLogger.cs
-  - DownKyi/Services/Download/DownloadShutdownCoordinator.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadRuntimeFactory.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadOrchestrator.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadTaskAdmissionService.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadTaskQueueGateway.cs
+  - src/DownKyi.Desktop/Services/Download/IDownloadTaskExecutor.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadPipeline.cs
+  - src/DownKyi.Desktop/Services/Download/IDownloadPipelineStage.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadExecutionContext.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadExecutionContextFactory.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadTransferKey.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadPlaybackResolver.cs
+  - src/DownKyi.Desktop/Services/Download/ITransferBackend.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadTransferCoordinator.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadRetryPolicy.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadTransferFileCleanup.cs
+  - src/DownKyi.Desktop/Services/Download/ResolvePlaybackStage.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadMediaStage.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadArtifactsStage.cs
+  - src/DownKyi.Desktop/Services/Download/MuxStage.cs
+  - src/DownKyi.Desktop/Services/Download/ValidateStage.cs
+  - src/DownKyi.Desktop/Services/Download/FinalizeStage.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadActivityPresenter.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadCompletionProjector.cs
+  - src/DownKyi.Desktop/Services/Download/BuiltinTransferBackend.cs
+  - src/DownKyi.Desktop/Services/Download/Aria2TransferBackend.cs
+  - src/DownKyi.Desktop/Services/Download/Aria2TransferFailureClassifier.cs
+  - src/DownKyi.Desktop/Services/Download/AriaRuntimeClientRegistry.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadArtifactWriter.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadTaskStateWriter.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadTaskShutdownRecovery.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadTransferRequestFactory.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadOutputRecorder.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadTaskFileService.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadFileIntegrity.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadDiagnosticLogger.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadShutdownCoordinator.cs
 responsibility: Admits committed task IDs directly, selects one transfer backend, dispatches bounded workers, orders typed download stages, centrally budgets transfer retries, writes auxiliary artifacts and task state through dedicated owners, verifies integrity, and projects completed tasks.
 inbound:
   - service.download-bootstrap
@@ -1833,8 +1834,8 @@ tests:
 id: ui.download-projection
 type: ui
 paths:
-  - DownKyi/Services/Download/DownloadTaskProjectionStore.cs
-  - DownKyi/Services/Download/DownloadTaskProjectionMapper.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadTaskProjectionStore.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadTaskProjectionMapper.cs
 responsibility: Projects committed immutable tasks into existing UI models and creates only brand-new queued aggregates from add input.
 inbound:
   - service.download-task-application
@@ -2050,7 +2051,7 @@ paths:
   - DownKyi.Core/Aria2cNet
   - DownKyi.Core/Aria2cNet/Server/AriaProcessSupervisor.cs
   - DownKyi.Core/Aria2cNet/Server/WindowsProcessJob.cs
-  - DownKyi/Services/Download/AriaRuntimeClientRegistry.cs
+  - src/DownKyi.Desktop/Services/Download/AriaRuntimeClientRegistry.cs
   - tests/DownKyi.Core.Tests/AriaClientIsolationTests.cs
   - tests/DownKyi.Tests/AriaRuntimeClientRegistryTests.cs
   - script/aria2.ps1
@@ -2087,9 +2088,9 @@ tests:
 id: ui.async-image-loader
 type: ui-service
 paths:
-  - DownKyi/CustomControl/AsyncImageLoader/Loaders/AdvancedImage.axaml.cs
-  - DownKyi/CustomControl/AsyncImageLoader/Loaders/BaseWebImageLoader.cs
-  - DownKyi/CustomControl/AsyncImageLoader/Loaders/ImageSourceUriResolver.cs
+  - src/DownKyi.Desktop/CustomControl/AsyncImageLoader/Loaders/AdvancedImage.axaml.cs
+  - src/DownKyi.Desktop/CustomControl/AsyncImageLoader/Loaders/BaseWebImageLoader.cs
+  - src/DownKyi.Desktop/CustomControl/AsyncImageLoader/Loaders/ImageSourceUriResolver.cs
 responsibility: Resolves Avalonia assets, local images, and remote artwork without faulting asynchronous bindings.
 inbound:
   - ui.main-window

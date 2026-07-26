@@ -141,7 +141,7 @@ internal class ViewSeasonsSeriesViewModel : ViewModelBase
             string? image;
             if (string.IsNullOrEmpty(item.Meta.Cover))
             {
-                image = "avares://DownKyi/Resources/video-placeholder.png";
+                image = "avares://DownKyi.Desktop/Resources/video-placeholder.png";
             }
             else
             {
@@ -174,7 +174,7 @@ internal class ViewSeasonsSeriesViewModel : ViewModelBase
             string? image;
             if (string.IsNullOrEmpty(item.Meta.Cover))
             {
-                image = "avares://DownKyi/Resources/video-placeholder.png";
+                image = "avares://DownKyi.Desktop/Resources/video-placeholder.png";
             }
             else
             {

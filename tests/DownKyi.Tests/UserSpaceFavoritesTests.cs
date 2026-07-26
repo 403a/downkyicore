@@ -30,7 +30,7 @@ public sealed class UserSpaceFavoritesTests
         var folder = Assert.Single(folders);
         Assert.Equal(1, folder.Id);
         Assert.Equal(3, folder.MediaCount);
-        Assert.Equal("avares://DownKyi/Resources/video-placeholder.png", folder.Cover);
+        Assert.Equal("avares://DownKyi.Desktop/Resources/video-placeholder.png", folder.Cover);
     }
 
     [Fact]

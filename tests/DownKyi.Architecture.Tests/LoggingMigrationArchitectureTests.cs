@@ -50,7 +50,7 @@ public sealed class LoggingMigrationArchitectureTests
     {
         var commandSource = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Commands",
             "AsyncDelegateCommand.cs"));
 
@@ -63,11 +63,11 @@ public sealed class LoggingMigrationArchitectureTests
     [Theory]
     [InlineData("DownKyi.Core/Utils/HardDisk.cs")]
     [InlineData("DownKyi.Core/Utils/ObjectHelper.cs")]
-    [InlineData("DownKyi/CustomAction/ScrollIntoViewBehavior.cs")]
-    [InlineData("DownKyi/Services/VersionCheckerService.cs")]
-    [InlineData("DownKyi/ViewModels/Dialogs/ViewDownloadSetterViewModel.cs")]
-    [InlineData("DownKyi/ViewModels/MainWindowViewModel.cs")]
-    [InlineData("DownKyi/ViewModels/Toolbox/ViewBiliHelperViewModel.cs")]
+    [InlineData("src/DownKyi.Desktop/CustomAction/ScrollIntoViewBehavior.cs")]
+    [InlineData("src/DownKyi.Desktop/Services/VersionCheckerService.cs")]
+    [InlineData("src/DownKyi.Desktop/ViewModels/Dialogs/ViewDownloadSetterViewModel.cs")]
+    [InlineData("src/DownKyi.Desktop/ViewModels/MainWindowViewModel.cs")]
+    [InlineData("src/DownKyi.Desktop/ViewModels/Toolbox/ViewBiliHelperViewModel.cs")]
     public void MigratedRuntimeFilesCannotRestoreStaticOrTerminalLogging(string relativePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(relativePath);
@@ -84,12 +84,12 @@ public sealed class LoggingMigrationArchitectureTests
     {
         var mainWindowSource = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "ViewModels",
             "MainWindowViewModel.cs"));
         var versionCheckerSource = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Services",
             "VersionCheckerService.cs"));
 

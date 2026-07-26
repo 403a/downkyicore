@@ -7,9 +7,9 @@ public sealed class AppLifecycleArchitectureTests
     [Fact]
     public void ExitPathDoesNotSynchronouslyWaitForAsyncCleanup()
     {
-        var appSource = ReadSource("DownKyi", "App.axaml.cs");
+        var appSource = ReadSource("src", "DownKyi.Desktop", "App.axaml.cs");
         var lifecycleSource = ReadSource(
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Platform",
             "AvaloniaApplicationLifecycle.cs");
 
@@ -24,7 +24,7 @@ public sealed class AppLifecycleArchitectureTests
     [Fact]
     public void MainWindowCompletesCleanupBeforeConfirmingClose()
     {
-        var source = ReadSource("DownKyi", "Views", "MainWindow.axaml.cs");
+        var source = ReadSource("src", "DownKyi.Desktop", "Views", "MainWindow.axaml.cs");
 
         Assert.Contains("await _applicationLifecycle.RequestShutdownAsync()", source, StringComparison.Ordinal);
         Assert.Contains("_closeConfirmed = true", source, StringComparison.Ordinal);
@@ -35,12 +35,12 @@ public sealed class AppLifecycleArchitectureTests
     public void SettingsRestartPromptsCannotBypassAsynchronousCleanup()
     {
         var viewModelSource = ReadSource(
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "ViewModels",
             "Settings",
             "ViewNetworkViewModel.cs");
         var coordinatorSource = ReadSource(
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Services",
             "Settings",
             "NetworkSettingsCoordinator.cs");
@@ -57,7 +57,7 @@ public sealed class AppLifecycleArchitectureTests
     public void ViewModelsCannotUseStaticApplicationOrProcessLifecycle()
     {
         var files = Directory.GetFiles(
-            Path.Combine(RepositoryRoot, "DownKyi", "ViewModels"),
+            Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "ViewModels"),
             "*.cs",
             SearchOption.AllDirectories);
 
@@ -74,13 +74,13 @@ public sealed class AppLifecycleArchitectureTests
     [Fact]
     public void AppDelegatesHostShutdownRestartAndSingleInstanceOwnership()
     {
-        var appSource = ReadSource("DownKyi", "App.axaml.cs");
+        var appSource = ReadSource("src", "DownKyi.Desktop", "App.axaml.cs");
         var lifecycleSource = ReadSource(
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Platform",
             "AvaloniaApplicationLifecycle.cs");
         var restartSource = ReadSource(
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Platform",
             "ProcessRestartLauncher.cs");
 
@@ -98,7 +98,7 @@ public sealed class AppLifecycleArchitectureTests
     [Fact]
     public void AppDoesNotOwnGlobalDownloadCollections()
     {
-        var source = ReadSource("DownKyi", "App.axaml.cs");
+        var source = ReadSource("src", "DownKyi.Desktop", "App.axaml.cs");
 
         Assert.DoesNotContain("static ImmutableObservableCollection", source, StringComparison.Ordinal);
         Assert.DoesNotContain("DownloadingList { get;", source, StringComparison.Ordinal);
@@ -109,10 +109,10 @@ public sealed class AppLifecycleArchitectureTests
     [Fact]
     public void HostOwnsDownloadBootstrapAndRuntimeLifecycle()
     {
-        var appSource = File.ReadAllText(Path.Combine(RepositoryRoot, "DownKyi", "App.axaml.cs"));
+        var appSource = File.ReadAllText(Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "App.axaml.cs"));
         var compositionSource = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Composition",
             "DesktopComposition.cs"));
 
@@ -133,10 +133,10 @@ public sealed class AppLifecycleArchitectureTests
     [Fact]
     public void AppDelegatesAllRegistrationsToMicrosoftDiComposition()
     {
-        var appSource = File.ReadAllText(Path.Combine(RepositoryRoot, "DownKyi", "App.axaml.cs"));
+        var appSource = File.ReadAllText(Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "App.axaml.cs"));
         var compositionSource = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Composition",
             "DesktopComposition.cs"));
 
@@ -155,16 +155,16 @@ public sealed class AppLifecycleArchitectureTests
     [Fact]
     public void ApplicationLoggingUsesOneProviderAcrossAppAndHostComposition()
     {
-        var appSource = File.ReadAllText(Path.Combine(RepositoryRoot, "DownKyi", "App.axaml.cs"));
+        var appSource = File.ReadAllText(Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "App.axaml.cs"));
         var aboutSource = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "ViewModels",
             "Settings",
             "ViewAboutViewModel.cs"));
         var compositionSource = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Composition",
             "DesktopComposition.cs"));
         var hostSource = File.ReadAllText(Path.Combine(

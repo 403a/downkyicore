@@ -91,7 +91,7 @@ internal sealed class UserSpaceLoadCoordinator : IUserSpaceLoadCoordinator
                 .Select(item => new UserSpaceFavoriteFolder(
                     item.Id,
                     string.IsNullOrWhiteSpace(item.Cover)
-                        ? "avares://DownKyi/Resources/video-placeholder.png"
+                        ? "avares://DownKyi.Desktop/Resources/video-placeholder.png"
                         : item.Cover,
                     item.Title,
                     item.MediaCount,

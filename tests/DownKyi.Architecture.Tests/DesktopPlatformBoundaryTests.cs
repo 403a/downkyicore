@@ -7,16 +7,16 @@ public sealed class DesktopPlatformBoundaryTests
     [Fact]
     public void ViewModelsUseTheClipboardApplicationBoundary()
     {
-        var viewModelDirectory = Path.Combine(RepositoryRoot, "DownKyi", "ViewModels");
+        var viewModelDirectory = Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "ViewModels");
         var violations = Directory
             .EnumerateFiles(viewModelDirectory, "*.cs", SearchOption.AllDirectories)
             .Where(path => File.ReadAllText(path).Contains("ClipboardManager", StringComparison.Ordinal))
             .Select(path => Path.GetRelativePath(RepositoryRoot, path))
             .ToArray();
-        var appSource = File.ReadAllText(Path.Combine(RepositoryRoot, "DownKyi", "App.axaml.cs"));
+        var appSource = File.ReadAllText(Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "App.axaml.cs"));
         var compositionSource = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Composition",
             "DesktopComposition.cs"));
 
@@ -28,16 +28,16 @@ public sealed class DesktopPlatformBoundaryTests
     [Fact]
     public void ViewModelsUseTheFilePickerApplicationBoundary()
     {
-        var viewModelDirectory = Path.Combine(RepositoryRoot, "DownKyi", "ViewModels");
+        var viewModelDirectory = Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "ViewModels");
         var violations = Directory
             .EnumerateFiles(viewModelDirectory, "*.cs", SearchOption.AllDirectories)
             .Where(path => File.ReadAllText(path).Contains("DialogUtils", StringComparison.Ordinal))
             .Select(path => Path.GetRelativePath(RepositoryRoot, path))
             .ToArray();
-        var appSource = File.ReadAllText(Path.Combine(RepositoryRoot, "DownKyi", "App.axaml.cs"));
+        var appSource = File.ReadAllText(Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "App.axaml.cs"));
         var compositionSource = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Composition",
             "DesktopComposition.cs"));
 
@@ -49,7 +49,7 @@ public sealed class DesktopPlatformBoundaryTests
     [Fact]
     public void ViewModelsUseTheShellFreePlatformLauncherBoundary()
     {
-        var viewModelDirectory = Path.Combine(RepositoryRoot, "DownKyi", "ViewModels");
+        var viewModelDirectory = Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "ViewModels");
         var violations = Directory
             .EnumerateFiles(viewModelDirectory, "*.cs", SearchOption.AllDirectories)
             .Where(path => File.ReadAllText(path).Contains("PlatformHelper", StringComparison.Ordinal))
@@ -63,12 +63,12 @@ public sealed class DesktopPlatformBoundaryTests
             "IPlatformLauncher.cs"));
         var adapterSource = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Platform",
             "AvaloniaPlatformLauncher.cs"));
         var compositionSource = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Composition",
             "DesktopComposition.cs"));
 
@@ -79,7 +79,7 @@ public sealed class DesktopPlatformBoundaryTests
         Assert.DoesNotContain("ShellExecRaw", adapterSource, StringComparison.Ordinal);
         Assert.Contains("ArgumentList.Add(target)", adapterSource, StringComparison.Ordinal);
         Assert.Contains("IPlatformLauncher, AvaloniaPlatformLauncher", compositionSource, StringComparison.Ordinal);
-        Assert.False(File.Exists(Path.Combine(RepositoryRoot, "DownKyi", "Utils", "PlatformHelper.cs")));
+        Assert.False(File.Exists(Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "Utils", "PlatformHelper.cs")));
     }
 
     private static string FindRepositoryRoot()

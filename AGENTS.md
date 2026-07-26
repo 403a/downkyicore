@@ -38,15 +38,10 @@ version.txt                        版本唯一來源
 src/DownKyi.Domain/                immutable domain state 與 typed results
 src/DownKyi.Application/           use-case contracts、desktop contracts、lifetime
 src/DownKyi.Infrastructure/        SQLite store、clock、write-behind 等 adapters
-src/DownKyi.Desktop/               framework-neutral Host 建立入口
+src/DownKyi.Desktop/               Avalonia App、composition、views、ViewModels、desktop runtime
 
 DownKyi.Core/                      Bilibili API、設定、日誌、aria2、FFmpeg 相容核心
-DownKyi/                           Avalonia App、composition、views、ViewModels、runtime services
-  Composition/DesktopComposition.cs
-  Platform/                        Avalonia navigation/dialog/lifecycle adapters
-  Services/Download/               download orchestration and transfer runtime
-  Views/
-  ViewModels/
+DownKyi/                           最小可執行入口，只委派至 DownKyi.Desktop
 
 tests/DownKyi.Domain.Tests/
 tests/DownKyi.Application.Tests/
@@ -66,9 +61,7 @@ docs/
   operations/                       驗證、診斷、發布與回滾
 ```
 
-`DownKyi.Core` 與根層 `DownKyi` 仍含既有產品模型及 Bilibili API 相容面。不要僅為目錄整齊搬動它們；跨層移動必須先有測試保護資料格式、XAML binding 與外部協定。
-
-`src/DownKyi.Desktop` 目前不是完整 Desktop boundary。目標是把 Views、ViewModels、UI projections、desktop adapters 與 lifecycle 移入該 assembly，並讓 executable 只保留最小 startup/composition。完整順序以 live plan 為準。
+`DownKyi.Core` 仍含既有產品模型及 Bilibili API 相容面。不要僅為目錄整齊搬動它；跨層移動必須先有測試保護資料格式與外部協定。`DownKyi` 可執行專案只允許保留最小 process bootstrap。
 
 ## 啟動與 Composition
 
@@ -76,6 +69,7 @@ docs/
 
 ```text
 Program
+  -> DesktopApplication.RunAsync()
   -> Avalonia App
   -> DownKyiHost.Create()
   -> DesktopComposition.AddDownKyiDesktop()
@@ -87,14 +81,14 @@ Program
 規則：
 
 - `App.axaml.cs` 只管理 Avalonia 啟動、Host 接線、全域例外觀察與結束釋放。
-- 所有服務與 ViewModel 註冊集中於 `DownKyi/Composition/DesktopComposition.cs`。
+- 所有服務與 ViewModel 註冊集中於 `src/DownKyi.Desktop/Composition/DesktopComposition.cs`。
 - 依賴一律透過建構子注入；禁止 service locator、靜態 App 服務屬性與第二個容器。
 - `MainWindow` 建構時載入完整 XAML，並由 Host 注入 ViewModel、設定與生命週期。
 - Host root XAML 禁止 `ViewModelLocator.AutoWireViewModel` 與 `RegionManager.RegionName`。
 
 ## UI 邊界
 
-Application 層的 desktop contracts 位於 `src/DownKyi.Application/Desktop`。Avalonia adapters 位於 `DownKyi/Platform`：
+Application 層的 desktop contracts 位於 `src/DownKyi.Application/Desktop`。Avalonia adapters 位於 `src/DownKyi.Desktop/Platform`：
 
 - `IAppNavigationService` / `AvaloniaNavigationService`
 - `IAppDialogService` / `AvaloniaDialogService`

@@ -29,7 +29,7 @@ internal class ViewSeasonsSeriesViewModel : ViewModelBase
 {
     public const string Tag = "PageSeasonsSeries";
     private const int VideoNumberInPage = 30;
-    private const string PlaceholderCover = "avares://DownKyi/Resources/video-placeholder.png";
+    private const string PlaceholderCover = "avares://DownKyi.Desktop/Resources/video-placeholder.png";
 
     private readonly ISeasonsSeriesCoordinator _coordinator;
     private readonly ILogger<ViewSeasonsSeriesViewModel> _logger;

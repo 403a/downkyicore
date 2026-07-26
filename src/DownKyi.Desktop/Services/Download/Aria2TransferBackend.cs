@@ -154,7 +154,8 @@ internal sealed class Aria2TransferBackend : ITransferBackend
         ariaManager.TellStatus += progressHandler;
         try
         {
-            var result = await ariaManager.GetDownloadStatusDetailAsync(
+            var (downloadResult, errorCode, errorMessage) =
+                await ariaManager.GetDownloadStatusDetailAsync(
                 activeGid,
                 async cancellationToken =>
                 {
@@ -169,12 +170,12 @@ internal sealed class Aria2TransferBackend : ITransferBackend
                 },
                 request.CancellationToken).ConfigureAwait(true);
 
-            if (result.Result == DownloadResult.SUCCESS)
+            if (downloadResult == DownloadResult.SUCCESS)
             {
                 return DownloadTransferResult.Succeeded();
             }
 
-            if (ShouldClearBackendIdentity(result.ErrorCode))
+            if (ShouldClearBackendIdentity(errorCode))
             {
                 await request.SetBackendIdentityAsync(
                     null,
@@ -182,8 +183,8 @@ internal sealed class Aria2TransferBackend : ITransferBackend
             }
 
             return Aria2TransferFailureClassifier.Classify(
-                result.ErrorCode,
-                result.ErrorMessage);
+                errorCode,
+                errorMessage);
         }
         catch (OperationCanceledException) when (
             !request.CancellationToken.IsCancellationRequested && request.IsPauseRequested())
@@ -228,7 +229,7 @@ internal sealed class Aria2TransferBackend : ITransferBackend
         if (!string.IsNullOrWhiteSpace(gid))
         {
             var status = await _ariaClient.TellStatus(gid).ConfigureAwait(true);
-            if (status.Result == null)
+            if (status is not { Result: { } statusResult })
             {
                 if (IsNotFound(status.Error))
                 {
@@ -245,7 +246,7 @@ internal sealed class Aria2TransferBackend : ITransferBackend
             }
             else
             {
-                existingStatus = status.Result.Status;
+                existingStatus = statusResult.Status;
             }
         }
 
@@ -274,19 +275,21 @@ internal sealed class Aria2TransferBackend : ITransferBackend
             }
 
             var added = await _ariaClient.AddUriAsync(request.Urls.ToList(), option).ConfigureAwait(true);
-            if (string.IsNullOrWhiteSpace(added?.Result))
+            if (added is not { Result: { } addedGid } ||
+                string.IsNullOrWhiteSpace(addedGid))
             {
                 throw new InvalidOperationException(
                     "aria2 rejected the addUri request.");
             }
 
-            gid = added.Result;
+            gid = addedGid;
             await request.SetBackendIdentityAsync(gid, request.CancellationToken).ConfigureAwait(true);
         }
         else if (string.Equals(existingStatus, "paused", StringComparison.Ordinal))
         {
             var unpaused = await _ariaClient.UnpauseAsync(gid).ConfigureAwait(true);
-            if (string.IsNullOrWhiteSpace(unpaused.Result))
+            if (unpaused is not { Result: { } unpausedGid } ||
+                string.IsNullOrWhiteSpace(unpausedGid))
             {
                 throw new InvalidOperationException(
                     "aria2 rejected the unpause request.");

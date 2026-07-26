@@ -124,7 +124,7 @@ internal sealed class PersonalMediaCoordinator : IPersonalMediaCoordinator
             Url = address,
             UpMid = history.AuthorMid,
             Cover = string.IsNullOrEmpty(history.Cover)
-                ? "avares://DownKyi/Resources/video-placeholder.png"
+                ? "avares://DownKyi.Desktop/Resources/video-placeholder.png"
                 : NormalizeImageAddress(history.Cover),
             Title = history.Title ?? string.Empty,
             SubTitle = history.ShowTitle ?? string.Empty,

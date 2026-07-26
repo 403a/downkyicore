@@ -150,7 +150,7 @@ $coreUiDependencies = @(
         Sort-Object
 )
 
-$servicesRoot = Join-Path $repositoryRoot "DownKyi/Services"
+$servicesRoot = Join-Path $repositoryRoot "src/DownKyi.Desktop/Services"
 $presentationBoundContracts = @(
     Get-ChildItem -LiteralPath $servicesRoot -Recurse -File -Filter "I*.cs" |
         Where-Object {
@@ -242,7 +242,7 @@ $oversizedFiles = @(
         Sort-Object lines -Descending
 )
 
-$downloadRoot = Join-Path $repositoryRoot "DownKyi/Services/Download"
+$downloadRoot = Join-Path $repositoryRoot "src/DownKyi.Desktop/Services/Download"
 $downloadSources = @(Get-ChildItem -LiteralPath $downloadRoot -Recurse -File -Filter "*.cs")
 $downloadingItemReferences = 0
 $domainTaskReferences = 0
@@ -264,7 +264,7 @@ $bilibiliHttpSource = (
         ForEach-Object { Get-ChildItem -LiteralPath $_ -Recurse -File -Filter "*.cs" } |
         ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw }
 ) -join "`n"
-$collectionPath = Join-Path $repositoryRoot "DownKyi/ViewModels/ImmutableObservableCollection.cs"
+$collectionPath = Join-Path $repositoryRoot "src/DownKyi.Desktop/ViewModels/ImmutableObservableCollection.cs"
 $collectionSource = Get-Content -LiteralPath $collectionPath -Raw
 $logProviderPath = Join-Path $repositoryRoot "DownKyi.Core/Logging/ApplicationLogProvider.cs"
 

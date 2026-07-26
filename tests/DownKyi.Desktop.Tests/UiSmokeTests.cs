@@ -322,7 +322,7 @@ public sealed class UiSmokeTests
                     .Navigate(new AppNavigationRequest(AppRoute.Index, Parameter: "smoke"));
 
                 Assert.IsType<ViewIndexViewModel>(mainViewModel.MainContent);
-                Assert.NotNull(Program.BuildAvaloniaApp());
+                Assert.NotNull(DesktopApplication.BuildAvaloniaApp());
                 AssertPrismRuntimeIsNotLoaded();
             }
             finally
@@ -470,7 +470,7 @@ public sealed class UiSmokeTests
         application.Resources.MergedDictionaries.Add(new ResourceInclude(
             new Uri("avares://DownKyi.Desktop.Tests/"))
         {
-            Source = new Uri("avares://DownKyi/Themes/ThemeDefault.axaml")
+            Source = new Uri("avares://DownKyi.Desktop/Themes/ThemeDefault.axaml")
         });
         return application;
     }

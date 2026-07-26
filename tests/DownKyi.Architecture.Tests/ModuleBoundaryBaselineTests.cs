@@ -18,10 +18,10 @@ public sealed class ModuleBoundaryBaselineTests
 
     private static readonly HashSet<string> KnownPresentationBoundServiceContracts = new(StringComparer.Ordinal)
     {
-        "DownKyi/Services/Download/IAddToDownloadSession.cs",
-        "DownKyi/Services/Download/ITransferBackend.cs",
-        "DownKyi/Services/IFavoritesService.cs",
-        "DownKyi/Services/IInfoService.cs"
+        "src/DownKyi.Desktop/Services/Download/IAddToDownloadSession.cs",
+        "src/DownKyi.Desktop/Services/Download/ITransferBackend.cs",
+        "src/DownKyi.Desktop/Services/IFavoritesService.cs",
+        "src/DownKyi.Desktop/Services/IInfoService.cs"
     };
 
     private static readonly Dictionary<string, HashSet<string>> KnownDuplicateSimpleNames =
@@ -82,7 +82,7 @@ public sealed class ModuleBoundaryBaselineTests
         "DownKyi.Core/Danmaku2Ass/Utils.cs -> Utils",
         "DownKyi.Core/Storage/Constant.cs -> Constant",
         "DownKyi.Core/Storage/StorageManager.cs -> StorageManager",
-        "DownKyi/Services/Utils.cs -> Utils"
+        "src/DownKyi.Desktop/Services/Utils.cs -> Utils"
     };
 
     private static readonly HashSet<string> KnownFileTypeMismatches = new(StringComparer.Ordinal)
@@ -93,7 +93,7 @@ public sealed class ModuleBoundaryBaselineTests
         "DownKyi.Core/Logging/ApplicationLogJsonModels.cs",
         "DownKyi.Core/Models/NfoModels.cs",
         "DownKyi.Core/Utils/QRCode.cs",
-        "DownKyi/Commands/AsyncDelegateCommand.cs"
+        "src/DownKyi.Desktop/Commands/AsyncDelegateCommand.cs"
     };
 
     private static readonly Dictionary<string, int> KnownOversizedFiles = new(StringComparer.Ordinal)
@@ -102,15 +102,15 @@ public sealed class ModuleBoundaryBaselineTests
         ["DownKyi.Core/BiliApi/BiliUtils/ParseEntrance.cs"] = 586,
         ["DownKyi.Core/Logging/ApplicationLogProvider.cs"] = 715,
         ["DownKyi.Core/Settings/SettingsManager.Network.cs"] = 671,
-        ["DownKyi/CustomControl/CustomPagerViewModel.cs"] = 506,
-        ["DownKyi/Services/Download/AddToDownloadService.cs"] = 667,
-        ["DownKyi/ViewModels/Settings/ViewNetworkViewModel.cs"] = 649,
-        ["DownKyi/ViewModels/Settings/ViewVideoViewModel.cs"] = 1020,
-        ["DownKyi/ViewModels/ViewMyBangumiFollowViewModel.cs"] = 531,
-        ["DownKyi/ViewModels/ViewMySpaceViewModel.cs"] = 669,
-        ["DownKyi/ViewModels/ViewUserSpaceViewModel.cs"] = 569,
-        ["DownKyi/Views/Settings/ViewNetwork.axaml"] = 608,
-        ["DownKyi/Views/ViewVideoDetail.axaml"] = 565,
+        ["src/DownKyi.Desktop/CustomControl/CustomPagerViewModel.cs"] = 506,
+        ["src/DownKyi.Desktop/Services/Download/AddToDownloadService.cs"] = 667,
+        ["src/DownKyi.Desktop/ViewModels/Settings/ViewNetworkViewModel.cs"] = 649,
+        ["src/DownKyi.Desktop/ViewModels/Settings/ViewVideoViewModel.cs"] = 1020,
+        ["src/DownKyi.Desktop/ViewModels/ViewMyBangumiFollowViewModel.cs"] = 531,
+        ["src/DownKyi.Desktop/ViewModels/ViewMySpaceViewModel.cs"] = 669,
+        ["src/DownKyi.Desktop/ViewModels/ViewUserSpaceViewModel.cs"] = 569,
+        ["src/DownKyi.Desktop/Views/Settings/ViewNetwork.axaml"] = 608,
+        ["src/DownKyi.Desktop/Views/ViewVideoDetail.axaml"] = 565,
         ["src/DownKyi.Infrastructure/Downloads/SqliteDownloadTaskStore.cs"] = 928
     };
 
@@ -146,7 +146,7 @@ public sealed class ModuleBoundaryBaselineTests
     [Fact]
     public void ServiceContractsCannotAddPresentationDependencies()
     {
-        var servicesRoot = Path.Combine(RepositoryRoot, "DownKyi", "Services");
+        var servicesRoot = Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "Services");
         var actual = Directory
             .EnumerateFiles(servicesRoot, "I*.cs", SearchOption.AllDirectories)
             .Where(path => !IsBuildOutput(path))
@@ -273,7 +273,7 @@ public sealed class ModuleBoundaryBaselineTests
 
         Assert.Equal(
             [
-                "DownKyi/Services/Migration/LegacyDownloadTaskMapper.cs",
+                "src/DownKyi.Desktop/Services/Migration/LegacyDownloadTaskMapper.cs",
                 "src/DownKyi.Infrastructure/Downloads/SqliteDownloadTaskStore.cs"
             ],
             actual.Order(StringComparer.Ordinal));
@@ -282,7 +282,7 @@ public sealed class ModuleBoundaryBaselineTests
     [Fact]
     public void DownloadRuntimeDoesNotPollUiCollectionsForWork()
     {
-        var downloadRoot = Path.Combine(RepositoryRoot, "DownKyi", "Services", "Download");
+        var downloadRoot = Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "Services", "Download");
         var actual = Directory
             .EnumerateFiles(downloadRoot, "*.cs", SearchOption.AllDirectories)
             .Where(path =>
@@ -334,17 +334,17 @@ public sealed class ModuleBoundaryBaselineTests
             .ToArray();
         var knownConsumers = new HashSet<string>(StringComparer.Ordinal)
         {
-            "DownKyi/Services/Download/DownloadListState.cs",
-            "DownKyi/ViewModels/DownloadManager/ViewDownloadFinishedViewModel.cs",
-            "DownKyi/ViewModels/DownloadManager/ViewDownloadingViewModel.cs",
-            "DownKyi/ViewModels/ImmutableObservableCollection.cs"
+            "src/DownKyi.Desktop/Services/Download/DownloadListState.cs",
+            "src/DownKyi.Desktop/ViewModels/DownloadManager/ViewDownloadFinishedViewModel.cs",
+            "src/DownKyi.Desktop/ViewModels/DownloadManager/ViewDownloadingViewModel.cs",
+            "src/DownKyi.Desktop/ViewModels/ImmutableObservableCollection.cs"
         };
 
         AssertSubset(consumers, knownConsumers, "custom mutable observable collection consumer");
 
         var collectionSource = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "ViewModels",
             "ImmutableObservableCollection.cs"));
         var notImplementedCount = Regex.Count(
