@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using DownKyi.Application.Bilibili;
 using DownKyi.Application.Desktop;
 using DownKyi.Core.BiliApi.History;
 using DownKyi.Core.BiliApi.History.Models;
@@ -35,74 +36,70 @@ internal sealed class PersonalMediaCoordinator : IPersonalMediaCoordinator
 {
     private readonly ISettingsStore _settingsStore;
     private readonly IAppNavigationService _navigationService;
+    private readonly IBilibiliApiClient _client;
 
     public PersonalMediaCoordinator(
         ISettingsStore settingsStore,
-        IAppNavigationService navigationService)
+        IAppNavigationService navigationService,
+        IBilibiliApiClient client)
     {
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
         _navigationService = navigationService ?? throw new ArgumentNullException(nameof(navigationService));
+        _client = client ?? throw new ArgumentNullException(nameof(client));
     }
 
-    public Task<IReadOnlyList<ToViewMedia>> LoadToViewAsync(CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<ToViewMedia>> LoadToViewAsync(
+        CancellationToken cancellationToken)
     {
-        return Task.Run<IReadOnlyList<ToViewMedia>>(() =>
+        var items = await _client.GetToViewAsync(cancellationToken).ConfigureAwait(false);
+        if (items == null || items.Count == 0)
+        {
+            return Array.Empty<ToViewMedia>();
+        }
+
+        var result = new List<ToViewMedia>(items.Count);
+        foreach (var item in items)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var items = ToView.GetToView(cancellationToken);
-            if (items == null || items.Count == 0)
+            result.Add(new ToViewMedia(
+                _navigationService,
+                AppRoute.MyToViewVideo,
+                _settingsStore)
             {
-                return Array.Empty<ToViewMedia>();
-            }
+                Aid = item.Aid,
+                Bvid = item.Bvid,
+                UpMid = item.Owner?.Mid ?? -1,
+                Cover = NormalizeImageAddress(item.Pic),
+                Title = item.Title,
+                UpName = item.Owner?.Name ?? string.Empty,
+                UpHeader = item.Owner?.Face ?? string.Empty
+            });
+        }
 
-            var result = new List<ToViewMedia>(items.Count);
-            foreach (var item in items)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                result.Add(new ToViewMedia(
-                    _navigationService,
-                    AppRoute.MyToViewVideo,
-                    _settingsStore)
-                {
-                    Aid = item.Aid,
-                    Bvid = item.Bvid,
-                    UpMid = item.Owner?.Mid ?? -1,
-                    Cover = NormalizeImageAddress(item.Pic),
-                    Title = item.Title,
-                    UpName = item.Owner?.Name ?? string.Empty,
-                    UpHeader = item.Owner?.Face ?? string.Empty
-                });
-            }
-
-            return result;
-        }, cancellationToken);
+        return result;
     }
 
-    public Task<HistoryPageSnapshot> LoadHistoryPageAsync(
+    public async Task<HistoryPageSnapshot> LoadHistoryPageAsync(
         long max,
         long viewAt,
         int pageSize,
         CancellationToken cancellationToken)
     {
-        return Task.Run(() =>
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var response = HistoryApi.GetHistory(
-                max,
-                viewAt,
-                pageSize,
-                cancellationToken: cancellationToken);
-            var medias = response?.List?
-                .Select(item => ConvertHistory(item, _navigationService, _settingsStore))
-                .Where(item => item != null && !string.IsNullOrEmpty(item.Title))
-                .Cast<HistoryMedia>()
-                .ToArray() ?? Array.Empty<HistoryMedia>();
-            return new HistoryPageSnapshot(
-                medias,
-                response?.Cursor?.Max ?? max,
-                response?.Cursor?.ViewAt ?? viewAt,
-                medias.Length > 0);
-        }, cancellationToken);
+        var response = await _client.GetHistoryAsync(
+            max,
+            viewAt,
+            pageSize,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        var medias = response?.List?
+            .Select(item => ConvertHistory(item, _navigationService, _settingsStore))
+            .Where(item => item != null && !string.IsNullOrEmpty(item.Title))
+            .Cast<HistoryMedia>()
+            .ToArray() ?? Array.Empty<HistoryMedia>();
+        return new HistoryPageSnapshot(
+            medias,
+            response?.Cursor?.Max ?? max,
+            response?.Cursor?.ViewAt ?? viewAt,
+            medias.Length > 0);
     }
 
     internal static HistoryMedia? ConvertHistory(

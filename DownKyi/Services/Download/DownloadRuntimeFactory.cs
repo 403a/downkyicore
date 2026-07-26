@@ -1,4 +1,5 @@
 using System;
+using DownKyi.Application.Bilibili;
 using DownKyi.Application.Desktop;
 using DownKyi.Application.Downloads;
 using DownKyi.Core.Aria2cNet.Client;
@@ -32,6 +33,7 @@ internal sealed class DownloadRuntimeFactory : IDownloadRuntimeFactory
     private readonly IWbiKeyProvider _wbiKeyProvider;
     private readonly IUiDispatcher _uiDispatcher;
     private readonly ILoggerFactory _loggerFactory;
+    private readonly IBilibiliApiClient _client;
 
     public DownloadRuntimeFactory(
         DownloadListState downloadLists,
@@ -46,7 +48,8 @@ internal sealed class DownloadRuntimeFactory : IDownloadRuntimeFactory
         FfmpegProcessor ffmpegProcessor,
         AriaRuntimeClientRegistry ariaClientRegistry,
         AriaServer ariaServer,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        IBilibiliApiClient client)
     {
         _downloadLists = downloadLists ?? throw new ArgumentNullException(nameof(downloadLists));
         _projectionStore = projectionStore
@@ -63,6 +66,7 @@ internal sealed class DownloadRuntimeFactory : IDownloadRuntimeFactory
             ?? throw new ArgumentNullException(nameof(ariaClientRegistry));
         _ariaServer = ariaServer ?? throw new ArgumentNullException(nameof(ariaServer));
         _loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
+        _client = client ?? throw new ArgumentNullException(nameof(client));
     }
 
     public IDownloadRuntime? Create()
@@ -105,7 +109,8 @@ internal sealed class DownloadRuntimeFactory : IDownloadRuntimeFactory
         var artifactWriter = new DownloadArtifactWriter(
             _wbiKeyProvider,
             _stateWriter,
-            _loggerFactory.CreateLogger<DownloadArtifactWriter>());
+            _loggerFactory.CreateLogger<DownloadArtifactWriter>(),
+            _client);
         var shutdownRecovery = new DownloadTaskShutdownRecovery(
             _tasks,
             _stateWriter);
@@ -118,7 +123,8 @@ internal sealed class DownloadRuntimeFactory : IDownloadRuntimeFactory
             _uiDispatcher);
         var playbackResolver = new DownloadPlaybackResolver(
             _wbiKeyProvider,
-            TimeProvider.System);
+            TimeProvider.System,
+            _client);
         var transferCoordinator = new DownloadTransferCoordinator(
             transferBackend,
             new DownloadRetryPolicy(),

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using DownKyi.Application.Bilibili;
 using DownKyi.Application.Downloads;
 using DownKyi.Core.BiliApi.Sign;
 using DownKyi.Core.BiliApi.VideoStream;
@@ -30,15 +31,18 @@ internal sealed class ContentInfoServiceFactory : IContentInfoServiceFactory
     private readonly ISettingsStore _settingsStore;
     private readonly IVideoTagProvider _tagProvider;
     private readonly IWbiKeyProvider _wbiKeyProvider;
+    private readonly IBilibiliApiClient _client;
 
     public ContentInfoServiceFactory(
         ISettingsStore settingsStore,
         IVideoTagProvider tagProvider,
-        IWbiKeyProvider wbiKeyProvider)
+        IWbiKeyProvider wbiKeyProvider,
+        IBilibiliApiClient client)
     {
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
         _tagProvider = tagProvider ?? throw new ArgumentNullException(nameof(tagProvider));
         _wbiKeyProvider = wbiKeyProvider ?? throw new ArgumentNullException(nameof(wbiKeyProvider));
+        _client = client ?? throw new ArgumentNullException(nameof(client));
     }
 
     public async Task<IInfoService> CreateAsync(
@@ -54,14 +58,19 @@ internal sealed class ContentInfoServiceFactory : IContentInfoServiceFactory
                 _settingsStore,
                 _tagProvider,
                 _wbiKeyProvider,
+                _client,
                 cancellationToken).ConfigureAwait(false);
         }
 
-        return await Task.Run<IInfoService>(() => item.Kind switch
+        return item.Kind switch
         {
-            DownloadInfoKind.Bangumi => new BangumiInfoService(item.Source, _settingsStore, cancellationToken),
+            DownloadInfoKind.Bangumi => await BangumiInfoService.CreateAsync(
+                item.Source,
+                _settingsStore,
+                _client,
+                cancellationToken).ConfigureAwait(false),
             _ => throw new ArgumentOutOfRangeException(nameof(item), item.Kind, null)
-        }, cancellationToken).ConfigureAwait(false);
+        };
     }
 }
 

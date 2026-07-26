@@ -1,19 +1,16 @@
-using System.Net;
 using DownKyi.Core.BiliApi;
 using DownKyi.Core.BiliApi.Sign;
 using DownKyi.Core.BiliApi.VideoStream;
 using DownKyi.Core.BiliApi.VideoStream.Models;
 using Newtonsoft.Json;
-using BiliWebClient = DownKyi.Core.BiliApi.WebClient;
 
 namespace DownKyi.Core.Tests;
 
-public sealed class PlayUrlEnvelopeContractTests : IDisposable
+public sealed class PlayUrlEnvelopeContractTests
 {
     private const string ImgKey = "12345678901234567890123456789012";
     private const string SubKey = "abcdefghijklmnopqrstuvwxyzABCDEF";
     private static readonly WbiKeys Keys = new(ImgKey, SubKey);
-    private readonly WebClientTestContext _webClientContext = new();
     private static readonly string SampleDirectory = Path.Combine(
         FindRepositoryRoot(),
         "tests",
@@ -90,11 +87,11 @@ public sealed class PlayUrlEnvelopeContractTests : IDisposable
     }
 
     [Fact]
-    public void OrdinaryVideoEndpointUsesDataEnvelope()
+    public async Task OrdinaryVideoEndpointUsesDataEnvelope()
     {
-        ConfigureResponse("playurl-video-data.json");
+        var client = CreateClient("playurl-video-data.json");
 
-        var payload = VideoStreamApi.GetVideoPlayUrl(
+        var payload = await client.GetVideoPlayUrlAsync(
             Keys,
             1702204169,
             1,
@@ -106,11 +103,11 @@ public sealed class PlayUrlEnvelopeContractTests : IDisposable
     }
 
     [Fact]
-    public void BangumiEndpointUsesResultVideoInfoEnvelope()
+    public async Task BangumiEndpointUsesResultVideoInfoEnvelope()
     {
-        ConfigureResponse("playurl-bangumi-v2-result.json");
+        var client = CreateClient("playurl-bangumi-v2-result.json");
 
-        var payload = VideoStreamApi.GetBangumiPlayUrl(
+        var payload = await client.GetBangumiPlayUrlAsync(
             1,
             "BV1fixture",
             2,
@@ -135,11 +132,11 @@ public sealed class PlayUrlEnvelopeContractTests : IDisposable
     }
 
     [Fact]
-    public void CheeseEndpointUsesDataEnvelope()
+    public async Task CheeseEndpointUsesDataEnvelope()
     {
-        ConfigureResponse("playurl-cheese-data.json");
+        var client = CreateClient("playurl-cheese-data.json");
 
-        var payload = VideoStreamApi.GetCheesePlayUrl(
+        var payload = await client.GetCheesePlayUrlAsync(
             1,
             "BV1fixture",
             2,
@@ -150,12 +147,12 @@ public sealed class PlayUrlEnvelopeContractTests : IDisposable
     }
 
     [Fact]
-    public void OrdinaryVideoEndpointRejectsEmptyDataEnvelope()
+    public async Task OrdinaryVideoEndpointRejectsEmptyDataEnvelope()
     {
-        ConfigureResponse("playurl-empty-data.json");
+        var client = CreateClient("playurl-empty-data.json");
 
-        var exception = Assert.Throws<BilibiliApiResponseException>(() =>
-            VideoStreamApi.GetVideoPlayUrl(
+        var exception = await Assert.ThrowsAsync<BilibiliApiResponseException>(() =>
+            client.GetVideoPlayUrlAsync(
                 Keys,
                 1702204169,
                 1,
@@ -163,13 +160,7 @@ public sealed class PlayUrlEnvelopeContractTests : IDisposable
                 2,
                 cancellationToken: TestContext.Current.CancellationToken));
 
-        Assert.Equal(nameof(VideoStreamApi.GetVideoPlayUrl), exception.Operation);
-    }
-
-    public void Dispose()
-    {
-        _webClientContext.Dispose();
-        GC.SuppressFinalize(this);
+        Assert.Equal(nameof(VideoStreamApi.GetVideoPlayUrlAsync), exception.Operation);
     }
 
     private static PlayUrlOrigin ReadSample(string name)
@@ -179,13 +170,10 @@ public sealed class PlayUrlEnvelopeContractTests : IDisposable
                ?? throw new InvalidDataException($"Sample '{name}' did not deserialize.");
     }
 
-    private static void ConfigureResponse(string sampleName)
+    private static StubBilibiliApiClient CreateClient(string sampleName)
     {
         var body = File.ReadAllText(Path.Combine(SampleDirectory, sampleName));
-        BiliWebClient.SendOverrideForTests = (_, _) => new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(body)
-        };
+        return new StubBilibiliApiClient((_, _) => Task.FromResult(body));
     }
 
     private static string FindRepositoryRoot()

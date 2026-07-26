@@ -8,11 +8,13 @@ public sealed class LoginCoordinatorTests
     [Fact]
     public async Task RequestLoginUrlPreservesCancellationBeforeNetworkWork()
     {
-        var coordinator = new LoginCoordinator(NullLogger<LoginCoordinator>.Instance);
+        var coordinator = new LoginCoordinator(
+            NullLogger<LoginCoordinator>.Instance,
+            new TestBilibiliApiClient());
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync();
 
-        await Assert.ThrowsAsync<TaskCanceledException>(
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => coordinator.RequestLoginUrlAsync(cancellation.Token));
     }
 }

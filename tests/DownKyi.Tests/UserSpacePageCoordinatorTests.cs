@@ -65,7 +65,7 @@ public sealed class UserSpacePageCoordinatorTests
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync();
 
-        await Assert.ThrowsAsync<TaskCanceledException>(
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => coordinator.LoadMyProfileAsync(42, cancellation.Token));
     }
 
@@ -77,7 +77,7 @@ public sealed class UserSpacePageCoordinatorTests
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync();
 
-        await Assert.ThrowsAsync<TaskCanceledException>(
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => coordinator.LoadMyStatsAsync(42, cancellation.Token));
     }
 
@@ -89,7 +89,7 @@ public sealed class UserSpacePageCoordinatorTests
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync();
 
-        await Assert.ThrowsAsync<TaskCanceledException>(() => coordinator.LoadBangumiFollowPageAsync(
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => coordinator.LoadBangumiFollowPageAsync(
             42,
             BangumiType.ANIME,
             1,
@@ -103,6 +103,7 @@ public sealed class UserSpacePageCoordinatorTests
             settings.Store,
             new TestWbiKeyProvider(),
             new TestNavigationService(),
-            NullLogger<UserSpacePageCoordinator>.Instance);
+            NullLogger<UserSpacePageCoordinator>.Instance,
+            new TestBilibiliApiClient());
     }
 }

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using DownKyi.Application.Bilibili;
 using DownKyi.Core.BiliApi.Bangumi;
 using DownKyi.Core.BiliApi.Bangumi.Models;
 using DownKyi.Core.BiliApi.BiliUtils;
@@ -22,39 +23,72 @@ internal class BangumiInfoService : IInfoService
 {
     private readonly BangumiSeason? _bangumiSeason;
     private readonly ISettingsStore _settingsStore;
+    private readonly IBilibiliApiClient _client;
 
     public BangumiInfoService(
-        string? input,
         ISettingsStore settingsStore,
-        CancellationToken cancellationToken = default)
+        IBilibiliApiClient client)
     {
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
+        _client = client ?? throw new ArgumentNullException(nameof(client));
+    }
+
+    private BangumiInfoService(
+        BangumiSeason bangumiSeason,
+        ISettingsStore settingsStore,
+        IBilibiliApiClient client)
+        : this(settingsStore, client)
+    {
+        _bangumiSeason = bangumiSeason ?? throw new ArgumentNullException(nameof(bangumiSeason));
+    }
+
+    public static async Task<BangumiInfoService> CreateAsync(
+        string? input,
+        ISettingsStore settingsStore,
+        IBilibiliApiClient client,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(settingsStore);
+        ArgumentNullException.ThrowIfNull(client);
         if (input == null)
         {
-            return;
+            return new BangumiInfoService(settingsStore, client);
         }
 
+        BangumiSeason? bangumiSeason = null;
         if (ParseEntrance.IsBangumiSeasonId(input) || ParseEntrance.IsBangumiSeasonUrl(input))
         {
             var seasonId = ParseEntrance.GetBangumiSeasonId(input);
-            _bangumiSeason = BangumiInfo.BangumiSeasonInfo(seasonId, cancellationToken: cancellationToken);
+            bangumiSeason = await client.BangumiSeasonInfoAsync(
+                seasonId,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 
         if (ParseEntrance.IsBangumiEpisodeId(input) || ParseEntrance.IsBangumiEpisodeUrl(input))
         {
             var episodeId = ParseEntrance.GetBangumiEpisodeId(input);
-            _bangumiSeason = BangumiInfo.BangumiSeasonInfo(-1, episodeId, cancellationToken);
+            bangumiSeason = await client.BangumiSeasonInfoAsync(
+                -1,
+                episodeId,
+                cancellationToken).ConfigureAwait(false);
         }
 
         if (ParseEntrance.IsBangumiMediaId(input) || ParseEntrance.IsBangumiMediaUrl(input))
         {
             var mediaId = ParseEntrance.GetBangumiMediaId(input);
-            var bangumiMedia = BangumiInfo.BangumiMediaInfo(mediaId, cancellationToken);
+            var bangumiMedia = await client.BangumiMediaInfoAsync(mediaId, cancellationToken)
+                .ConfigureAwait(false);
             if (bangumiMedia != null)
             {
-                _bangumiSeason = BangumiInfo.BangumiSeasonInfo(bangumiMedia.SeasonId, cancellationToken: cancellationToken);
+                bangumiSeason = await client.BangumiSeasonInfoAsync(
+                    bangumiMedia.SeasonId,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
             }
         }
+
+        return bangumiSeason == null
+            ? new BangumiInfoService(settingsStore, client)
+            : new BangumiInfoService(bangumiSeason, settingsStore, client);
     }
 
     /// <summary>
@@ -264,11 +298,11 @@ internal class BangumiInfoService : IInfoService
     {
         ArgumentNullException.ThrowIfNull(page);
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(VideoStreamApi.GetBangumiPlayUrl(
+        return _client.GetBangumiPlayUrlAsync(
             page.Avid,
             page.Bvid,
             page.Cid,
-            cancellationToken: cancellationToken));
+            cancellationToken: cancellationToken);
     }
 
     /// <summary>

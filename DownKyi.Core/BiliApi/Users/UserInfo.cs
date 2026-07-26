@@ -1,3 +1,4 @@
+using DownKyi.Application.Bilibili;
 using DownKyi.Core.BiliApi.Sign;
 using DownKyi.Core.BiliApi.Users.Models;
 using DownKyi.Core.Logging;
@@ -17,19 +18,22 @@ public static class UserInfo
     /// 导航栏用户信息
     /// </summary>
     /// <returns></returns>
-    public static UserInfoForNavigation? GetUserInfoForNavigation(CancellationToken cancellationToken = default)
+    public static async Task<UserInfoForNavigation?> GetUserInfoForNavigationAsync(
+        this IBilibiliApiClient client,
+        CancellationToken cancellationToken = default)
     {
         const string url = "https://api.bilibili.com/x/web-interface/nav";
         const string referer = "https://www.bilibili.com";
         // The nav endpoint returns -101 for anonymous users while still supplying
         // the public WBI metadata required to sign ordinary video requests.
-        var userInfo = BiliApiRequest.RequestJsonAllowingCode<UserInfoForNavigationOrigin>(
+        var userInfo = await BiliApiRequest.RequestJsonAllowingCodeAsync<UserInfoForNavigationOrigin>(
+            client,
             url,
             referer,
-            nameof(GetUserInfoForNavigation),
+            nameof(GetUserInfoForNavigationAsync),
             "UserInfo",
             AnonymousNavigationCode,
-            cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return BiliApiRequest.RequirePayload(userInfo.Data);
     }
@@ -39,7 +43,8 @@ public static class UserInfo
     /// </summary>
     /// <param name="mid"></param>
     /// <returns></returns>
-    public static UserInfoForSpace? GetUserInfoForSpace(
+    public static async Task<UserInfoForSpace?> GetUserInfoForSpaceAsync(
+        this IBilibiliApiClient client,
         WbiKeys keys,
         long unixTimeSeconds,
         long mid,
@@ -66,12 +71,13 @@ public static class UserInfo
             unixTimeSeconds));
         var url = $"https://api.bilibili.com/x/space/wbi/acc/info?{query}";
         const string referer = "https://www.bilibili.com";
-        var spaceInfo = BiliApiRequest.RequestJson<UserInfoForSpaceOrigin>(
+        var spaceInfo = await BiliApiRequest.RequestJsonAsync<UserInfoForSpaceOrigin>(
+            client,
             url,
             referer,
-            nameof(GetUserInfoForSpace),
+            nameof(GetUserInfoForSpaceAsync),
             "UserInfo",
-            cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return BiliApiRequest.RequirePayload(spaceInfo.Data);
     }
@@ -80,16 +86,19 @@ public static class UserInfo
     /// 本用户详细信息
     /// </summary>
     /// <returns></returns>
-    public static MyInfo? GetMyInfo(CancellationToken cancellationToken = default)
+    public static async Task<MyInfo?> GetMyInfoAsync(
+        this IBilibiliApiClient client,
+        CancellationToken cancellationToken = default)
     {
         const string url = "https://api.bilibili.com/x/space/myinfo";
         const string referer = "https://www.bilibili.com";
-        var myInfo = BiliApiRequest.RequestJson<MyInfoOrigin>(
+        var myInfo = await BiliApiRequest.RequestJsonAsync<MyInfoOrigin>(
+            client,
             url,
             referer,
-            nameof(GetMyInfo),
+            nameof(GetMyInfoAsync),
             "UserInfo",
-            cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return BiliApiRequest.RequirePayload(myInfo.Data);
     }

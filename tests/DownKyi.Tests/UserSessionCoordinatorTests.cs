@@ -27,11 +27,13 @@ public sealed class UserSessionCoordinatorTests
     public async Task RefreshPreservesCancellationBeforeNetworkWork()
     {
         using var settings = new TestSettingsStore();
-        var coordinator = new UserSessionCoordinator(settings.Store);
+        var coordinator = new UserSessionCoordinator(
+            settings.Store,
+            new TestBilibiliApiClient());
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync();
 
-        await Assert.ThrowsAsync<TaskCanceledException>(
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => coordinator.RefreshAsync(cancellation.Token));
     }
 
@@ -82,13 +84,13 @@ public sealed class UserSessionCoordinatorTests
         });
         var coordinator = new UserSessionCoordinator(
             settings.Store,
-            _ => new UserInfoForNavigation
+            _ => Task.FromResult<UserInfoForNavigation?>(new UserInfoForNavigation
             {
                 Mid = 42,
                 Name = "updated-user",
                 IsLogin = true,
                 Wbi = null
-            });
+            }));
 
         await coordinator.RefreshAsync(TestContext.Current.CancellationToken);
 

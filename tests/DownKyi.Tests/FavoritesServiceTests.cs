@@ -12,7 +12,10 @@ public sealed class FavoritesServiceTests
     {
         using var settings = new TestSettingsStore();
         var navigation = new TestNavigationService();
-        var service = new FavoritesService(settings.Store, navigation);
+        var service = new FavoritesService(
+            settings.Store,
+            navigation,
+            new TestBilibiliApiClient());
         var source = new ApiFavoritesMedia
         {
             Id = 170001,
@@ -41,7 +44,10 @@ public sealed class FavoritesServiceTests
     public void UnavailableMediaWithoutTitleGetsStatusFallback()
     {
         using var settings = new TestSettingsStore();
-        var service = new FavoritesService(settings.Store, new TestNavigationService());
+        var service = new FavoritesService(
+            settings.Store,
+            new TestNavigationService(),
+            new TestBilibiliApiClient());
 
         var mapped = Assert.Single(service.MapFavoritesMedia(
             [new ApiFavoritesMedia { Attr = 1 }],

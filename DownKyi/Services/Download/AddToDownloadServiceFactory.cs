@@ -1,4 +1,5 @@
 using System;
+using DownKyi.Application.Bilibili;
 using DownKyi.Application.Desktop;
 using DownKyi.Core.BiliApi.Sign;
 using DownKyi.Core.BiliApi.VideoStream;
@@ -25,6 +26,7 @@ internal sealed class AddToDownloadServiceFactory : IAddToDownloadServiceFactory
     private readonly ILogger<AddToDownloadService> _logger;
     private readonly IVideoTagProvider _tagProvider;
     private readonly IWbiKeyProvider _wbiKeyProvider;
+    private readonly IBilibiliApiClient _client;
 
     public AddToDownloadServiceFactory(
         DownloadListState downloadLists,
@@ -33,6 +35,7 @@ internal sealed class AddToDownloadServiceFactory : IAddToDownloadServiceFactory
         ISettingsStore settingsStore,
         IVideoTagProvider tagProvider,
         IWbiKeyProvider wbiKeyProvider,
+        IBilibiliApiClient client,
         IUserNotificationService notificationService,
         IAppDialogService dialogService,
         ILogger<AddToDownloadService> logger)
@@ -43,6 +46,7 @@ internal sealed class AddToDownloadServiceFactory : IAddToDownloadServiceFactory
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
         _tagProvider = tagProvider ?? throw new ArgumentNullException(nameof(tagProvider));
         _wbiKeyProvider = wbiKeyProvider ?? throw new ArgumentNullException(nameof(wbiKeyProvider));
+        _client = client ?? throw new ArgumentNullException(nameof(client));
         _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
         _dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -58,6 +62,7 @@ internal sealed class AddToDownloadServiceFactory : IAddToDownloadServiceFactory
             _settingsStore,
             _tagProvider,
             _wbiKeyProvider,
+            _client,
             _notificationService,
             _dialogService,
             _logger);

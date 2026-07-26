@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using DownKyi.Application.Bilibili;
 using DownKyi.Core.BiliApi.Video;
 
 namespace DownKyi.Services.Video;
@@ -17,17 +18,22 @@ internal interface IVideoTagProvider
 
 internal sealed class VideoTagProvider : IVideoTagProvider
 {
-    public Task<IReadOnlyList<string>> GetTagsAsync(
+    private readonly IBilibiliApiClient _client;
+
+    public VideoTagProvider(IBilibiliApiClient client)
+    {
+        _client = client ?? throw new ArgumentNullException(nameof(client));
+    }
+
+    public async Task<IReadOnlyList<string>> GetTagsAsync(
         string bvid,
         long cid,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(bvid);
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.Run<IReadOnlyList<string>>(
-            () => VideoInfo.GetBiliTagInfo(bvid, cid, cancellationToken)
-                ?.Select(tag => tag.TagName)
-                .ToArray() ?? Array.Empty<string>(),
-            cancellationToken);
+        var tags = await _client.GetBiliTagInfoAsync(bvid, cid, cancellationToken)
+            .ConfigureAwait(false);
+        return tags?.Select(tag => tag.TagName).ToArray() ?? Array.Empty<string>();
     }
 }

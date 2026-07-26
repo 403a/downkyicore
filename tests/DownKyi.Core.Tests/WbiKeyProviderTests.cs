@@ -1,10 +1,9 @@
-using System.Net;
+using DownKyi.Application.Bilibili;
 using DownKyi.Core.BiliApi;
 using DownKyi.Core.BiliApi.Sign;
 using DownKyi.Core.BiliApi.Users.Models;
 using DownKyi.Core.BiliApi.Video;
 using DownKyi.Core.Settings;
-using BiliWebClient = DownKyi.Core.BiliApi.WebClient;
 
 namespace DownKyi.Core.Tests;
 
@@ -13,7 +12,6 @@ public sealed class WbiKeyProviderTests : IDisposable
     private const string ImgKey = "7cd084941338484aae1ad9425b84077c";
     private const string SubKey = "4932caff0ff746eab6f01bf08b70ac45";
     private readonly List<string> _directories = [];
-    private readonly WebClientTestContext _webClientContext = new();
 
     [Fact]
     public async Task EmptyInitialKeysTriggerRefreshBeforeFirstUse()
@@ -52,14 +50,11 @@ public sealed class WbiKeyProviderTests : IDisposable
             "BiliApi",
             "JsonSamples",
             "video-view-BV1U7V66FEiK.json"), TestContext.Current.CancellationToken);
-        BiliWebClient.SendOverrideForTests = (_, _) => new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(sample)
-        };
+        var client = new StubBilibiliApiClient((_, _) => Task.FromResult(sample));
 
         var video = await WbiRequestExecutor.ExecuteAsync(
             provider,
-            (keys, unixTimeSeconds) => VideoInfo.VideoViewInfo(
+            (keys, unixTimeSeconds) => client.VideoViewInfoAsync(
                 keys,
                 unixTimeSeconds,
                 "BV1U7V66FEiK",
@@ -186,9 +181,12 @@ public sealed class WbiKeyProviderTests : IDisposable
 
         var result = await WbiRequestExecutor.ExecuteAsync(
             provider,
-            (_, _) => ++requestCount == 1
-                ? throw new BilibiliApiResponseException("fixture", "signature rejected", code: -403)
-                : "ok",
+            (_, _) => Task.FromResult(++requestCount == 1
+                ? throw new BilibiliApiResponseException(
+                    "fixture",
+                    "signature rejected",
+                    code: -403)
+                : "ok"),
             TimeProvider.System,
             TestContext.Current.CancellationToken);
 
@@ -209,7 +207,10 @@ public sealed class WbiKeyProviderTests : IDisposable
                 (_, _) =>
                 {
                     requestCount++;
-                    throw new BilibiliApiResponseException("fixture", "signature rejected", code: -403);
+                    return Task.FromException<string>(new BilibiliApiResponseException(
+                        "fixture",
+                        "signature rejected",
+                        code: -403));
                 },
                 TimeProvider.System,
                 TestContext.Current.CancellationToken));
@@ -230,7 +231,10 @@ public sealed class WbiKeyProviderTests : IDisposable
                 (_, _) =>
                 {
                     requestCount++;
-                    throw new BilibiliApiResponseException("fixture", "not found", code: -404);
+                    return Task.FromException<string>(new BilibiliApiResponseException(
+                        "fixture",
+                        "not found",
+                        code: -404));
                 },
                 TimeProvider.System,
                 TestContext.Current.CancellationToken));
@@ -241,7 +245,6 @@ public sealed class WbiKeyProviderTests : IDisposable
 
     public void Dispose()
     {
-        _webClientContext.Dispose();
         foreach (var directory in _directories)
         {
             if (Directory.Exists(directory))

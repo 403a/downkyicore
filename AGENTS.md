@@ -162,7 +162,7 @@ Durable 下載狀態只能由 `IDownloadTaskApplicationService` 依 `DownloadTas
 
 ## HTTP 與外部程序
 
-- Bilibili HTTP 目前使用 factory 建立的 `BilibiliHttpClient`，但仍經過 static `WebClient` facade 且含同步 send/read/backoff。不得擴大此相容面；目標是注入 async `IBilibiliApiClient` 並移除 `WebClient.Configure()`。
+- Bilibili API 呼叫必須注入 async `IBilibiliApiClient`；buvid 由 `IBuvidProvider` single-flight 載入，cookie 由 `IBilibiliCookieProvider` 提供。禁止重新加入 static client、`Configure()`、同步 send/read 或 blocking backoff。
 - retry 必須迭代、有限、尊重 cancellation/backoff；耗盡後丟出明確例外，不得回傳空字串偽裝成功。
 - JSON 空字串、HTML 錯誤頁與 schema failure 必須可見。
 - WBI 簽名必須從 `IWbiKeyProvider` 取得目前有效金鑰；`WbiSign` 不得讀取 settings。只有 WBI request 的 `-403` 可強制刷新並重試一次。

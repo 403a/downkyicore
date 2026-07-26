@@ -21,7 +21,7 @@ flowchart TD
     Desktop["DownKyi.Desktop\nHost builder only"]
     Application["DownKyi.Application\nselected contracts and use cases"]
     Domain["DownKyi.Domain\ndownload aggregate and typed results"]
-    Infrastructure["DownKyi.Infrastructure\nSQLite store + write-behind + clock"]
+    Infrastructure["DownKyi.Infrastructure\nSQLite + async Bilibili HTTP + write-behind + clock"]
 
     Entry --> Core
     Entry --> Desktop
@@ -42,7 +42,7 @@ flowchart TD
 - `DownKyi.Desktop` 只含 Host builder，尚未形成完整 Desktop assembly boundary。
 - `DownKyi.Core` 仍直接依賴 Avalonia QR bitmap 與 XAML resources，尚未是 headless core。
 - `DownKyi.Domain.DownloadTask` 已是持久化狀態轉換的權威；worker 與 pipeline 入口使用 `DownloadTaskId`，但 orchestrator channel 與部分 media stage 仍暫時持有 UI projection。
-- `DownKyi.Application` 和 `DownKyi.Infrastructure` 已建立正確的依賴方向，但只承接部分實際產品責任。
+- `DownKyi.Application` 已擁有 Bilibili HTTP/buvid/cookie ports；`DownKyi.Infrastructure` 已擁有其 async `IHttpClientFactory` transport、single-flight buvid provider、SQLite 與 write-behind，但 aria2、FFmpeg、file system 與 logging sink 尚待後續切片搬入。
 - Prism、DryIoc、EventAggregator、RegionManager 和 ContainerLocator 已從 production source 移除，不得重新引入。
 
 ## 目前啟動鏈
@@ -58,6 +58,8 @@ Program
 ```
 
 `DownKyiHost` 與 `DesktopComposition` 目前共同形成 composition root。這是受測試保護的相容狀態，但目標是讓 executable 只保留最小啟動與最外層組合。
+
+Bilibili endpoint adapters 仍位於 `DownKyi.Core/BiliApi` 以保留 DTO 與外部協定相容性，但所有 production 呼叫都接收注入的 `IBilibiliApiClient` 並使用 async API。Host 是 client、cookie provider、buvid provider 與網路設定的唯一組合點；static client、全域 `Configure()` 和同步 HTTP compatibility path 已刪除。
 
 ## 目前導航與 UserSpace 資料流
 

@@ -1,3 +1,4 @@
+using DownKyi.Application.Bilibili;
 using DownKyi.Core.BiliApi.Users;
 using DownKyi.Core.BiliApi.Users.Models;
 using DownKyi.Core.Settings;
@@ -26,8 +27,14 @@ public sealed class WbiKeyProvider : IWbiKeyProvider, IDisposable
     private bool _persistedKeysExamined;
     private bool _disposed;
 
-    public WbiKeyProvider(ISettingsStore settingsStore)
-        : this(settingsStore, FetchNavigationAsync, TimeProvider.System, DefaultLifetime)
+    public WbiKeyProvider(
+        ISettingsStore settingsStore,
+        IBilibiliApiClient client)
+        : this(
+            settingsStore,
+            CreateNavigationFetcher(client),
+            TimeProvider.System,
+            DefaultLifetime)
     {
     }
 
@@ -117,11 +124,11 @@ public sealed class WbiKeyProvider : IWbiKeyProvider, IDisposable
         return extensionIndex < 0 ? fileName : fileName[..extensionIndex];
     }
 
-    private static Task<UserInfoForNavigation?> FetchNavigationAsync(CancellationToken cancellationToken)
+    private static Func<CancellationToken, Task<UserInfoForNavigation?>>
+        CreateNavigationFetcher(IBilibiliApiClient client)
     {
-        return Task.Run(
-            () => UserInfo.GetUserInfoForNavigation(cancellationToken),
-            cancellationToken);
+        ArgumentNullException.ThrowIfNull(client);
+        return client.GetUserInfoForNavigationAsync;
     }
 
     private Task<WbiKeys> GetOrStartRefresh()

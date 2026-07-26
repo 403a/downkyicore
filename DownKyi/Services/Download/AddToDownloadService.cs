@@ -6,6 +6,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using DownKyi.Application.Bilibili;
 using DownKyi.Application.Desktop;
 using DownKyi.Core.BiliApi;
 using DownKyi.Core.BiliApi.BiliUtils;
@@ -49,12 +50,6 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
     private bool _downloadSubtitle = true;
     private bool _downloadCover = true;
 
-    /// <summary>
-    /// 添加下载
-    /// </summary>
-    /// <param name="streamType"></param>
-    /// <param name="downloadLists"></param>
-    /// <param name="projectionStore"></param>
     public AddToDownloadService(
         PlayStreamType streamType,
         DownloadListState downloadLists,
@@ -63,6 +58,7 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
         ISettingsStore settingsStore,
         IVideoTagProvider tagProvider,
         IWbiKeyProvider wbiKeyProvider,
+        IBilibiliApiClient client,
         IUserNotificationService notificationService,
         IAppDialogService dialogService,
         ILogger<AddToDownloadService> logger)
@@ -75,16 +71,21 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
         _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
         _dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        ArgumentNullException.ThrowIfNull(client);
         switch (streamType)
         {
             case PlayStreamType.Video:
-                _videoInfoService = new VideoInfoService(settingsStore, _tagProvider, wbiKeyProvider);
+                _videoInfoService = new VideoInfoService(
+                    settingsStore,
+                    _tagProvider,
+                    wbiKeyProvider,
+                    client);
                 break;
             case PlayStreamType.Bangumi:
-                _videoInfoService = new BangumiInfoService(null, settingsStore);
+                _videoInfoService = new BangumiInfoService(settingsStore, client);
                 break;
             case PlayStreamType.Cheese:
-                _videoInfoService = new CheeseInfoService(null, settingsStore);
+                _videoInfoService = new CheeseInfoService(settingsStore, client);
                 break;
             default:
                 break;

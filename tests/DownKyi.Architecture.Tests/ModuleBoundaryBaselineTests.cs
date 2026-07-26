@@ -298,9 +298,13 @@ public sealed class ModuleBoundaryBaselineTests
     }
 
     [Fact]
-    public void StaticAndSynchronousHttpDebtCannotSpreadBeyondCurrentOwners()
+    public void BilibiliHttpRuntimeCannotRestoreStaticOrSynchronousTransport()
     {
-        var apiRoot = Path.Combine(RepositoryRoot, "DownKyi.Core", "BiliApi");
+        var apiRoots = new[]
+        {
+            Path.Combine(RepositoryRoot, "DownKyi.Core", "BiliApi"),
+            Path.Combine(RepositoryRoot, "src", "DownKyi.Infrastructure", "Bilibili")
+        };
         var markers = new[]
         {
             "static BilibiliHttpClient? _client",
@@ -308,8 +312,8 @@ public sealed class ModuleBoundaryBaselineTests
             "reader.ReadToEnd()",
             "WaitHandle.WaitOne"
         };
-        var actual = Directory
-            .EnumerateFiles(apiRoot, "*.cs", SearchOption.AllDirectories)
+        var actual = apiRoots
+            .SelectMany(root => Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories))
             .Where(path =>
             {
                 var source = File.ReadAllText(path);
@@ -318,14 +322,7 @@ public sealed class ModuleBoundaryBaselineTests
             .Select(Relative)
             .ToArray();
 
-        AssertSubset(
-            actual,
-            new HashSet<string>(StringComparer.Ordinal)
-            {
-                "DownKyi.Core/BiliApi/BilibiliHttpClient.cs",
-                "DownKyi.Core/BiliApi/WebClient.cs"
-            },
-            "static or synchronous HTTP owner");
+        Assert.Empty(actual);
     }
 
     [Fact]

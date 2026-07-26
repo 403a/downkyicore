@@ -14,7 +14,7 @@ public sealed class FavoritesCoordinatorTests
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync();
 
-        await Assert.ThrowsAsync<TaskCanceledException>(
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => coordinator.LoadFoldersAsync(42, cancellation.Token));
     }
 
@@ -25,7 +25,7 @@ public sealed class FavoritesCoordinatorTests
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync();
 
-        await Assert.ThrowsAsync<TaskCanceledException>(
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => coordinator.LoadPublicFavoritesAsync(42, cancellation.Token));
     }
 
@@ -45,12 +45,14 @@ public sealed class FavoritesCoordinatorTests
 
     private sealed class ThrowingFavoritesService : IFavoritesService
     {
-        public FavoritesPageItem? GetFavorites(long mediaId, CancellationToken cancellationToken = default)
+        public Task<FavoritesPageItem?> GetFavoritesAsync(
+            long mediaId,
+            CancellationToken cancellationToken = default)
         {
             throw new InvalidOperationException("The API should not be called for a canceled request.");
         }
 
-        public DownKyi.Core.BiliApi.Favorites.Models.FavoritesMediaResource GetFavoritesMediaPage(
+        public Task<DownKyi.Core.BiliApi.Favorites.Models.FavoritesMediaResource> GetFavoritesMediaPageAsync(
             long mediaId,
             int page,
             int pageSize,
@@ -60,7 +62,7 @@ public sealed class FavoritesCoordinatorTests
             throw new InvalidOperationException("The API should not be called for a canceled request.");
         }
 
-        public IReadOnlyList<ApiFavoritesMedia> GetAllFavoritesMedia(
+        public Task<IReadOnlyList<ApiFavoritesMedia>> GetAllFavoritesMediaAsync(
             long mediaId,
             CancellationToken cancellationToken)
         {
@@ -75,12 +77,16 @@ public sealed class FavoritesCoordinatorTests
             throw new InvalidOperationException("Mapping should not run for a canceled request.");
         }
 
-        public IReadOnlyList<TabHeader> GetCreatedFavorites(long mid, CancellationToken cancellationToken)
+        public Task<IReadOnlyList<TabHeader>> GetCreatedFavoritesAsync(
+            long mid,
+            CancellationToken cancellationToken)
         {
             throw new InvalidOperationException("The API should not be called for a canceled request.");
         }
 
-        public IReadOnlyList<TabHeader> GetCollectedFavorites(long mid, CancellationToken cancellationToken)
+        public Task<IReadOnlyList<TabHeader>> GetCollectedFavoritesAsync(
+            long mid,
+            CancellationToken cancellationToken)
         {
             throw new InvalidOperationException("The API should not be called for a canceled request.");
         }
@@ -97,9 +103,12 @@ public sealed class FavoritesCoordinatorTests
 
         public (long MediaId, int Page, int PageSize, string? Keyword) LastRequest { get; private set; }
 
-        public FavoritesPageItem? GetFavorites(long mediaId, CancellationToken cancellationToken = default) => null;
+        public Task<FavoritesPageItem?> GetFavoritesAsync(
+            long mediaId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<FavoritesPageItem?>(null);
 
-        public DownKyi.Core.BiliApi.Favorites.Models.FavoritesMediaResource GetFavoritesMediaPage(
+        public Task<DownKyi.Core.BiliApi.Favorites.Models.FavoritesMediaResource> GetFavoritesMediaPageAsync(
             long mediaId,
             int page,
             int pageSize,
@@ -107,16 +116,17 @@ public sealed class FavoritesCoordinatorTests
             CancellationToken cancellationToken)
         {
             LastRequest = (mediaId, page, pageSize, keyword);
-            return new DownKyi.Core.BiliApi.Favorites.Models.FavoritesMediaResource
+            return Task.FromResult(new DownKyi.Core.BiliApi.Favorites.Models.FavoritesMediaResource
             {
                 HasMore = true,
                 Medias = [new ApiFavoritesMedia { Id = 1, Bvid = "BV1fixture01", Title = "fixture" }]
-            };
+            });
         }
 
-        public IReadOnlyList<ApiFavoritesMedia> GetAllFavoritesMedia(
+        public Task<IReadOnlyList<ApiFavoritesMedia>> GetAllFavoritesMediaAsync(
             long mediaId,
-            CancellationToken cancellationToken) => Array.Empty<ApiFavoritesMedia>();
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<ApiFavoritesMedia>>(Array.Empty<ApiFavoritesMedia>());
 
         public IReadOnlyList<FavoritesMedia> MapFavoritesMedia(
             IReadOnlyList<ApiFavoritesMedia> medias,
@@ -130,8 +140,14 @@ public sealed class FavoritesCoordinatorTests
             }];
         }
 
-        public IReadOnlyList<TabHeader> GetCreatedFavorites(long mid, CancellationToken cancellationToken) => [];
+        public Task<IReadOnlyList<TabHeader>> GetCreatedFavoritesAsync(
+            long mid,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<TabHeader>>([]);
 
-        public IReadOnlyList<TabHeader> GetCollectedFavorites(long mid, CancellationToken cancellationToken) => [];
+        public Task<IReadOnlyList<TabHeader>> GetCollectedFavoritesAsync(
+            long mid,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<TabHeader>>([]);
     }
 }

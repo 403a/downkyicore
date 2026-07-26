@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using DownKyi.Application.Bilibili;
 using DownKyi.Application.Media;
 using DownKyi.Core.BiliApi.Sign;
 using DownKyi.Core.BiliApi.VideoStream.Models;
@@ -21,13 +22,15 @@ internal sealed class VideoParseCoordinator
     public VideoParseCoordinator(
         ISettingsStore settingsStore,
         IVideoTagProvider tagProvider,
-        IWbiKeyProvider wbiKeyProvider)
+        IWbiKeyProvider wbiKeyProvider,
+        IBilibiliApiClient client)
         : this((input, cancellationToken) =>
             CreateInfoServiceAsync(
                 input,
                 settingsStore,
                 tagProvider,
                 wbiKeyProvider,
+                client,
                 cancellationToken))
     {
     }
@@ -178,11 +181,13 @@ internal sealed class VideoParseCoordinator
         ISettingsStore settingsStore,
         IVideoTagProvider tagProvider,
         IWbiKeyProvider wbiKeyProvider,
+        IBilibiliApiClient client,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(settingsStore);
         ArgumentNullException.ThrowIfNull(tagProvider);
         ArgumentNullException.ThrowIfNull(wbiKeyProvider);
+        ArgumentNullException.ThrowIfNull(client);
         var kind = VideoInputResolver.Resolve(input);
         if (kind == VideoInputKind.Video)
         {
@@ -191,15 +196,24 @@ internal sealed class VideoParseCoordinator
                 settingsStore,
                 tagProvider,
                 wbiKeyProvider,
+                client,
                 cancellationToken).ConfigureAwait(false);
         }
 
-        return await Task.Run<IInfoService?>(() => kind switch
+        return kind switch
         {
-            VideoInputKind.Bangumi => new BangumiInfoService(input, settingsStore, cancellationToken),
-            VideoInputKind.Cheese => new CheeseInfoService(input, settingsStore, cancellationToken),
+            VideoInputKind.Bangumi => await BangumiInfoService.CreateAsync(
+                input,
+                settingsStore,
+                client,
+                cancellationToken).ConfigureAwait(false),
+            VideoInputKind.Cheese => await CheeseInfoService.CreateAsync(
+                input,
+                settingsStore,
+                client,
+                cancellationToken).ConfigureAwait(false),
             _ => null
-        }, cancellationToken).ConfigureAwait(false);
+        };
     }
 }
 

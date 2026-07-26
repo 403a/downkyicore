@@ -1,11 +1,11 @@
 using System;
 using System.IO;
 using System.Net.Http;
+using DownKyi.Application.Bilibili;
 using DownKyi.Application.Desktop;
 using DownKyi.Application.Downloads;
 using DownKyi.Application.Lifetime;
 using DownKyi.Core.Aria2cNet.Server;
-using DownKyi.Core.BiliApi;
 using DownKyi.Core.BiliApi.Sign;
 using DownKyi.Core.FFMpeg;
 using DownKyi.Core.Logging;
@@ -13,6 +13,7 @@ using DownKyi.Core.Settings;
 using DownKyi.Core.Storage;
 using DownKyi.CustomControl.AsyncImageLoader;
 using DownKyi.CustomControl.AsyncImageLoader.Loaders;
+using DownKyi.Infrastructure.Bilibili;
 using DownKyi.Infrastructure.Downloads;
 using DownKyi.Platform;
 using DownKyi.Services;
@@ -70,6 +71,26 @@ internal static class DesktopComposition
                 disposeHttpClient: true,
                 Path.Combine(StorageManager.GetCache(), "Images")));
         services.AddSingleton<ISettingsStore, SettingsStore>();
+        services.AddSingleton<IBilibiliCookieProvider, BilibiliCookieProvider>();
+        services.AddDownKyiBilibiliInfrastructure(provider =>
+        {
+            var network = provider.GetRequiredService<ISettingsStore>().Current.Network;
+            return network.NetworkProxy switch
+            {
+                NetworkProxy.None => new BilibiliNetworkOptions(
+                    network.UserAgent,
+                    UseProxy: false,
+                    ProxyAddress: null),
+                NetworkProxy.Custom => new BilibiliNetworkOptions(
+                    network.UserAgent,
+                    UseProxy: true,
+                    network.CustomNetworkProxy),
+                _ => new BilibiliNetworkOptions(
+                    network.UserAgent,
+                    UseProxy: true,
+                    ProxyAddress: null)
+            };
+        });
         services.AddSingleton<IWbiKeyProvider, WbiKeyProvider>();
         services.AddSingleton<FfmpegProcessor>();
         services.AddSingleton<IDownloadTaskStore, SqliteDownloadTaskStore>();
@@ -118,7 +139,6 @@ internal static class DesktopComposition
         services.AddSingleton<IDesktopInteractionContext, DesktopInteractionContext>();
         services.AddSingleton<SearchService>();
 
-        services.AddDownKyiBilibiliHttpClient();
         services.AddSingleton<AriaServer>();
         services.AddSingleton<DownloadDiagnosticLogger>();
         services.AddSingleton<IDownloadRuntimeFactory, DownloadRuntimeFactory>();

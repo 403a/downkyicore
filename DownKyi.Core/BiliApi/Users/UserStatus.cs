@@ -1,3 +1,4 @@
+using DownKyi.Application.Bilibili;
 using DownKyi.Core.BiliApi.Users.Models;
 using DownKyi.Core.Logging;
 using Newtonsoft.Json;
@@ -14,16 +15,20 @@ public static class UserStatus
     /// </summary>
     /// <param name="mid"></param>
     /// <returns></returns>
-    public static UserRelationStat? GetUserRelationStat(long mid, CancellationToken cancellationToken = default)
+    public static async Task<UserRelationStat?> GetUserRelationStatAsync(
+        this IBilibiliApiClient client,
+        long mid,
+        CancellationToken cancellationToken = default)
     {
         var url = $"https://api.bilibili.com/x/relation/stat?vmid={mid}";
         const string referer = "https://www.bilibili.com";
-        var userRelationStat = BiliApiRequest.RequestJson<UserRelationStatOrigin>(
+        var userRelationStat = await BiliApiRequest.RequestJsonAsync<UserRelationStatOrigin>(
+            client,
             url,
             referer,
-            nameof(GetUserRelationStat),
+            nameof(GetUserRelationStatAsync),
             "UserStatus",
-            cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return BiliApiRequest.RequirePayload(userRelationStat.Data);
     }
@@ -35,15 +40,20 @@ public static class UserStatus
     /// </summary>
     /// <param name="mid"></param>
     /// <returns></returns>
-    public static UpStat? GetUpStat(long mid)
+    public static async Task<UpStat?> GetUpStatAsync(
+        this IBilibiliApiClient client,
+        long mid,
+        CancellationToken cancellationToken = default)
     {
         var url = $"https://api.bilibili.com/x/space/upstat?mid={mid}";
         const string referer = "https://www.bilibili.com";
-        var upStat = BiliApiRequest.RequestJson<UpStatOrigin>(
+        var upStat = await BiliApiRequest.RequestJsonAsync<UpStatOrigin>(
+            client,
             url,
             referer,
-            nameof(GetUpStat),
-            "UserStatus");
+            nameof(GetUpStatAsync),
+            "UserStatus",
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return BiliApiRequest.RequirePayload(upStat.Data);
     }

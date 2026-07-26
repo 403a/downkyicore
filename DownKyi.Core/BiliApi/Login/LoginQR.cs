@@ -1,4 +1,5 @@
 using Avalonia.Media.Imaging;
+using DownKyi.Application.Bilibili;
 using DownKyi.Core.BiliApi.Login.Models;
 using DownKyi.Core.Utils;
 using Newtonsoft.Json;
@@ -11,14 +12,19 @@ public static class LoginQr
     /// 申请二维码URL及扫码密钥（web端）
     /// </summary>
     /// <returns></returns>
-    public static LoginUrlOrigin? GetLoginUrl()
+    public static async Task<LoginUrlOrigin?> GetLoginUrlAsync(
+        this IBilibiliApiClient client,
+        CancellationToken cancellationToken = default)
     {
         const string getLoginUrl = "https://passport.bilibili.com/x/passport-login/web/qrcode/generate";
-        var response = BiliApiRequest.RequestJson<LoginUrlOrigin>(
+        var response = await BiliApiRequest.RequestJsonAsync<LoginUrlOrigin>(
+            client,
             getLoginUrl,
             null,
-            nameof(GetLoginUrl),
-            "LoginQR");
+            nameof(GetLoginUrlAsync),
+            "LoginQR",
+            includeCredentials: false,
+            cancellationToken).ConfigureAwait(false);
         BiliApiRequest.RequirePayload(response.Data);
         return response;
     }
@@ -28,15 +34,21 @@ public static class LoginQr
     /// </summary>
     /// <param name="qrcodeKey"></param>
     /// <returns></returns>
-    public static LoginStatus? GetLoginStatus(string qrcodeKey)
+    public static async Task<LoginStatus?> GetLoginStatusAsync(
+        this IBilibiliApiClient client,
+        string qrcodeKey,
+        CancellationToken cancellationToken = default)
     {
         var url = $"https://passport.bilibili.com/x/passport-login/web/qrcode/poll?qrcode_key={qrcodeKey}";
 
-        var response = BiliApiRequest.RequestJson<LoginStatus>(
+        var response = await BiliApiRequest.RequestJsonAsync<LoginStatus>(
+            client,
             url,
             null,
-            nameof(GetLoginStatus),
-            "LoginQR");
+            nameof(GetLoginStatusAsync),
+            "LoginQR",
+            includeCredentials: false,
+            cancellationToken).ConfigureAwait(false);
         BiliApiRequest.RequirePayload(response.Data);
         return response;
     }
@@ -45,11 +57,14 @@ public static class LoginQr
     /// 获得登录二维码
     /// </summary>
     /// <returns></returns>
-    public static Bitmap? GetLoginQrCode()
+    public static async Task<Bitmap?> GetLoginQrCodeAsync(
+        this IBilibiliApiClient client,
+        CancellationToken cancellationToken = default)
     {
         try
         {
-            var loginAddress = GetLoginUrl()?.Data?.QrCodeAddress;
+            var login = await client.GetLoginUrlAsync(cancellationToken).ConfigureAwait(false);
+            var loginAddress = login?.Data?.QrCodeAddress;
             return Uri.TryCreate(loginAddress, UriKind.Absolute, out var loginUri)
                 ? GetLoginQrCode(loginUri)
                 : null;

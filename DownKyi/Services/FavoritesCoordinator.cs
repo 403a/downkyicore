@@ -40,59 +40,64 @@ internal sealed class FavoritesCoordinator : IFavoritesCoordinator
         _favoritesService = favoritesService ?? throw new ArgumentNullException(nameof(favoritesService));
     }
 
-    public Task<IReadOnlyList<TabHeader>> LoadFoldersAsync(long mid, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<TabHeader>> LoadFoldersAsync(
+        long mid,
+        CancellationToken cancellationToken)
     {
-        return Task.Run<IReadOnlyList<TabHeader>>(() =>
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var created = _favoritesService.GetCreatedFavorites(mid, cancellationToken);
-            var collected = _favoritesService.GetCollectedFavorites(mid, cancellationToken);
-            var result = new List<TabHeader>(created.Count + collected.Count);
-            result.AddRange(created);
-            result.AddRange(collected);
-            return result;
-        }, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        var created = await _favoritesService.GetCreatedFavoritesAsync(mid, cancellationToken)
+            .ConfigureAwait(false);
+        var collected = await _favoritesService.GetCollectedFavoritesAsync(mid, cancellationToken)
+            .ConfigureAwait(false);
+        var result = new List<TabHeader>(created.Count + collected.Count);
+        result.AddRange(created);
+        result.AddRange(collected);
+        return result;
     }
 
-    public Task<FavoritesMediaPageSnapshot> LoadMediaPageAsync(
+    public async Task<FavoritesMediaPageSnapshot> LoadMediaPageAsync(
         long favoritesId,
         int page,
         int pageSize,
         string? keyword,
         CancellationToken cancellationToken)
     {
-        return Task.Run(() =>
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var resource = _favoritesService.GetFavoritesMediaPage(
-                favoritesId,
-                page,
-                pageSize,
-                keyword,
+        cancellationToken.ThrowIfCancellationRequested();
+        var resource = await _favoritesService.GetFavoritesMediaPageAsync(
+            favoritesId,
+            page,
+            pageSize,
+            keyword,
+            cancellationToken).ConfigureAwait(false);
+        var mapped = resource.Medias.Count == 0
+            ? Array.Empty<FavoritesMedia>()
+            : _favoritesService.MapFavoritesMedia(
+                resource.Medias,
+                AppRoute.MyFavorites,
                 cancellationToken);
-            var mapped = resource.Medias.Count == 0
-                ? Array.Empty<FavoritesMedia>()
-                : _favoritesService.MapFavoritesMedia(resource.Medias, AppRoute.MyFavorites, cancellationToken);
-            return new FavoritesMediaPageSnapshot(mapped, resource.HasMore);
-        }, cancellationToken);
+        return new FavoritesMediaPageSnapshot(mapped, resource.HasMore);
     }
 
-    public Task<PublicFavoritesSnapshot?> LoadPublicFavoritesAsync(
+    public async Task<PublicFavoritesSnapshot?> LoadPublicFavoritesAsync(
         long favoritesId,
         CancellationToken cancellationToken)
     {
-        return Task.Run(() =>
+        cancellationToken.ThrowIfCancellationRequested();
+        var favorites = await _favoritesService.GetFavoritesAsync(
+            favoritesId,
+            cancellationToken).ConfigureAwait(false);
+        if (favorites == null)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var favorites = _favoritesService.GetFavorites(favoritesId, cancellationToken);
-            if (favorites == null)
-            {
-                return null;
-            }
+            return null;
+        }
 
-            var medias = _favoritesService.GetAllFavoritesMedia(favoritesId, cancellationToken);
-            var mapped = _favoritesService.MapFavoritesMedia(medias, AppRoute.PublicFavorites, cancellationToken);
-            return new PublicFavoritesSnapshot(favorites, mapped);
-        }, cancellationToken);
+        var medias = await _favoritesService.GetAllFavoritesMediaAsync(
+            favoritesId,
+            cancellationToken).ConfigureAwait(false);
+        var mapped = _favoritesService.MapFavoritesMedia(
+            medias,
+            AppRoute.PublicFavorites,
+            cancellationToken);
+        return new PublicFavoritesSnapshot(favorites, mapped);
     }
 }

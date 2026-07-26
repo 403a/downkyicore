@@ -2,8 +2,8 @@
 
 Status: active
 Last updated: 2026-07-26
-Current group: Gate 6 centralized download retry policy
-Current branch: `refactor/download-retry-policy`
+Current group: Gate 7 HTTP and Infrastructure ownership
+Current branch: `refactor/async-bilibili-infrastructure`
 
 This file contains only unfinished or not-yet-integrated work. Completed PR 02-32 items are not restored. Design rationale belongs in `design-docs`; product acceptance belongs in `product-specs`.
 
@@ -19,48 +19,12 @@ The previous `Status: complete` was incorrect.
 - Gate 5 and the authenticated read-only Bilibili audit passed Windows/Linux/macOS quality CI and CodeQL, then PR #88 was merged into `refactor/pr-30-32-release-hardening` as merge commit `fadd7eb3`.
 - The authenticated audit passed its `/nav` login gate and all 14 contract probes. Only the allowlisted sanitized diagnostics artifact is retained; the candidate-file Gitleaks scan reported zero findings.
 - Gate 6 stage extraction passed two complete Windows/Linux/macOS quality and CodeQL rounds, then PR #89 was merged into `refactor/pr-30-32-release-hardening` as merge commit `e288913f`.
-- Gate 6 retry policy is published as PR #90. Its implementation head passed Windows/Linux/macOS quality run `30187122186` and CodeQL run `30187122221`.
+- Gate 6 retry policy passed three complete remote rounds. Final Windows/Linux/macOS quality run `30187455431` and CodeQL run `30187455441` had zero check annotations, then PR #90 was merged into `refactor/pr-30-32-release-hardening` as merge commit `ba0a928e`.
 - `version.txt` remains `1.0.32`; v1.1.0 has not passed its release gate.
 
 No release tag may be created while any release blocker below remains.
 
 ## Execution Order
-
-### Gate 6: Split DownloadPipeline And Centralize Retry
-
-Owner branch: `refactor/download-retry-policy`.
-
-Current progress (2026-07-26):
-
-- `DownloadTransferCoordinator` owns one global five-attempt budget across primary, backup and one refreshed playback-address set.
-- `DownloadRetryPolicy` returns typed decisions for transient network/5xx, 429, expired address/403, rejected resume state, invalid media, disk/permission, permanent failure and cancellation.
-- `DownloadMediaStage` calls the coordinator once per selected DASH stream or ordered DURL segment; it no longer owns retry loops.
-- Built-in and aria2 backends accept exactly one URL and return `DownloadTransferResult`. Downloader's `MaxTryAgainOnFailure` is zero; aria2 receives `max-tries=1`, `retry-wait=0`, `always-resume=false` and `max-resume-failure-tries=0`.
-- Expired addresses can trigger one playback re-resolution. Rejected resume state clears only that transfer's file and sidecars before one same-address retry; invalid media moves to a backup after deleting corrupt output; retryable network failures preserve partial files and resume sidecars.
-- aria2 performs one physical RPC request per client call; error or empty envelopes fail immediately with typed diagnostics instead of consuming hidden retries. RPC-layer failure preserves the latest GID, while terminal aria2 task failure or an explicit not-found response clears stale identity.
-- Retry diagnostics record only backend, attempt, failure kind, sanitized error code, next action and bounded delay. They never record URL, path, GID or account data.
-- Strict `AnalysisMode=All` Release build has zero warnings and all 615 solution tests pass locally. Format verification, `git diff --check`, module-boundary audit and vulnerable/deprecated package audits are green; Gitleaks reports zero findings across 900 candidate files. PR #90's implementation head passed the complete Windows/Linux/macOS quality matrix and CodeQL; the final documentation head must pass the same gates before integration.
-
-Scope:
-
-- Establish one retry budget owner with typed decisions for timeout/5xx, 429, expired URL, rejected resume state, invalid media, disk error and cancellation.
-- Publish and integrate the retry-policy PR without changing stored task, partial-file, GID, or resume formats.
-
-Verification:
-
-- each stage has deterministic unit tests.
-- fake HTTP tests cover interrupted, empty, wrong length, 403, 429, 500 and slow responses.
-- retry-count tests prove no multiplicative pipeline x backend attempts.
-- architecture tests keep both backend-internal retry counts at one physical attempt per coordinator call.
-
-Completion:
-
-- pipeline and backend do not multiply independent retry budgets.
-- retryable failures preserve resumable files, while invalid media removes corrupt files and sidecars.
-
-Rollback:
-
-- Each extracted stage is one commit and can be reverted without changing stored task format.
 
 ### Gate 7: Finish HTTP And Infrastructure Ownership
 
@@ -80,6 +44,14 @@ Verification:
 - retry exhaustion preserves typed HTTP/API error.
 - all Bilibili fixtures remain green.
 - architecture tests reject static client facades and sync network IO.
+
+Local result:
+
+- Strict Release build passed with zero warnings and zero errors.
+- All 606 solution tests passed, including 32 Infrastructure transport/DI tests and 176 architecture tests.
+- `dotnet format --verify-no-changes`, package vulnerability/deprecation audits, module-boundary audit and `git diff --check` passed.
+- Candidate-file Gitleaks scan inspected 922 files and reported zero findings.
+- Remote Windows/Linux/macOS quality and CodeQL gates remain required before this gate is integrated.
 
 Completion:
 

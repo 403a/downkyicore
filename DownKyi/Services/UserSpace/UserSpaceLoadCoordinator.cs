@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using DownKyi.Application.Bilibili;
 using DownKyi.Core.BiliApi.Favorites;
 using DownKyi.Core.BiliApi.Favorites.Models;
 using DownKyi.Core.BiliApi.Sign;
@@ -40,20 +41,23 @@ internal sealed class UserSpaceLoadCoordinator : IUserSpaceLoadCoordinator
 {
     private readonly ILogger<UserSpaceLoadCoordinator> _logger;
     private readonly IWbiKeyProvider _wbiKeyProvider;
+    private readonly IBilibiliApiClient _client;
 
     public UserSpaceLoadCoordinator(
         IWbiKeyProvider wbiKeyProvider,
-        ILogger<UserSpaceLoadCoordinator> logger)
+        ILogger<UserSpaceLoadCoordinator> logger,
+        IBilibiliApiClient client)
     {
         _wbiKeyProvider = wbiKeyProvider ?? throw new ArgumentNullException(nameof(wbiKeyProvider));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _client = client ?? throw new ArgumentNullException(nameof(client));
     }
 
     public async Task<UserSpaceSnapshot> LoadAsync(long mid, CancellationToken cancellationToken)
     {
         var user = await WbiRequestExecutor.ExecuteAsync(
             _wbiKeyProvider,
-            (keys, unixTimeSeconds) => UserInfo.GetUserInfoForSpace(
+            (keys, unixTimeSeconds) => _client.GetUserInfoForSpaceAsync(
                 keys,
                 unixTimeSeconds,
                 mid,
@@ -62,18 +66,19 @@ internal sealed class UserSpaceLoadCoordinator : IUserSpaceLoadCoordinator
             cancellationToken).ConfigureAwait(false);
         var publicationTypes = await WbiRequestExecutor.ExecuteAsync(
             _wbiKeyProvider,
-            (keys, unixTimeSeconds) => Core.BiliApi.Users.UserSpace.GetPublicationType(
+            (keys, unixTimeSeconds) => _client.GetPublicationTypeAsync(
                 keys,
                 unixTimeSeconds,
-                mid),
+                mid,
+                cancellationToken),
             TimeProvider.System,
             cancellationToken).ConfigureAwait(false);
 
-        return await Task.Run(() => LoadRemainingSnapshot(
+        return await LoadRemainingSnapshotAsync(
             mid,
             user,
             publicationTypes,
-            cancellationToken), cancellationToken).ConfigureAwait(false);
+            cancellationToken).ConfigureAwait(false);
     }
 
     internal static IReadOnlyList<UserSpaceFavoriteFolder> MapFavoriteFolders(
@@ -94,20 +99,23 @@ internal sealed class UserSpaceLoadCoordinator : IUserSpaceLoadCoordinator
                 .ToArray();
     }
 
-    private UserSpaceSnapshot LoadRemainingSnapshot(
+    private async Task<UserSpaceSnapshot> LoadRemainingSnapshotAsync(
         long mid,
         UserInfoForSpace? user,
         IReadOnlyList<SpacePublicationListTypeVideoZone>? publicationTypes,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var settings = Core.BiliApi.Users.UserSpace.GetSpaceSettings(mid, cancellationToken);
-        var seasonsSeries = Core.BiliApi.Users.UserSpace.GetSeasonsSeries(mid, 1, 20);
-        var favoriteFolders = LoadFavoriteFolders(mid, cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-        var relation = UserStatus.GetUserRelationStat(mid, cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-        var statistics = UserStatus.GetUpStat(mid);
+        var settings = await _client.GetSpaceSettingsAsync(mid, cancellationToken)
+            .ConfigureAwait(false);
+        var seasonsSeries = await _client.GetSeasonsSeriesAsync(mid, 1, 20, cancellationToken)
+            .ConfigureAwait(false);
+        var favoriteFolders = await LoadFavoriteFoldersAsync(mid, cancellationToken)
+            .ConfigureAwait(false);
+        var relation = await _client.GetUserRelationStatAsync(mid, cancellationToken)
+            .ConfigureAwait(false);
+        var statistics = await _client.GetUpStatAsync(mid, cancellationToken)
+            .ConfigureAwait(false);
         return new UserSpaceSnapshot(
             settings,
             user,
@@ -118,13 +126,15 @@ internal sealed class UserSpaceLoadCoordinator : IUserSpaceLoadCoordinator
             statistics);
     }
 
-    private IReadOnlyList<UserSpaceFavoriteFolder> LoadFavoriteFolders(
+    private async Task<IReadOnlyList<UserSpaceFavoriteFolder>> LoadFavoriteFoldersAsync(
         long mid,
         CancellationToken cancellationToken)
     {
         try
         {
-            return MapFavoriteFolders(FavoritesInfo.GetAllCreatedFavorites(mid, cancellationToken));
+            var favorites = await _client.GetAllCreatedFavoritesAsync(mid, cancellationToken)
+                .ConfigureAwait(false);
+            return MapFavoriteFolders(favorites);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

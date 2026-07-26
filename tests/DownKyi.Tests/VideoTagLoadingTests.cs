@@ -48,7 +48,12 @@ public sealed class VideoTagLoadingTests : IDisposable
                 }
             ]
         };
-        var service = new VideoInfoService(videoView, settings, provider, new TestWbiKeyProvider());
+        var service = new VideoInfoService(
+            videoView,
+            settings,
+            provider,
+            new TestWbiKeyProvider(),
+            new TestBilibiliApiClient());
         var page = Assert.Single(service.GetVideoPages(parseCancellation.Token)!);
 
         await parseCancellation.CancelAsync();
@@ -268,6 +273,7 @@ public sealed class VideoTagLoadingTests : IDisposable
             Queue = new RecordingDownloadTaskQueue();
             Logger = new RecordingLogger<AddToDownloadService>();
             var desktop = new TestDesktopInteractionContext();
+            var client = new TestBilibiliApiClient();
             var admission = new DownloadTaskAdmissionService(
                 ListState,
                 _projectionStore,
@@ -278,8 +284,9 @@ public sealed class VideoTagLoadingTests : IDisposable
                 _projectionStore,
                 admission,
                 _settings,
-                new VideoTagProvider(),
+                new VideoTagProvider(client),
                 new TestWbiKeyProvider(),
+                client,
                 desktop.Notifications,
                 desktop.Dialogs,
                 Logger);

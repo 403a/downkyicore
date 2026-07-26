@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using DownKyi.Application.Bilibili;
 using Newtonsoft.Json;
 using JsonException = Newtonsoft.Json.JsonException;
 
@@ -53,46 +54,56 @@ internal static class BiliApiRequest
             $"{operationName} returned a successful response without the required '{fieldName}' payload.");
     }
 
-    public static T RequestJson<T>(
+    public static Task<T> RequestJsonAsync<T>(
+        IBilibiliApiClient client,
         string url,
         string? referer,
         string operationName,
         string logTag,
+        bool includeCredentials = true,
         CancellationToken cancellationToken = default)
     {
-        return RequestJson<T>(
+        return RequestJsonAsync<T>(
+            client,
             url,
             referer,
             operationName,
             logTag,
             serializerSettings: null,
+            includeCredentials,
             cancellationToken);
     }
 
-    public static T RequestJson<T>(
+    public static Task<T> RequestJsonAsync<T>(
+        IBilibiliApiClient client,
         string url,
         string? referer,
         string operationName,
         string logTag,
         JsonSerializerSettings? serializerSettings,
+        bool includeCredentials = true,
         CancellationToken cancellationToken = default)
     {
-        return RequestJsonCore<T>(
+        return RequestJsonCoreAsync<T>(
+            client,
             url,
             referer,
             operationName,
             logTag,
             serializerSettings,
             allowedNonSuccessCode: null,
+            includeCredentials,
             cancellationToken);
     }
 
-    public static T RequestJsonAllowingCode<T>(
+    public static Task<T> RequestJsonAllowingCodeAsync<T>(
+        IBilibiliApiClient client,
         string url,
         string? referer,
         string operationName,
         string logTag,
         int allowedNonSuccessCode,
+        bool includeCredentials = true,
         CancellationToken cancellationToken = default)
     {
         if (allowedNonSuccessCode == 0)
@@ -103,28 +114,39 @@ internal static class BiliApiRequest
                 "The explicit exception must be a non-success API code.");
         }
 
-        return RequestJsonCore<T>(
+        return RequestJsonCoreAsync<T>(
+            client,
             url,
             referer,
             operationName,
             logTag,
             serializerSettings: null,
             allowedNonSuccessCode,
+            includeCredentials,
             cancellationToken);
     }
 
-    private static T RequestJsonCore<T>(
+    private static async Task<T> RequestJsonCoreAsync<T>(
+        IBilibiliApiClient client,
         string url,
         string? referer,
         string operationName,
         string logTag,
         JsonSerializerSettings? serializerSettings,
         int? allowedNonSuccessCode,
+        bool includeCredentials,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(client);
         ArgumentException.ThrowIfNullOrWhiteSpace(operationName);
         ArgumentException.ThrowIfNullOrWhiteSpace(logTag);
-        var response = WebClient.RequestWeb(url, referer, cancellationToken: cancellationToken);
+        var response = await client.GetStringAsync(
+            new BilibiliHttpRequest(
+                url,
+                referer,
+                includeCredentials,
+                includeBuvid: includeCredentials),
+            cancellationToken).ConfigureAwait(false);
         try
         {
             var metadata = System.Text.Json.JsonSerializer.Deserialize(
@@ -162,15 +184,24 @@ internal static class BiliApiRequest
         }
     }
 
-    public static string RequestText(
+    public static Task<string> RequestTextAsync(
+        IBilibiliApiClient client,
         string url,
         string? referer,
         string operationName,
         string logTag,
+        bool includeCredentials = true,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(client);
         ArgumentException.ThrowIfNullOrWhiteSpace(operationName);
         ArgumentException.ThrowIfNullOrWhiteSpace(logTag);
-        return WebClient.RequestWeb(url, referer, cancellationToken: cancellationToken);
+        return client.GetStringAsync(
+            new BilibiliHttpRequest(
+                url,
+                referer,
+                includeCredentials,
+                includeBuvid: includeCredentials),
+            cancellationToken);
     }
 }

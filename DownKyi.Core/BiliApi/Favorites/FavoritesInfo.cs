@@ -1,3 +1,4 @@
+using DownKyi.Application.Bilibili;
 using DownKyi.Core.BiliApi.Favorites.Models;
 using DownKyi.Core.Logging;
 using Newtonsoft.Json;
@@ -10,16 +11,20 @@ public static class FavoritesInfo
     /// 获取收藏夹元数据
     /// </summary>
     /// <param name="mediaId"></param>
-    public static FavoritesMetaInfo? GetFavoritesInfo(long mediaId, CancellationToken cancellationToken = default)
+    public static async Task<FavoritesMetaInfo?> GetFavoritesInfoAsync(
+        this IBilibiliApiClient client,
+        long mediaId,
+        CancellationToken cancellationToken = default)
     {
         var url = $"https://api.bilibili.com/x/v3/fav/folder/info?media_id={mediaId}";
         const string referer = "https://www.bilibili.com";
-        var info = BiliApiRequest.RequestJson<FavoritesMetaInfoOrigin>(
+        var info = await BiliApiRequest.RequestJsonAsync<FavoritesMetaInfoOrigin>(
+            client,
             url,
             referer,
-            nameof(GetFavoritesInfo),
+            nameof(GetFavoritesInfoAsync),
             "FavoritesInfo",
-            cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return BiliApiRequest.RequirePayload(info.Data);
     }
@@ -31,16 +36,22 @@ public static class FavoritesInfo
     /// <param name="pn">页码</param>
     /// <param name="ps">每页项数</param>
     /// <returns></returns>
-    public static IReadOnlyList<FavoritesMetaInfo>? GetCreatedFavorites(long mid, int pn, int ps, CancellationToken cancellationToken = default)
+    public static async Task<IReadOnlyList<FavoritesMetaInfo>?> GetCreatedFavoritesAsync(
+        this IBilibiliApiClient client,
+        long mid,
+        int pn,
+        int ps,
+        CancellationToken cancellationToken = default)
     {
         var url = $"https://api.bilibili.com/x/v3/fav/folder/created/list?up_mid={mid}&pn={pn}&ps={ps}";
         const string referer = "https://www.bilibili.com";
-        var favorites = BiliApiRequest.RequestJson<FavoritesListOrigin>(
+        var favorites = await BiliApiRequest.RequestJsonAsync<FavoritesListOrigin>(
+            client,
             url,
             referer,
-            nameof(GetCreatedFavorites),
+            nameof(GetCreatedFavoritesAsync),
             "FavoritesInfo",
-            cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return BiliApiRequest.RequirePayload(favorites.Data).List;
     }
@@ -50,7 +61,10 @@ public static class FavoritesInfo
     /// </summary>
     /// <param name="mid">目标用户UID</param>
     /// <returns></returns>
-    public static IReadOnlyList<FavoritesMetaInfo> GetAllCreatedFavorites(long mid, CancellationToken cancellationToken = default)
+    public static async Task<IReadOnlyList<FavoritesMetaInfo>> GetAllCreatedFavoritesAsync(
+        this IBilibiliApiClient client,
+        long mid,
+        CancellationToken cancellationToken = default)
     {
         var result = new List<FavoritesMetaInfo>();
 
@@ -61,7 +75,8 @@ public static class FavoritesInfo
             const int ps = 50;
 
             cancellationToken.ThrowIfCancellationRequested();
-            var data = GetCreatedFavorites(mid, i, ps, cancellationToken);
+            var data = await client.GetCreatedFavoritesAsync(mid, i, ps, cancellationToken)
+                .ConfigureAwait(false);
             if (data == null || data.Count == 0)
             {
                 break;
@@ -80,16 +95,22 @@ public static class FavoritesInfo
     /// <param name="pn">页码</param>
     /// <param name="ps">每页项数</param>
     /// <returns></returns>
-    public static IReadOnlyList<FavoritesMetaInfo>? GetCollectedFavorites(long mid, int pn, int ps, CancellationToken cancellationToken = default)
+    public static async Task<IReadOnlyList<FavoritesMetaInfo>?> GetCollectedFavoritesAsync(
+        this IBilibiliApiClient client,
+        long mid,
+        int pn,
+        int ps,
+        CancellationToken cancellationToken = default)
     {
         var url = $"https://api.bilibili.com/x/v3/fav/folder/collected/list?up_mid={mid}&pn={pn}&ps={ps}";
         const string referer = "https://www.bilibili.com";
-        var favorites = BiliApiRequest.RequestJson<FavoritesListOrigin>(
+        var favorites = await BiliApiRequest.RequestJsonAsync<FavoritesListOrigin>(
+            client,
             url,
             referer,
-            nameof(GetCollectedFavorites),
+            nameof(GetCollectedFavoritesAsync),
             "FavoritesInfo",
-            cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return BiliApiRequest.RequirePayload(favorites.Data).List;
     }
@@ -99,7 +120,10 @@ public static class FavoritesInfo
     /// </summary>
     /// <param name="mid">目标用户UID</param>
     /// <returns></returns>
-    public static IReadOnlyList<FavoritesMetaInfo> GetAllCollectedFavorites(long mid, CancellationToken cancellationToken = default)
+    public static async Task<IReadOnlyList<FavoritesMetaInfo>> GetAllCollectedFavoritesAsync(
+        this IBilibiliApiClient client,
+        long mid,
+        CancellationToken cancellationToken = default)
     {
         var result = new List<FavoritesMetaInfo>();
 
@@ -110,7 +134,8 @@ public static class FavoritesInfo
             const int ps = 50;
 
             cancellationToken.ThrowIfCancellationRequested();
-            var data = GetCollectedFavorites(mid, i, ps, cancellationToken);
+            var data = await client.GetCollectedFavoritesAsync(mid, i, ps, cancellationToken)
+                .ConfigureAwait(false);
             if (data == null || data.Count == 0)
             {
                 break;

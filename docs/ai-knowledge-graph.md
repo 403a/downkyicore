@@ -18,10 +18,10 @@ This document is the first file an AI agent should read before changing DownKyi.
 The target projects exist, but the target ownership model is not complete. Read `ARCHITECTURE.md` and `docs/design-docs/module-boundary-naming-audit.md` before interpreting the graph.
 
 - `src/DownKyi.Desktop` currently owns only Host creation. Views, ViewModels, navigation/dialog adapters, UI projections, and lifecycle remain in the `DownKyi` executable assembly.
-- `src/DownKyi.Infrastructure` currently owns SQLite task persistence, write-behind, and clock. Bilibili HTTP, aria2, FFmpeg, filesystem paths, and logging implementation remain mainly in `DownKyi.Core` or `DownKyi`.
+- `src/DownKyi.Infrastructure` currently owns SQLite task persistence, write-behind, clock, and the injected Bilibili HTTP/buvid runtime. Aria2, FFmpeg, filesystem paths, and logging implementation remain mainly in `DownKyi.Core` or `DownKyi`.
 - `DownKyi.Domain.DownloadTask` is the durable runtime state authority. `DownloadTaskApplicationService` loads by `DownloadTaskId`, invokes legal transitions, persists optimistic versions, and only then publishes committed snapshots. Normal runtime no longer reconstructs Domain state from mutable UI projections.
 - New tasks, resumed tasks, and persisted startup tasks directly enqueue `DownloadTaskId` through `DownloadTaskQueueGateway`; `DownloadOrchestrator` no longer scans a UI collection and each active task has its own linked cancellation owner.
-- Workers and pipeline entry points use `DownloadTaskId`. `DownloadPipeline` is a typed stage sequencer; localized activity rendering and completion-list mutation have separate presenter/projector owners. `DownloadExecutionContext` still exposes a transient `DownloadingItem` projection for playback/UI context, and the HTTP compatibility layer still uses a static facade plus synchronous send/read/backoff.
+- Workers and pipeline entry points use `DownloadTaskId`. `DownloadPipeline` is a typed stage sequencer; localized activity rendering and completion-list mutation have separate presenter/projector owners. `DownloadExecutionContext` still exposes a transient `DownloadingItem` projection for playback/UI context. Bilibili HTTP uses injected Application ports with an async Infrastructure implementation; the old static/synchronous compatibility layer is gone.
 - These facts are tracked debt, not stable contracts. The ordered migration and release blockers live in `docs/refactoring-live-plan.md`.
 - `ModuleBoundaryBaselineTests` allows every listed debt item to disappear, but rejects new owners, consumers, duplicate names, UI dependencies, synchronous HTTP debt, or oversized-file growth.
 
@@ -112,7 +112,7 @@ flowchart TD
     WbiProvider["core.wbi-key-provider\nIWbiKeyProvider + WbiKeyProvider"]
     WbiExecutor["core.wbi-request-executor\nWbiRequestExecutor"]
     BiliApi["core.bili-api\nDownKyi.Core/BiliApi"]
-    WebClient["core.web-client\nDownKyi.Core/BiliApi/WebClient.cs"]
+    BiliHttp["infra.bilibili-http\nApplication ports + Infrastructure transport"]
     Settings["core.settings\nISettingsStore + SettingsStore"]
     LegacySettings["core.legacy-settings-migration\nLegacySettingsDecryptor.cs"]
     DownloadAdd["service.download-add\nAddToDownloadService + DownloadAddCoordinator"]
@@ -208,7 +208,7 @@ flowchart TD
     WbiExecutor -->|invokes signed endpoint| BiliApi
     WbiProvider -->|bootstraps and persists compatible keys| Settings
     WbiProvider -->|loads navigation metadata| BiliApi
-    BiliApi -->|calls| WebClient
+    BiliApi -->|calls injected port| BiliHttp
     Lifecycle -->|stops| Host
     Lifecycle -->|flushes on shutdown| Settings
     Lifecycle -->|flushes on shutdown| Logs
@@ -225,8 +225,8 @@ flowchart TD
     DownloadService -->|executes optional| Aria
     DownloadService -->|executes| FFmpeg
     DownloadService -->|writes| Logs
-    WebClient -->|throws visible failures| BiliApi
-    Tests -->|guards| WebClient
+    BiliHttp -->|throws typed visible failures| BiliApi
+    Tests -->|guards| BiliHttp
     Tests -->|guards| DownloadAdd
     Tests -->|guards| DownloadService
     ArchitectureTests -->|guards dependency direction| Domain
@@ -235,7 +235,7 @@ flowchart TD
     ArchitectureTests -->|guards dependency direction| Host
     ArchitectureTests -->|guards| UiTheme
     UiSmoke -->|guards XAML construction| MainWindow
-    Benchmarks -->|measures| WebClient
+    Benchmarks -->|measures request contracts| BiliHttp
     CI -->|guards| Tests
     CI -->|guards| ArchitectureTests
     CI -->|guards| UiSmoke
@@ -604,7 +604,7 @@ outbound:
   - service.account-session
 contracts:
   - Restarting, leaving, or disposing the page cancels the active QR generation/poll operation.
-  - QR bitmap and bound-state mutation stay on the UI dispatcher; synchronous HTTP and cookie-file writes do not.
+  - QR bitmap and bound-state mutation stay on the UI dispatcher; asynchronous HTTP and compatibility cookie-file writes remain outside UI-bound work.
 hazards:
   - Wrapping the entire UI workflow in Task.Run causes cross-thread UI/event access and hides cancellation ownership.
 tests:
@@ -620,7 +620,7 @@ type: service
 paths:
   - DownKyi/Services/Account/UserSessionCoordinator.cs
   - DownKyi/Services/Account/LoginCoordinator.cs
-responsibility: Runs synchronous account API and cookie persistence operations away from the UI thread and returns cancellable snapshots/results.
+responsibility: Runs injected asynchronous account API operations and isolated cookie persistence away from the UI thread, returning cancellable snapshots/results.
 inbound:
   - viewmodel.index
   - viewmodel.login
@@ -628,12 +628,11 @@ outbound:
   - core.bili-api
   - core.legacy-settings-migration
 contracts:
-  - Caller cancellation is checked before and after every synchronous network or file operation.
+  - Caller cancellation reaches every network operation and is checked around compatibility file persistence.
   - Navigation user data maps to the existing `UserInfoSettings` schema without changing keys or login-file location.
   - WBI key extraction accepts absolute and protocol-relative addresses and strips query/fragment suffixes using ordinal parsing.
   - Missing or partial navigation WBI metadata cannot erase previously validated persisted keys.
 hazards:
-  - Legacy synchronous Bilibili calls cannot abort an in-flight socket request yet; cancellation prevents later persistence and stale UI projection.
   - Internal settings persistence still uses the historical partial `SettingsManager` implementation, but it has no singleton/global access and is reachable only through the injected store.
 tests:
   - test.account-session
@@ -683,9 +682,9 @@ outbound:
 contracts:
   - Private whisper/group data is requested only for the current logged-in user.
   - Coordinator methods return API models without accessing Avalonia, Prism, settings paths, or bound collections.
-  - Caller cancellation is checked before and after every legacy synchronous API operation.
+  - Caller cancellation reaches each asynchronous relation API operation and prevents stale projection.
 hazards:
-  - Legacy synchronous relation calls cannot abort an in-flight socket request; cancellation still blocks stale projection and subsequent calls.
+  - Private relation endpoints remain login-dependent and must not be retried as anonymous requests after authorization failure.
 tests:
   - test.friend-relations
   - test.architecture-boundaries
@@ -733,10 +732,10 @@ outbound:
   - service.download-add
 contracts:
   - `SeasonsSeriesKind` selects the matching Bilibili endpoint and invalid values fail explicitly.
-  - Page calls check caller cancellation before and after synchronous legacy API work.
+  - Page and parse calls pass caller cancellation through the asynchronous Bilibili API boundary.
   - Add work checks cancellation between items and receives a confirmed non-empty directory.
 hazards:
-  - Legacy synchronous page and parse calls cannot abort in flight; cancellation blocks subsequent work and stale UI projection.
+  - A canceled page or add operation must not publish a partial result or continue processing later items.
   - The add path depends only on typed dialog and notification contracts implemented by Desktop adapters.
 tests:
   - test.seasons-series
@@ -798,13 +797,12 @@ outbound:
   - core.bili-api
 contracts:
   - `FavoritesService` is a pure mapper/API adapter and never accesses `App`, Dispatcher, or observable collections.
-  - Pre-canceled requests cannot start legacy synchronous API work.
+  - Pre-canceled requests cannot start API work.
   - Unavailable favorite videos preserve API title, cover, identifier, and availability state instead of disappearing or being represented as valid media.
   - Timestamp/number projection preserves the existing UI contract.
   - `IFavoritesService` is the injectable API boundary for page search and all-media retrieval; the coordinator does not call the static endpoint facade directly.
   - Favorite page snapshots retain `has_more`; they never reinterpret the folder-wide `media_count` as a filtered total.
 hazards:
-  - Legacy synchronous Bilibili calls cannot abort in flight; cancellation prevents subsequent calls and stale UI projection.
   - API model and UI model both use `FavoritesMedia`; aliases must remain explicit at the mapping boundary.
 tests:
   - test.favorites
@@ -861,7 +859,6 @@ contracts:
   - Pre-canceled requests cannot start API work and mapping checks cancellation between watch-later items.
   - Only archive and pgc history entries are projected; protocol-relative image addresses are normalized without `Uri.Scheme` access.
 hazards:
-  - Legacy synchronous requests may remain in flight until their current HTTP operation returns; stale projection is still blocked.
   - Platform icon creation remains a desktop mapping concern and must not migrate into `DownKyi.Core`.
 tests:
   - test.personal-media
@@ -1159,7 +1156,7 @@ contracts:
   - Public favorite folders with zero media are omitted; selecting a folder uses the typed `UserSpaceFavorites -> PublicFavorites` route chain.
   - Favorite-folder API failure is optional profile metadata: known network/schema failures produce a sanitized warning and an empty folder tab, while cancellation still propagates.
 hazards:
-  - Legacy synchronous Bilibili API methods cannot abort an in-flight socket call yet; cancellation prevents subsequent calls and stale UI projection.
+  - Optional profile metadata failures must remain sanitized and cannot suppress cancellation.
 tests:
   - test.user-space-favorites
   - test.typed-navigation
@@ -1403,8 +1400,11 @@ paths:
   - DownKyi.Core/BiliApi/Users/UserInfo.cs
   - DownKyi.Core/BiliApi/VideoStream/BangumiPlayUrlV2Contract.cs
   - DownKyi.Core/BiliApi/VideoStream/Models/BangumiPlayUrlV2Origin.cs
+  - DownKyi.Core/BiliApi/VideoStream/VideoStreamApi.cs
+  - DownKyi.Core/BiliApi/VideoStream/VideoStreamApi.Subtitles.cs
   - DownKyi.Core/BiliApi/Favorites/FavoritesResource.cs
   - DownKyi.Core/BiliApi/Users/UserSpace.cs
+  - DownKyi.Core/BiliApi/Users/UserSpace.Collections.cs
   - docs/operations/bilibili-api-audit.md
 responsibility: Wraps Bilibili API endpoints, response parsing, and shared request failure handling.
 inbound:
@@ -1415,7 +1415,7 @@ inbound:
   - service.friend-relations
   - service.seasons-series
 outbound:
-  - core.web-client
+  - infra.bilibili-http
   - core.settings
 contracts:
   - API failures should be visible at the API boundary; do not turn errors into valid empty payloads.
@@ -1434,7 +1434,7 @@ hazards:
   - Bilibili schema changes must fail at this boundary rather than deserialize into a plausible empty success object.
   - Logging full URLs can leak tokens, cookies, and personal query data.
 tests:
-  - test.web-client
+  - test.bilibili-http
   - test.json-contracts
   - test.wbi-signature
   - test.bilibili-api-contract-audit
@@ -1516,45 +1516,49 @@ outbound:
 contracts:
   - A `-403` returned by a request executed as a WBI operation forces one refresh and one retry.
   - A second `-403`, every non-`-403` API error, network failure, schema failure, and cancellation propagate without another refresh.
-  - Synchronous compatibility endpoints run outside the UI thread and still receive the current operation token at their HTTP boundary.
+  - Endpoint delegates are asynchronous and receive the current operation token without `Task.Run` or synchronous compatibility wrappers.
 hazards:
   - A general retry loop would hide permission, missing-video, rate-limit, and schema errors as key failures.
 tests:
   - test.wbi-signature
 ```
 
-### core.web-client
+### infra.bilibili-http
 
 ```yaml
-id: core.web-client
-type: core
+id: infra.bilibili-http
+type: infrastructure
 paths:
-  - DownKyi.Core/BiliApi/WebClient.cs
-  - DownKyi.Core/BiliApi/BilibiliHttpClient.cs
-  - DownKyi.Core/BiliApi/BilibiliHttpClientRegistration.cs
-responsibility: Uses one IHttpClientFactory-managed typed client to build Bilibili requests, apply cookies/buvid/referer, and perform bounded cancellation-aware retries; WebClient is the temporary legacy facade.
+  - src/DownKyi.Application/Bilibili/IBilibiliApiClient.cs
+  - src/DownKyi.Application/Bilibili/IBuvidProvider.cs
+  - src/DownKyi.Infrastructure/Bilibili/BilibiliApiClient.cs
+  - src/DownKyi.Infrastructure/Bilibili/BilibiliHttpTransport.cs
+  - src/DownKyi.Infrastructure/Bilibili/BilibiliBuvidProvider.cs
+  - src/DownKyi.Infrastructure/Bilibili/BilibiliServiceCollectionExtensions.cs
+  - DownKyi/Services/Account/BilibiliCookieProvider.cs
+responsibility: Implements injected async Bilibili transport, credential and buvid composition, bounded cancellation-aware retries, response stream ownership, and atomic file downloads.
 inbound:
   - core.bili-api
 outbound:
   - external.bilibili
   - core.settings
 contracts:
-  - Host composition creates the typed client and handler from the shared injected settings owner before any legacy API call.
-  - The static WebClient facade does not create a fallback client, read process-global settings, or dispose the Host-owned connection pool.
+  - Host composition registers one `IBilibiliApiClient`, `IBuvidProvider`, and cookie provider through Microsoft DI.
+  - API callers receive the client explicitly; no static client, global Configure call, or service locator is permitted.
+  - All HTTP, response reads, stream copies, and retry delays are asynchronous and cancellation-aware.
   - Retry is iterative, not recursive.
-  - Retry exhaustion throws HttpRequestException.
+  - Retry exhaustion throws `BilibiliHttpRequestException` with a typed failure kind.
   - HTTP 200 with an empty body is a failed request, not a valid payload.
   - Cancellation is never swallowed by retry.
-  - HTTP 401/403 and rejected API schemas are non-retryable; HTTP 429 honors Retry-After with a bounded delay.
-  - JSON metadata uses source-generated System.Text.Json contexts; legacy endpoint DTO materialization remains Newtonsoft-compatible.
-  - The static compatibility facade emits no request diagnostics; injected callers own redacted operational context.
+  - HTTP 401/403 are non-retryable; HTTP 429 honors Retry-After with a bounded delay; retryable 5xx and transport failures remain bounded.
+  - Concurrent buvid callers share one in-flight request; canceling one waiter cannot cancel the shared load.
+  - Response/request ownership follows the returned stream, and failed file transfers remove the `.download` temporary file.
+  - Cookies, request headers, full sensitive URLs, and account data never enter diagnostics or fixtures.
 hazards:
-  - Synchronous compatibility endpoint signatures keep the WebClient facade alive; isolate them behind application services and do not add UI callers.
-  - The typed client currently performs synchronous `HttpClient.Send`, `ReadToEnd`, and blocking retry waits; the factory-managed handler alone does not make the request path asynchronous.
-  - `WebClient.Configure()` keeps client ownership process-global and prevents isolated concurrent API clients.
-  - Cookie handling must not be emitted to console or public logs.
+  - Bilibili may change fingerprint and API envelopes; source-generated DTO fields must preserve exact wire names and nullable absence.
+  - A caller cancellation token must only cancel that caller's wait, not shared credential initialization required by other operations.
 tests:
-  - test.web-client
+  - test.bilibili-http
 ```
 
 ### service.download-add
@@ -2161,7 +2165,7 @@ contracts:
   - Async command event notification uses the standard protected `OnCanExecuteChanged` raiser. Dialog ViewModels complete a typed dialog result through the injected Avalonia dialog boundary.
   - `TabLeftBanner.NavigationData` carries the selected user-space tab payload through `AppNavigationRequest.Parameter`; no framework-specific navigation key is exposed.
   - Test names use analyzer-compliant identifiers. Renamed enum members preserve their numeric settings values; aria2 change-position strings are produced by `AriaClient.GetChangePositionValue`, and Bilibili history still maps `ArticleList` to `article-list`.
-  - `VideoStreamApi` is the static Bilibili playback/subtitle API facade; it is not a `System.IO.Stream`. xUnit nonparallel fixtures use `...TestGroup` types while retaining their collection-name constants.
+  - `VideoStreamApi` is the injected asynchronous Bilibili playback/subtitle endpoint adapter; it is not a `System.IO.Stream`. xUnit nonparallel fixtures use `...TestGroup` types while retaining their collection-name constants.
   - Favorites API models map `bv_id` to `LegacyBvid` and `bvid` to `Bvid`; both wire fields remain distinct and are covered by a JSON contract test.
   - Download diagnostic IDs use uppercase truncated SHA-256 values. NFO boolean attributes use explicit lowercase literals, and FFmpeg cleanup errors go only through the shared injected logger rather than duplicate terminal output.
   - Aria2, clipboard, logging, and pager notifications use standard `EventHandler` contracts. Pager veto semantics use `CancelEventArgs` plus `ProposedCurrent`; `AvaloniaClipboardMonitor` remains desktop-internal.
@@ -2284,7 +2288,7 @@ sequenceDiagram
     participant VM as ViewVideoDetailViewModel
     participant Resolver as VideoInputResolver
     participant Parser as VideoParseCoordinator
-    participant API as BiliApiRequest/WebClient
+    participant API as BiliApiRequest/IBilibiliApiClient
     participant Add as DownloadAddCoordinator
     participant Projection as DownloadTaskProjectionStore
     participant Tasks as DownloadTaskApplicationService
@@ -2368,15 +2372,14 @@ test.download-pipeline-stages:
 ## Test Anchors
 
 ```yaml
-test.web-client:
+test.bilibili-http:
   paths:
-    - tests/DownKyi.Core.Tests/WebClientTests.cs
-    - tests/DownKyi.Core.Tests/WebClientLoopbackTests.cs
-    - tests/DownKyi.Core.Tests/BilibiliHttpClientTests.cs
+    - tests/DownKyi.Infrastructure.Tests/BilibiliHttpTransportTests.cs
+    - tests/DownKyi.Infrastructure.Tests/BilibiliApiClientTests.cs
+    - tests/DownKyi.Infrastructure.Tests/BilibiliBuvidProviderTests.cs
+    - tests/DownKyi.Infrastructure.Tests/BilibiliServiceCollectionExtensionsTests.cs
     - tests/DownKyi.Core.Tests/BiliApiContractSampleTests.cs
-    - tests/DownKyi.Core.Tests/WebClientConfigurationTests.cs
-    - tests/DownKyi.Core.Tests/WebClientTestContext.cs
-    - tests/DownKyi.Core.Tests/Infrastructure/LoopbackHttpServer.cs
+    - tests/TestInfrastructure/LoopbackHttpServer.cs
   guards:
     - retry exhaustion throws HttpRequestException
     - empty HTTP 200 responses retry and fail visibly
@@ -2385,10 +2388,11 @@ test.web-client:
     - Content-Length mismatch is detected while streaming
     - slow-response cancellation is not retried
     - cancellation is not retried or swallowed
-    - query parameter URL building stays stable
     - typed client registration, Retry-After handling, and API failure contracts remain explicit
-    - requests fail clearly before Host configuration instead of silently constructing a global fallback
-    - User-Agent and proxy configuration come only from an isolated injected settings owner
+    - anonymous requests do not load cookies or buvid
+    - concurrent buvid requests are single-flight and one canceled waiter does not cancel other callers
+    - invalid fingerprint payloads are not cached
+    - User-Agent and proxy configuration come only from Host-provided options
 
 test.download-add:
   paths:
@@ -2665,7 +2669,7 @@ test.release-packaging:
 test.null-contracts:
   paths:
     - tests/DownKyi.Core.Tests/BiliApiModelContractTests.cs
-    - tests/DownKyi.Core.Tests/WebClientTests.cs
+    - tests/DownKyi.Infrastructure.Tests/BilibiliHttpTransportTests.cs
     - tests/DownKyi.Tests/DownloadTaskFileServiceTests.cs
     - tests/DownKyi.Tests/RangeObservableCollectionTests.cs
   guards:

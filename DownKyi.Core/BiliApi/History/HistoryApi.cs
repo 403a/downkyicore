@@ -1,3 +1,4 @@
+using DownKyi.Application.Bilibili;
 using DownKyi.Core.BiliApi.History.Models;
 using DownKyi.Core.Logging;
 using Newtonsoft.Json;
@@ -18,7 +19,8 @@ namespace DownKyi.Core.BiliApi.History
         /// <param name="ps">每页项数</param>
         /// <param name="business">历史记录ID类型</param>
         /// <returns></returns>
-        public static HistoryData? GetHistory(
+        public static async Task<HistoryData?> GetHistoryAsync(
+            this IBilibiliApiClient client,
             long startId,
             long startTime,
             int ps = 30,
@@ -47,12 +49,13 @@ namespace DownKyi.Core.BiliApi.History
 
             var url = $"https://api.bilibili.com/x/web-interface/history/cursor?max={startId}&view_at={startTime}&ps={ps}&business={businessStr}";
             const string referer = "https://www.bilibili.com";
-            var history = BiliApiRequest.RequestJson<HistoryOrigin>(
+            var history = await BiliApiRequest.RequestJsonAsync<HistoryOrigin>(
+                client,
                 url,
                 referer,
-                nameof(GetHistory),
+                nameof(GetHistoryAsync),
                 "History",
-                cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             return BiliApiRequest.RequirePayload(history.Data);
         }

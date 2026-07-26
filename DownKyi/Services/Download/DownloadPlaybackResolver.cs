@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using DownKyi.Application.Bilibili;
 using DownKyi.Core.BiliApi.BiliUtils;
 using DownKyi.Core.BiliApi.Sign;
 using DownKyi.Core.BiliApi.VideoStream;
@@ -12,13 +13,16 @@ internal sealed class DownloadPlaybackResolver
 {
     private readonly IWbiKeyProvider _wbiKeyProvider;
     private readonly TimeProvider _timeProvider;
+    private readonly IBilibiliApiClient _client;
 
     public DownloadPlaybackResolver(
         IWbiKeyProvider wbiKeyProvider,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IBilibiliApiClient client)
     {
         _wbiKeyProvider = wbiKeyProvider ?? throw new ArgumentNullException(nameof(wbiKeyProvider));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+        _client = client ?? throw new ArgumentNullException(nameof(client));
     }
 
     public Task<PlayUrl?> ResolveAsync(
@@ -33,14 +37,14 @@ internal sealed class DownloadPlaybackResolver
                 _wbiKeyProvider,
                 (keys, unixTimeSeconds) => context.Settings.Video.VideoParseType switch
                 {
-                    0 => VideoStreamApi.GetVideoPlayUrl(
+                    0 => _client.GetVideoPlayUrlAsync(
                         keys,
                         unixTimeSeconds,
                         downloading.DownloadBase.Avid,
                         downloading.DownloadBase.Bvid,
                         downloading.DownloadBase.Cid,
                         cancellationToken: cancellationToken),
-                    1 => VideoStreamApi.GetVideoPlayUrlWebPage(
+                    1 => _client.GetVideoPlayUrlWebPageAsync(
                         keys,
                         unixTimeSeconds,
                         downloading.DownloadBase.Avid,
@@ -53,17 +57,17 @@ internal sealed class DownloadPlaybackResolver
                 },
                 _timeProvider,
                 cancellationToken),
-            PlayStreamType.Bangumi => Task.FromResult(VideoStreamApi.GetBangumiPlayUrl(
+            PlayStreamType.Bangumi => _client.GetBangumiPlayUrlAsync(
                 downloading.DownloadBase.Avid,
                 downloading.DownloadBase.Bvid,
                 downloading.DownloadBase.Cid,
-                cancellationToken: cancellationToken)),
-            PlayStreamType.Cheese => Task.FromResult(VideoStreamApi.GetCheesePlayUrl(
+                cancellationToken: cancellationToken),
+            PlayStreamType.Cheese => _client.GetCheesePlayUrlAsync(
                 downloading.DownloadBase.Avid,
                 downloading.DownloadBase.Bvid,
                 downloading.DownloadBase.Cid,
                 downloading.DownloadBase.EpisodeId,
-                cancellationToken: cancellationToken)),
+                cancellationToken: cancellationToken),
             _ => Task.FromResult<PlayUrl?>(null)
         };
     }

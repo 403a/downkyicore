@@ -1,3 +1,4 @@
+using DownKyi.Application.Bilibili;
 using DownKyi.Core.BiliApi.Bangumi.Models;
 using DownKyi.Core.Logging;
 using Newtonsoft.Json;
@@ -11,16 +12,20 @@ public static class BangumiInfo
     /// </summary>
     /// <param name="mediaId"></param>
     /// <returns></returns>
-    public static BangumiMedia? BangumiMediaInfo(long mediaId, CancellationToken cancellationToken = default)
+    public static async Task<BangumiMedia?> BangumiMediaInfoAsync(
+        this IBilibiliApiClient client,
+        long mediaId,
+        CancellationToken cancellationToken = default)
     {
         var url = $"https://api.bilibili.com/pgc/review/user?media_id={mediaId}";
         const string referer = "https://www.bilibili.com";
-        var media = BiliApiRequest.RequestJson<BangumiMediaOrigin>(
+        var media = await BiliApiRequest.RequestJsonAsync<BangumiMediaOrigin>(
+            client,
             url,
             referer,
-            nameof(BangumiMediaInfo),
+            nameof(BangumiMediaInfoAsync),
             "BangumiInfo",
-            cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return BiliApiRequest.RequirePayload(media.Result, "result").Media;
     }
@@ -31,7 +36,11 @@ public static class BangumiInfo
     /// <param name="seasonId"></param>
     /// <param name="episodeId"></param>
     /// <returns></returns>
-    public static BangumiSeason? BangumiSeasonInfo(long seasonId = -1, long episodeId = -1, CancellationToken cancellationToken = default)
+    public static async Task<BangumiSeason?> BangumiSeasonInfoAsync(
+        this IBilibiliApiClient client,
+        long seasonId = -1,
+        long episodeId = -1,
+        CancellationToken cancellationToken = default)
     {
         const string baseUrl = "https://api.bilibili.com/pgc/view/web/season";
         const string referer = "https://www.bilibili.com";
@@ -49,12 +58,13 @@ public static class BangumiInfo
             return null;
         }
 
-        var bangumiSeason = BiliApiRequest.RequestJson<BangumiSeasonOrigin>(
+        var bangumiSeason = await BiliApiRequest.RequestJsonAsync<BangumiSeasonOrigin>(
+            client,
             url,
             referer,
-            nameof(BangumiSeasonInfo),
+            nameof(BangumiSeasonInfoAsync),
             "BangumiInfo",
-            cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return BiliApiRequest.RequirePayload(bangumiSeason.Result, "result");
     }

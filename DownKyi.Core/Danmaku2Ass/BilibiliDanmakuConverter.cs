@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using DownKyi.Application.Bilibili;
 using DownKyi.Core.BiliApi.DanmakuApi;
 
 namespace DownKyi.Core.Danmaku2Ass;
@@ -79,10 +80,19 @@ public sealed class BilibiliDanmakuConverter
         return this;
     }
 
-    public void Create(long avid, long cid, Config subtitleConfig, string assFile, CancellationToken cancellationToken = default)
+    public async Task CreateAsync(
+        IBilibiliApiClient client,
+        long avid,
+        long cid,
+        Config subtitleConfig,
+        string assFile,
+        CancellationToken cancellationToken = default)
     {
         // 弹幕转换
-        var biliDanmakus = DanmakuProtobuf.GetAllDanmakuProto(avid, cid, cancellationToken)
+        var biliDanmakus = (await client.GetAllDanmakuProtoAsync(
+                avid,
+                cid,
+                cancellationToken).ConfigureAwait(false))
             .OrderBy(danmaku => danmaku.Progress);
 
         var danmakus = new List<Danmaku>();
