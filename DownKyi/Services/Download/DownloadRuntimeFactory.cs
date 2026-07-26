@@ -116,17 +116,26 @@ internal sealed class DownloadRuntimeFactory : IDownloadRuntimeFactory
         var completionProjector = new DownloadCompletionProjector(
             _downloadLists,
             _uiDispatcher);
+        var playbackResolver = new DownloadPlaybackResolver(
+            _wbiKeyProvider,
+            TimeProvider.System);
+        var transferCoordinator = new DownloadTransferCoordinator(
+            transferBackend,
+            new DownloadRetryPolicy(),
+            TimeProvider.System,
+            _loggerFactory.CreateLogger<DownloadTransferCoordinator>());
         IDownloadPipelineStage[] stages =
         [
             new ResolvePlaybackStage(
                 _notificationService,
                 presenter,
-                _wbiKeyProvider,
+                playbackResolver,
                 _loggerFactory.CreateLogger<ResolvePlaybackStage>()),
             new DownloadMediaStage(
                 _projectionStore,
                 _stateWriter,
-                transferBackend,
+                transferCoordinator,
+                playbackResolver,
                 _loggerFactory.CreateLogger<DownloadMediaStage>()),
             new DownloadArtifactsStage(artifactWriter),
             new MuxStage(

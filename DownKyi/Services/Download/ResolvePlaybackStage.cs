@@ -3,10 +3,6 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using DownKyi.Application.Desktop;
-using DownKyi.Core.BiliApi.BiliUtils;
-using DownKyi.Core.BiliApi.Sign;
-using DownKyi.Core.BiliApi.VideoStream;
-using DownKyi.Core.BiliApi.VideoStream.Models;
 using DownKyi.Core.Logging;
 using DownKyi.Domain.Results;
 using Microsoft.Extensions.Logging;
@@ -17,19 +13,20 @@ internal sealed class ResolvePlaybackStage : IDownloadPipelineStage
 {
     private readonly IUserNotificationService _notificationService;
     private readonly DownloadActivityPresenter _presenter;
-    private readonly IWbiKeyProvider _wbiKeyProvider;
+    private readonly DownloadPlaybackResolver _playbackResolver;
     private readonly ILogger _logger;
 
     public ResolvePlaybackStage(
         IUserNotificationService notificationService,
         DownloadActivityPresenter presenter,
-        IWbiKeyProvider wbiKeyProvider,
+        DownloadPlaybackResolver playbackResolver,
         ILogger logger)
     {
         _notificationService = notificationService
             ?? throw new ArgumentNullException(nameof(notificationService));
         _presenter = presenter ?? throw new ArgumentNullException(nameof(presenter));
-        _wbiKeyProvider = wbiKeyProvider ?? throw new ArgumentNullException(nameof(wbiKeyProvider));
+        _playbackResolver = playbackResolver
+            ?? throw new ArgumentNullException(nameof(playbackResolver));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -72,7 +69,9 @@ internal sealed class ResolvePlaybackStage : IDownloadPipelineStage
             return DownloadStageResult.Success(Name);
         }
 
-        var playUrl = await ResolvePlayUrlAsync(context, cancellationToken).ConfigureAwait(true);
+        var playUrl = await _playbackResolver.ResolveAsync(
+            context,
+            cancellationToken).ConfigureAwait(true);
         if (playUrl == null)
         {
             return DownloadStageResult.Failure(
@@ -93,49 +92,4 @@ internal sealed class ResolvePlaybackStage : IDownloadPipelineStage
                    nameof(filePath));
     }
 
-    private async Task<PlayUrl?> ResolvePlayUrlAsync(
-        DownloadExecutionContext context,
-        CancellationToken cancellationToken)
-    {
-        var downloading = context.Downloading;
-        return downloading.Downloading.PlayStreamType switch
-        {
-            PlayStreamType.Video => await WbiRequestExecutor.ExecuteAsync(
-                _wbiKeyProvider,
-                (keys, unixTimeSeconds) => context.Settings.Video.VideoParseType switch
-                {
-                    0 => VideoStreamApi.GetVideoPlayUrl(
-                        keys,
-                        unixTimeSeconds,
-                        downloading.DownloadBase.Avid,
-                        downloading.DownloadBase.Bvid,
-                        downloading.DownloadBase.Cid,
-                        cancellationToken: cancellationToken),
-                    1 => VideoStreamApi.GetVideoPlayUrlWebPage(
-                        keys,
-                        unixTimeSeconds,
-                        downloading.DownloadBase.Avid,
-                        downloading.DownloadBase.Bvid,
-                        downloading.DownloadBase.Cid,
-                        downloading.DownloadBase.Page,
-                        cancellationToken),
-                    _ => throw new ArgumentException(
-                        "Invalid video parse type. Valid values are: 0 (WebAPI) or 1 (WebPage).")
-                },
-                TimeProvider.System,
-                cancellationToken).ConfigureAwait(true),
-            PlayStreamType.Bangumi => VideoStreamApi.GetBangumiPlayUrl(
-                downloading.DownloadBase.Avid,
-                downloading.DownloadBase.Bvid,
-                downloading.DownloadBase.Cid,
-                cancellationToken: cancellationToken),
-            PlayStreamType.Cheese => VideoStreamApi.GetCheesePlayUrl(
-                downloading.DownloadBase.Avid,
-                downloading.DownloadBase.Bvid,
-                downloading.DownloadBase.Cid,
-                downloading.DownloadBase.EpisodeId,
-                cancellationToken: cancellationToken),
-            _ => null
-        };
-    }
 }
