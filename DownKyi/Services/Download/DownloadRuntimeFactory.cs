@@ -1,5 +1,6 @@
 using System;
 using DownKyi.Application.Desktop;
+using DownKyi.Application.Downloads;
 using DownKyi.Core.Aria2cNet.Client;
 using DownKyi.Core.Aria2cNet.Server;
 using DownKyi.Core.BiliApi.Sign;
@@ -23,6 +24,7 @@ internal sealed class DownloadRuntimeFactory : IDownloadRuntimeFactory
     private readonly AriaServer _ariaServer;
     private readonly DownloadTaskProjectionStore _projectionStore;
     private readonly DownloadTaskStateWriter _stateWriter;
+    private readonly IDownloadTaskApplicationService _tasks;
     private readonly IUserNotificationService _notificationService;
     private readonly DownloadDiagnosticLogger _diagnosticLogger;
     private readonly FfmpegProcessor _ffmpegProcessor;
@@ -35,6 +37,7 @@ internal sealed class DownloadRuntimeFactory : IDownloadRuntimeFactory
         DownloadListState downloadLists,
         DownloadTaskProjectionStore projectionStore,
         DownloadTaskStateWriter stateWriter,
+        IDownloadTaskApplicationService tasks,
         IUserNotificationService notificationService,
         IUiDispatcher uiDispatcher,
         ISettingsStore settingsStore,
@@ -49,6 +52,7 @@ internal sealed class DownloadRuntimeFactory : IDownloadRuntimeFactory
         _projectionStore = projectionStore
             ?? throw new ArgumentNullException(nameof(projectionStore));
         _stateWriter = stateWriter ?? throw new ArgumentNullException(nameof(stateWriter));
+        _tasks = tasks ?? throw new ArgumentNullException(nameof(tasks));
         _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
         _uiDispatcher = uiDispatcher ?? throw new ArgumentNullException(nameof(uiDispatcher));
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
@@ -103,8 +107,7 @@ internal sealed class DownloadRuntimeFactory : IDownloadRuntimeFactory
             _stateWriter,
             _loggerFactory.CreateLogger<DownloadArtifactWriter>());
         var shutdownRecovery = new DownloadTaskShutdownRecovery(
-            _downloadLists,
-            _projectionStore,
+            _tasks,
             _stateWriter);
         var pipeline = new DownloadPipeline(
                 _downloadLists,
@@ -123,8 +126,8 @@ internal sealed class DownloadRuntimeFactory : IDownloadRuntimeFactory
         return new DownloadOrchestrator(
             pipeline,
             _stateWriter,
-            _downloadLists,
-            _settingsStore,
+            _tasks,
+            network.MaxCurrentDownloads,
             _loggerFactory.CreateLogger<DownloadOrchestrator>());
     }
 }

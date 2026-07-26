@@ -84,11 +84,28 @@ public sealed class DownloadRuntimeArchitectureTests
             "Download",
             "DownloadOrchestrator.cs"));
 
-        Assert.Contains("Channel.CreateBounded<DownloadingItem>", source, StringComparison.Ordinal);
+        Assert.Contains("Channel.CreateBounded<DownloadTaskId>", source, StringComparison.Ordinal);
+        Assert.Contains("Channel.CreateUnbounded<DownloadTaskId>", source, StringComparison.Ordinal);
+        Assert.Contains("ForwardAdmissionsAsync", source, StringComparison.Ordinal);
         Assert.Contains("DownloadWorkerAsync", source, StringComparison.Ordinal);
-        Assert.Contains("_pipeline.ExecuteAsync(taskId", source, StringComparison.Ordinal);
-        Assert.DoesNotContain("_pipeline.ExecuteAsync(downloading", source, StringComparison.Ordinal);
+        Assert.Contains("_executor.ExecuteAsync(taskId", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("_executor.ExecuteAsync(downloading", source, StringComparison.Ordinal);
         Assert.DoesNotContain("void PersistDownloadingState(", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("DownloadingItem", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("DispatchAsync", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("_queuedDownloads", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("_downloadLists", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("Task.Delay", source, StringComparison.Ordinal);
+
+        var recoverySource = File.ReadAllText(Path.Combine(
+            RepositoryRoot,
+            "DownKyi",
+            "Services",
+            "Download",
+            "DownloadTaskShutdownRecovery.cs"));
+        Assert.Contains("IDownloadTaskApplicationService", recoverySource, StringComparison.Ordinal);
+        Assert.DoesNotContain("DownloadListState", recoverySource, StringComparison.Ordinal);
+        Assert.DoesNotContain("DownloadingItem", recoverySource, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -318,6 +335,13 @@ public sealed class DownloadRuntimeArchitectureTests
             "DownloadBootstrapHostedService.cs"));
 
         Assert.Contains("IDownloadRuntimeFactory", source, StringComparison.Ordinal);
+        Assert.Contains("QueueStartupTasksAsync", source, StringComparison.Ordinal);
+        Assert.Contains("runtime.EnqueueAsync(taskId", source, StringComparison.Ordinal);
+        Assert.Contains("IReadOnlyList<DownloadTask> tasks", source, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "new DownloadTaskId(item.DownloadBase.Id)",
+            source,
+            StringComparison.Ordinal);
         Assert.Contains("IUiDispatcher", source, StringComparison.Ordinal);
         Assert.Contains("Task.WhenAll(stopTasks)", source, StringComparison.Ordinal);
         Assert.DoesNotContain("Dispatcher.UIThread", source, StringComparison.Ordinal);
@@ -348,9 +372,12 @@ public sealed class DownloadRuntimeArchitectureTests
             .Replace("\r\n", "\n", StringComparison.Ordinal);
         var transferSource = File.ReadAllText(Path.Combine(directory, "ITransferBackend.cs"));
 
-        Assert.Contains("internal async Task ExecuteAsync(\n        DownloadTaskId taskId", pipelineSource, StringComparison.Ordinal);
-        Assert.Contains("internal async Task MarkFailedAsync(DownloadTaskId taskId)", pipelineSource, StringComparison.Ordinal);
+        Assert.Contains("public async Task ExecuteAsync(\n        DownloadTaskId taskId", pipelineSource, StringComparison.Ordinal);
+        Assert.Contains("public async Task MarkFailedAsync(", pipelineSource, StringComparison.Ordinal);
         Assert.DoesNotContain("internal async Task ExecuteAsync(\n        DownloadingItem", pipelineSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("CancellationToken? CancellationToken", pipelineSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("CancellationToken.GetValueOrDefault", pipelineSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("DownloadingList.Any", pipelineSource, StringComparison.Ordinal);
         Assert.DoesNotContain("DownloadingItem Download", transferSource, StringComparison.Ordinal);
         Assert.Contains("DownloadTaskId TaskId", transferSource, StringComparison.Ordinal);
         Assert.Contains("Func<DownloadProgress, CancellationToken, Task> PersistProgressAsync", transferSource, StringComparison.Ordinal);

@@ -49,6 +49,7 @@ PR 03-06 result: legacy GID, partial-file maps, completed asset keys, paused sta
 ## Download And Media Runtime Policy
 
 - Queue consumption uses a bounded Channel and fixed workers. Do not restore per-item task spawning or synchronous persistence callbacks.
+- New, resumed, and startup-restored work enters through `DownloadTaskQueueGateway` as `DownloadTaskId`. The unbounded admission channel isolates UI/startup callers from worker-channel capacity; only the internal dispatcher waits for bounded worker capacity. Runtime scheduling must never poll `ObservableCollection`.
 - Built-in and aria2 transfers share key, resume, integrity, and persistence behavior. Custom aria2 is a backend selection, not a copied workflow.
 - `DownloadArtifactWriter` owns cover, subtitle, danmaku, and NFO output. `DownloadTaskStateWriter` adapts runtime calls to typed Application commands; it cannot accept `DownloadingItem` or persist reconstructed UI state.
 - Pause first persists `Pausing`; built-in/aria2 backends preserve partial files and return a paused outcome; the worker confirms `Paused` only after transfer teardown. Process shutdown returns active `Downloading`/`Pausing` tasks to `Queued` without dropping GID, partial-file maps, completed keys, progress, output size, or optimistic version.
@@ -58,6 +59,10 @@ PR 03-06 result: legacy GID, partial-file maps, completed asset keys, paused sta
 - A multi-segment output is complete only after ffprobe confirms a video stream, expected duration, and successful middle/tail seek decoding. Invalid partial output is deleted.
 - Bilibili requests use the typed `BilibiliHttpClient` registered through `IHttpClientFactory`. The static `WebClient` exists only as a compatibility facade while legacy synchronous API callers are migrated.
 - HTTP 401/403 and API schema rejection are non-retryable, 429 honors bounded `Retry-After`, cancellation is never retried, and empty/HTML/malformed responses fail visibly.
+
+Gate 5 result: strict `AnalysisMode=All` Release build completed with zero warnings, all 565 solution tests passed, format verification and `git diff --check` passed, the module-boundary audit completed, NuGet reported no vulnerable or deprecated packages, and the candidate-file Gitleaks scan reported zero findings. Tests cover direct admission, pre-start buffering, deduplication, 1/4/8 worker execution, per-task cancellation, startup recovery, shutdown recovery, and architecture-test isolation from ignored local tooling trees. PR #88 also passed the Windows/Linux/macOS quality matrix and CodeQL.
+
+Loopback cancellation tests must synchronize on the server receiving the first request before canceling. Fixed timeouts are not an acceptable substitute because a loaded Windows runner can cancel before socket acceptance and produce a false zero-request failure.
 
 PR 07-15 result: Release build completed with zero warnings, 161 tests passed including real FFmpeg/ffprobe seek validation and Host smoke without Prism global container state, format verification passed, and both vulnerable and deprecated package audits were clean. Cross-RID Release builds passed for Windows x86, Linux x64/arm64, and macOS x64/arm64. An isolated Windows process smoke created the main window, accepted close, and exited with code 0 without reading or writing real user data. Native Linux/macOS execution remains owned by their CI runners.
 
@@ -126,6 +131,8 @@ PR 25-29 local result: the real headless Host resolves `MainWindow`, loads compl
 - Fixed fixtures under `tests/DownKyi.Core.Tests/BiliApi/JsonSamples` cover `BV1U7V66FEiK` video info, page/CID, and playback without using the live Bilibili network.
 - `docs/operations/bilibili-api-audit.md` is the endpoint inventory. Any endpoint/envelope change updates it and a deterministic fixture in the same PR; `BilibiliApiInventoryArchitectureTests` enforces coverage.
 - `pwsh ./script/audit-bilibili-api.ps1 -ConfirmLive` performs an explicitly requested anonymous probe. It never loads local login data and is not a CI test.
+- `pwsh ./script/audit-bilibili-authenticated-api.ps1 -ConfirmAuthenticatedLive` is the separately authorized read-only login probe. It gates on `/nav`, reads only `BILIBILI_TEST_COOKIE` from `~/.codex/.env`, and persists only the allowlisted sanitized artifact.
+- Run `pwsh ./script/scan-secrets.ps1` after an authenticated audit. Gitleaks must report zero findings for all tracked and non-ignored untracked candidate files; broad path exclusions are prohibited.
 
 ## Analyzer Policy
 

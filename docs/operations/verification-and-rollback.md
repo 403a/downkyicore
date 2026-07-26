@@ -33,7 +33,20 @@ dotnet format ./DownKyi.sln --no-restore --verify-no-changes
 git diff --check
 dotnet package list --project ./DownKyi.sln --vulnerable --include-transitive
 dotnet package list --project ./DownKyi.sln --deprecated
+pwsh ./script/scan-secrets.ps1
 ```
+
+`scan-secrets.ps1` 使用 Gitleaks 掃描目前 tracked 與尚未追蹤、但未被 `.gitignore` 排除的候選提交檔。固定驗證版本為 Gitleaks `8.30.1`；Windows x64 release zip 必須先依官方 `gitleaks_8.30.1_checksums.txt` 驗證 SHA-256，再解壓到 `.tools/gitleaks/bin/`。`.gitleaks.toml` 只允許公開 WBI 測試 fixture 與精確的 Avalonia brush resource 行，不得加入整個目錄或一般測試檔的寬鬆排除。
+
+登入態 API audit 只能由明確授權的 operator 執行：
+
+```powershell
+pwsh ./script/audit-bilibili-authenticated-api.ps1 `
+  -ConfirmAuthenticatedLive `
+  -OutputPath ./docs/operations/bilibili-authenticated-api-audit.json
+```
+
+腳本只從 `~/.codex/.env` 讀取 `BILIBILI_TEST_COOKIE`，不得把值放入命令列、檔案、log、fixture、commit 或 PR。`/x/web-interface/nav` 未同時滿足 code 0 與 `isLogin=true` 時，後續 probe 必須封鎖。
 
 ## UI 與 runtime evidence
 

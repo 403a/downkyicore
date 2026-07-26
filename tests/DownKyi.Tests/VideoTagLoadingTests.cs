@@ -80,6 +80,7 @@ public sealed class VideoTagLoadingTests : IDisposable
         Assert.Equal(1, added);
         Assert.Equal(operation.Token, observedToken);
         Assert.Equal("current", Assert.Single(Assert.Single(context.ListState.Downloading).Metadata!.Tags));
+        Assert.Single(context.Queue.Enqueued);
     }
 
     [Fact]
@@ -104,6 +105,25 @@ public sealed class VideoTagLoadingTests : IDisposable
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => addTask);
         Assert.Empty(context.ListState.Downloading);
         Assert.Equal(0, context.Store.AddCount);
+    }
+
+    [Fact]
+    public async Task CancellationAfterPersistenceDoesNotStrandQueuedTask()
+    {
+        using var context = CreateContext(generateMetadata: false);
+        using var operation = CancellationTokenSource.CreateLinkedTokenSource(
+            TestContext.Current.CancellationToken);
+        context.Store.AfterAddAsync = operation.CancelAsync;
+        context.Prepare(CreatePage(_ => Task.FromResult<IReadOnlyList<string>>([])));
+
+        var added = await context.Service
+            .AddToDownload(_directory, cancellationToken: operation.Token)
+            .ConfigureAwait(true);
+
+        Assert.True(operation.IsCancellationRequested);
+        Assert.Equal(1, added);
+        Assert.Single(context.ListState.Downloading);
+        Assert.Single(context.Queue.Enqueued);
     }
 
     [Fact]
@@ -245,12 +265,18 @@ public sealed class VideoTagLoadingTests : IDisposable
             _taskService = new DownloadTaskApplicationService(Store, clock);
             _projectionStore = new DownloadTaskProjectionStore(_taskService, clock);
             ListState = new DownloadListState();
+            Queue = new RecordingDownloadTaskQueue();
             Logger = new RecordingLogger<AddToDownloadService>();
             var desktop = new TestDesktopInteractionContext();
+            var admission = new DownloadTaskAdmissionService(
+                ListState,
+                _projectionStore,
+                Queue);
             Service = new AddToDownloadService(
                 DownKyi.Core.BiliApi.VideoStream.PlayStreamType.Video,
                 ListState,
                 _projectionStore,
+                admission,
                 _settings,
                 new VideoTagProvider(),
                 new TestWbiKeyProvider(),
@@ -264,6 +290,8 @@ public sealed class VideoTagLoadingTests : IDisposable
         public DownloadListState ListState { get; }
 
         public RecordingDownloadTaskStore Store { get; }
+
+        public RecordingDownloadTaskQueue Queue { get; }
 
         public RecordingLogger<AddToDownloadService> Logger { get; }
 
@@ -315,11 +343,20 @@ public sealed class VideoTagLoadingTests : IDisposable
     {
         public int AddCount { get; private set; }
 
-        public Task<OperationResult> AddAsync(DownloadTask task, CancellationToken cancellationToken)
+        public Func<Task>? AfterAddAsync { get; set; }
+
+        public async Task<OperationResult> AddAsync(
+            DownloadTask task,
+            CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             AddCount++;
-            return Task.FromResult(OperationResult.Success());
+            if (AfterAddAsync != null)
+            {
+                await AfterAddAsync().ConfigureAwait(false);
+            }
+
+            return OperationResult.Success();
         }
 
         public Task<OperationResult> ClearHistoryAsync(CancellationToken cancellationToken) =>

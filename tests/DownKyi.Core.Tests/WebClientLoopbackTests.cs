@@ -68,14 +68,17 @@ public sealed class WebClientLoopbackTests : IDisposable
                 "{\"code\":0}",
                 DelayBeforeResponse: TimeSpan.FromSeconds(5)));
         await using var serverLifetime = server.ConfigureAwait(false);
-        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
-
-        Assert.ThrowsAny<OperationCanceledException>(() =>
+        using var cancellation = new CancellationTokenSource();
+        var request = Task.Run(() =>
             BiliWebClient.RequestWeb(
                 server.Url.ToString(),
                 retry: 3,
                 cancellationToken: cancellation.Token));
 
+        await server.WaitForFirstRequestAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        await cancellation.CancelAsync().ConfigureAwait(true);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => request).ConfigureAwait(true);
         Assert.Equal(1, server.RequestCount);
     }
 

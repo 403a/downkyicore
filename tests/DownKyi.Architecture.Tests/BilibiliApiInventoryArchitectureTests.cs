@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace DownKyi.Architecture.Tests;
@@ -117,6 +118,99 @@ public sealed partial class BilibiliApiInventoryArchitectureTests
         Assert.DoesNotContain("GetLoginInfoCookies", script, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void AuthenticatedLiveProbeArtifactIsExplicitAndSanitized()
+    {
+        var script = File.ReadAllText(Path.Combine(
+            RepositoryRoot,
+            "script",
+            "audit-bilibili-authenticated-api.ps1"));
+        var artifact = File.ReadAllText(Path.Combine(
+            RepositoryRoot,
+            "docs",
+            "operations",
+            "bilibili-authenticated-api-audit.json"));
+
+        Assert.Contains("[switch]$ConfirmAuthenticatedLive", script, StringComparison.Ordinal);
+        Assert.Contains("$environmentVariableName = 'BILIBILI_TEST_COOKIE'", script, StringComparison.Ordinal);
+        Assert.Contains("-EnvironmentVariableLoaded $true", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetLoginInfoCookies", script, StringComparison.Ordinal);
+        Assert.Equal(1, SetContentPattern().Count(script));
+
+        foreach (var sensitiveName in new[]
+                 {
+                     "BILIBILI_TEST_COOKIE",
+                     "SESSDATA",
+                     "bili_jct",
+                     "DedeUserID",
+                     "Cookie",
+                     "Request Headers"
+                 })
+        {
+            Assert.DoesNotContain(sensitiveName, artifact, StringComparison.OrdinalIgnoreCase);
+        }
+
+        using var document = JsonDocument.Parse(artifact);
+        var root = document.RootElement;
+        Assert.True(root.GetProperty("EnvironmentVariableLoaded").GetBoolean());
+        Assert.True(root.GetProperty("NavigationGatePassed").GetBoolean());
+        Assert.Equal(
+            [
+                "Architecture",
+                "CapturedAtUtc",
+                "Commit",
+                "EnvironmentVariableLoaded",
+                "NavigationGatePassed",
+                "OperatingSystem",
+                "Results",
+                "Runtime",
+                "SchemaVersion"
+            ],
+            root.EnumerateObject()
+                .Select(property => property.Name)
+                .Order(StringComparer.Ordinal)
+                .ToArray());
+
+        var results = root.GetProperty("Results").EnumerateArray().ToArray();
+        Assert.NotEmpty(results);
+        foreach (var result in results)
+        {
+            Assert.Equal(
+                [
+                    "BilibiliCode",
+                    "ContractDrift",
+                    "ErrorType",
+                    "HttpStatus",
+                    "Name",
+                    "Outcome",
+                    "Path",
+                    "RequiredFieldsPresent",
+                    "RequiresLogin",
+                    "ResponseStructureMatchesExpected"
+                ],
+                result.EnumerateObject()
+                    .Select(property => property.Name)
+                    .Order(StringComparer.Ordinal)
+                    .ToArray());
+            Assert.StartsWith("/", result.GetProperty("Path").GetString(), StringComparison.Ordinal);
+            Assert.DoesNotContain("?", result.GetProperty("Path").GetString(), StringComparison.Ordinal);
+            Assert.Equal(200, result.GetProperty("HttpStatus").GetInt32());
+            Assert.Equal(0, result.GetProperty("BilibiliCode").GetInt32());
+            Assert.True(result.GetProperty("ResponseStructureMatchesExpected").GetBoolean());
+            Assert.True(result.GetProperty("RequiredFieldsPresent").GetBoolean());
+            Assert.False(result.GetProperty("ContractDrift").GetBoolean());
+            Assert.Equal("passed", result.GetProperty("Outcome").GetString());
+            Assert.Equal(JsonValueKind.Null, result.GetProperty("ErrorType").ValueKind);
+        }
+
+        var navigation = Assert.Single(results, result =>
+            string.Equals(
+                result.GetProperty("Path").GetString(),
+                "/x/web-interface/nav",
+                StringComparison.Ordinal));
+        Assert.False(navigation.GetProperty("RequiresLogin").GetBoolean());
+    }
+
     private static bool IsOptionalEnvelopeAttribute(string line)
     {
         return line.Contains("[JsonProperty(\"data\")]", StringComparison.Ordinal)
@@ -147,6 +241,9 @@ public sealed partial class BilibiliApiInventoryArchitectureTests
         RegexOptions.CultureInvariant,
         1000)]
     private static partial Regex EndpointPattern();
+
+    [GeneratedRegex("Set-Content", RegexOptions.CultureInvariant, 1000)]
+    private static partial Regex SetContentPattern();
 
     private static string FindRepositoryRoot()
     {

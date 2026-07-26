@@ -20,6 +20,7 @@ public sealed class ProjectDependencyTests
         {
             var matches = Directory
                 .EnumerateFiles(RepositoryRoot, $"{projectName}.csproj", SearchOption.AllDirectories)
+                .Where(IsRepositorySourcePath)
                 .Where(path => !IsUnderDirectory(path, "tests"))
                 .ToArray();
 
@@ -86,6 +87,7 @@ public sealed class ProjectDependencyTests
     {
         var domainProject = Directory
             .EnumerateFiles(RepositoryRoot, "DownKyi.Domain.csproj", SearchOption.AllDirectories)
+            .Where(IsRepositorySourcePath)
             .SingleOrDefault();
         if (domainProject == null)
         {
@@ -203,6 +205,7 @@ public sealed class ProjectDependencyTests
     {
         return Directory
             .EnumerateFiles(RepositoryRoot, $"{projectName}.csproj", SearchOption.AllDirectories)
+            .Where(IsRepositorySourcePath)
             .Single(path => !IsUnderDirectory(path, "tests"));
     }
 
@@ -220,6 +223,7 @@ public sealed class ProjectDependencyTests
     {
         var projects = Directory
             .EnumerateFiles(RepositoryRoot, "*.csproj", SearchOption.AllDirectories)
+            .Where(IsRepositorySourcePath)
             .Where(path => !IsUnderDirectory(path, "tests"))
             .Where(path => !IsUnderDirectory(path, "benchmarks"))
             .ToArray();
@@ -270,6 +274,14 @@ public sealed class ProjectDependencyTests
     {
         var marker = Path.DirectorySeparatorChar + directoryName + Path.DirectorySeparatorChar;
         return path.Contains(marker, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsRepositorySourcePath(string path)
+    {
+        return !IsUnderDirectory(path, ".git") &&
+               !IsUnderDirectory(path, ".tools") &&
+               !IsUnderDirectory(path, "bin") &&
+               !IsUnderDirectory(path, "obj");
     }
 
     private static string FindRepositoryRoot()

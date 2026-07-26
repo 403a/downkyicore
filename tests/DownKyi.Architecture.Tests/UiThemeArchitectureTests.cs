@@ -32,7 +32,7 @@ public sealed class UiThemeArchitectureTests
     {
         var consumers = Directory
             .EnumerateFiles(RepositoryRoot, "*.csproj", SearchOption.AllDirectories)
-            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase))
+            .Where(IsRepositorySourcePath)
             .Where(path => File.ReadAllText(path).Contains("Avalonia.Themes.Fluent", StringComparison.Ordinal))
             .Select(path => Path.GetRelativePath(RepositoryRoot, path).Replace('\\', '/'))
             .ToArray();
@@ -53,6 +53,19 @@ public sealed class UiThemeArchitectureTests
     private static string ReadSource(params string[] pathParts)
     {
         return File.ReadAllText(Path.Combine([RepositoryRoot, .. pathParts]));
+    }
+
+    private static bool IsRepositorySourcePath(string path)
+    {
+        var relativePath = Path.GetRelativePath(RepositoryRoot, path);
+        var segments = relativePath.Split(
+            [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+            StringSplitOptions.RemoveEmptyEntries);
+
+        return !segments.Contains(".git", StringComparer.OrdinalIgnoreCase) &&
+               !segments.Contains(".tools", StringComparer.OrdinalIgnoreCase) &&
+               !segments.Contains("bin", StringComparer.OrdinalIgnoreCase) &&
+               !segments.Contains("obj", StringComparer.OrdinalIgnoreCase);
     }
 
     private static string FindRepositoryRoot()

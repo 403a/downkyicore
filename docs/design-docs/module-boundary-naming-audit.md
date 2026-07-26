@@ -79,6 +79,8 @@ Domain task -> persistence -> Desktop projection
 
 ## Finding 3: Channel 仍以 UI collection 輪詢入隊
 
+Resolution (2026-07-26): Gate 5 replaced this compatibility path with direct `DownloadTaskId` admission for new, resumed, and persisted startup tasks. `DispatchAsync`, the 500 ms delay, `_queuedDownloads`, `Channel<DownloadingItem>`, and UI collection membership checks were removed. The original finding below is retained as historical rationale.
+
 `DownloadOrchestrator` 使用 bounded channel 與固定 workers 是正確方向，但 `DispatchAsync()` 每 500 ms 掃描 `_downloadLists.Downloading`，再用 `_queuedDownloads` 去重。
 
 影響：
