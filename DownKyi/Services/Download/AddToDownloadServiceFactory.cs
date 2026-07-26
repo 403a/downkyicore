@@ -18,6 +18,7 @@ internal sealed class AddToDownloadServiceFactory : IAddToDownloadServiceFactory
 {
     private readonly DownloadListState _downloadLists;
     private readonly DownloadTaskProjectionStore _projectionStore;
+    private readonly DownloadTaskAdmissionService _admission;
     private readonly ISettingsStore _settingsStore;
     private readonly IUserNotificationService _notificationService;
     private readonly IAppDialogService _dialogService;
@@ -28,6 +29,7 @@ internal sealed class AddToDownloadServiceFactory : IAddToDownloadServiceFactory
     public AddToDownloadServiceFactory(
         DownloadListState downloadLists,
         DownloadTaskProjectionStore projectionStore,
+        DownloadTaskAdmissionService admission,
         ISettingsStore settingsStore,
         IVideoTagProvider tagProvider,
         IWbiKeyProvider wbiKeyProvider,
@@ -37,6 +39,7 @@ internal sealed class AddToDownloadServiceFactory : IAddToDownloadServiceFactory
     {
         _downloadLists = downloadLists ?? throw new ArgumentNullException(nameof(downloadLists));
         _projectionStore = projectionStore ?? throw new ArgumentNullException(nameof(projectionStore));
+        _admission = admission ?? throw new ArgumentNullException(nameof(admission));
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
         _tagProvider = tagProvider ?? throw new ArgumentNullException(nameof(tagProvider));
         _wbiKeyProvider = wbiKeyProvider ?? throw new ArgumentNullException(nameof(wbiKeyProvider));
@@ -51,6 +54,7 @@ internal sealed class AddToDownloadServiceFactory : IAddToDownloadServiceFactory
             streamType,
             _downloadLists,
             _projectionStore,
+            _admission,
             _settingsStore,
             _tagProvider,
             _wbiKeyProvider,

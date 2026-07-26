@@ -62,8 +62,17 @@ internal sealed class DownloadTaskProjectionStore : IDisposable
     public async Task<IReadOnlyList<DownloadingItem>> GetDownloadingAsync(
         CancellationToken cancellationToken = default)
     {
+        var state = await GetDownloadingStateAsync(cancellationToken).ConfigureAwait(true);
+        return state.Projections;
+    }
+
+    public async Task<DownloadTaskProjectionStartupState> GetDownloadingStateAsync(
+        CancellationToken cancellationToken = default)
+    {
         var tasks = await _tasks.GetUnfinishedAsync(cancellationToken).ConfigureAwait(true);
-        return tasks.Select(CreateDownloadingProjection).ToArray();
+        return new DownloadTaskProjectionStartupState(
+            tasks,
+            tasks.Select(CreateDownloadingProjection).ToArray());
     }
 
     public async Task AddMigratedCompletedAsync(
@@ -257,3 +266,7 @@ internal sealed class DownloadTaskProjectionStore : IDisposable
         throw new InvalidOperationException(message ?? "Download storage operation failed.");
     }
 }
+
+internal sealed record DownloadTaskProjectionStartupState(
+    IReadOnlyList<DownloadTask> Tasks,
+    IReadOnlyList<DownloadingItem> Projections);

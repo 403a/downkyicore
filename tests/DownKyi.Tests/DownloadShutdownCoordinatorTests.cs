@@ -12,12 +12,10 @@ namespace DownKyi.Tests;
 public sealed class DownloadShutdownCoordinatorTests
 {
     [Fact]
-    public async Task StopAsyncCancellationWhileDispatchWaitsStillRecoversState()
+    public async Task StopAsyncCancellationWhileWorkerWaitsStillRecoversState()
     {
         using var tokenSource = CancellationTokenSource.CreateLinkedTokenSource(
             TestContext.Current.CancellationToken);
-        var occupiedSlot = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var dispatchTask = occupiedSlot.Task.WaitAsync(tokenSource.Token);
         var workerStopped = false;
         var workerTask = Task.Run(async () =>
         {
@@ -37,7 +35,6 @@ public sealed class DownloadShutdownCoordinatorTests
 
         await DownloadShutdownCoordinator.StopAsync(
             tokenSource,
-            dispatchTask,
             [workerTask],
             TimeSpan.FromSeconds(1),
             _ => { },
@@ -48,21 +45,20 @@ public sealed class DownloadShutdownCoordinatorTests
                 return Task.CompletedTask;
             });
 
-        Assert.True(dispatchTask.IsCanceled);
+        Assert.True(workerStopped);
         Assert.Equal(1, recoveryCount);
     }
 
     [Fact]
-    public async Task StopAsyncUnexpectedDispatchFailureRecoversBeforeRethrowing()
+    public async Task StopAsyncUnexpectedWorkerFailureRecoversBeforeRethrowing()
     {
         var recovered = false;
-        var failure = new InvalidOperationException("dispatch failed");
+        var failure = new InvalidOperationException("worker failed");
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             DownloadShutdownCoordinator.StopAsync(
                 null,
-                Task.FromException(failure),
-                [],
+                [Task.FromException(failure)],
                 TimeSpan.FromSeconds(1),
                 _ => { },
                 () =>
@@ -92,7 +88,6 @@ public sealed class DownloadShutdownCoordinatorTests
             using var tasks = new DownloadTaskApplicationService(store, clock);
             using var projections = new DownloadTaskProjectionStore(tasks, clock);
             var stateWriter = new DownloadTaskStateWriter(tasks);
-            var lists = new DownloadListState();
             var item = new DownloadingItem
             {
                 DownloadBase = new DownloadBase
@@ -107,7 +102,6 @@ public sealed class DownloadShutdownCoordinatorTests
                 }
             };
             await projections.AddDownloadingAsync(item, TestContext.Current.CancellationToken);
-            lists.Downloading.Add(item);
             var taskId = new DownloadTaskId(item.DownloadBase.Id);
             await stateWriter.StartAsync(taskId, TestContext.Current.CancellationToken);
             await stateWriter.RecordTransferFileAsync(
@@ -123,7 +117,7 @@ public sealed class DownloadShutdownCoordinatorTests
                 taskId,
                 new DownloadProgress(45, 450, 1000, 2_000_000),
                 TestContext.Current.CancellationToken);
-            var recovery = new DownloadTaskShutdownRecovery(lists, projections, stateWriter);
+            var recovery = new DownloadTaskShutdownRecovery(tasks, stateWriter);
 
             await recovery.PersistAsync();
 

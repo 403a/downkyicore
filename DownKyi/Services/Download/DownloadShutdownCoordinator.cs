@@ -9,7 +9,6 @@ internal static class DownloadShutdownCoordinator
 {
     public static async Task StopAsync(
         CancellationTokenSource? tokenSource,
-        Task? dispatchTask,
         IReadOnlyCollection<Task> workerTasks,
         TimeSpan workerTimeout,
         Action<TimeoutException> timeoutObserver,
@@ -29,17 +28,6 @@ internal static class DownloadShutdownCoordinator
                 await tokenSource.CancelAsync().ConfigureAwait(false);
             }
 
-            if (dispatchTask != null)
-            {
-                try
-                {
-                    await dispatchTask.ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
-                {
-                    return;
-                }
-            }
         }
         finally
         {

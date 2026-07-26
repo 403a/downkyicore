@@ -66,6 +66,7 @@ internal sealed class DownloadManagerCoordinator : IDownloadManagerCoordinator
 
     private readonly DownloadTaskProjectionStore _storage;
     private readonly DownloadTaskStateWriter _stateWriter;
+    private readonly IDownloadTaskQueue _taskQueue;
     private readonly DownloadTaskFileService _fileService;
     private readonly DownloadListState _downloadLists;
     private readonly IPlatformLauncher _platformLauncher;
@@ -73,12 +74,14 @@ internal sealed class DownloadManagerCoordinator : IDownloadManagerCoordinator
     public DownloadManagerCoordinator(
         DownloadTaskProjectionStore storage,
         DownloadTaskStateWriter stateWriter,
+        IDownloadTaskQueue taskQueue,
         DownloadTaskFileService fileService,
         DownloadListState downloadLists,
         IPlatformLauncher platformLauncher)
     {
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _stateWriter = stateWriter ?? throw new ArgumentNullException(nameof(stateWriter));
+        _taskQueue = taskQueue ?? throw new ArgumentNullException(nameof(taskQueue));
         _fileService = fileService ?? throw new ArgumentNullException(nameof(fileService));
         _downloadLists = downloadLists ?? throw new ArgumentNullException(nameof(downloadLists));
         _platformLauncher = platformLauncher ?? throw new ArgumentNullException(nameof(platformLauncher));
@@ -117,27 +120,35 @@ internal sealed class DownloadManagerCoordinator : IDownloadManagerCoordinator
                 or DownloadStatus.Pause
                 or DownloadStatus.DownloadFailed)
             {
-                await _stateWriter.ResumeAsync(
+                var resumed = await _stateWriter.ResumeAsync(
                     GetTaskId(item),
                     cancellationToken).ConfigureAwait(true);
+                await _taskQueue.EnqueueAsync(resumed.Id, CancellationToken.None).ConfigureAwait(true);
             }
         }
     }
 
-    public Task ToggleAsync(
+    public async Task ToggleAsync(
         DownloadingItem item,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(item);
-        return item.Downloading.DownloadStatus switch
+        var taskId = GetTaskId(item);
+        if (item.Downloading.DownloadStatus is DownloadStatus.PauseStarted
+            or DownloadStatus.Pause
+            or DownloadStatus.DownloadFailed)
         {
-            DownloadStatus.NotStarted or DownloadStatus.WaitForDownload =>
-                _stateWriter.PauseAsync(GetTaskId(item), cancellationToken),
-            DownloadStatus.PauseStarted or DownloadStatus.Pause or DownloadStatus.DownloadFailed =>
-                _stateWriter.ResumeAsync(GetTaskId(item), cancellationToken),
-            DownloadStatus.Downloading => _stateWriter.PauseAsync(GetTaskId(item), cancellationToken),
-            _ => Task.FromResult(_storage.GetRequiredSnapshot(GetTaskId(item)))
-        };
+            var resumed = await _stateWriter.ResumeAsync(taskId, cancellationToken).ConfigureAwait(true);
+            await _taskQueue.EnqueueAsync(resumed.Id, CancellationToken.None).ConfigureAwait(true);
+            return;
+        }
+
+        if (item.Downloading.DownloadStatus is DownloadStatus.NotStarted
+            or DownloadStatus.WaitForDownload
+            or DownloadStatus.Downloading)
+        {
+            await _stateWriter.PauseAsync(taskId, cancellationToken).ConfigureAwait(true);
+        }
     }
 
     public async Task DeleteAsync(
@@ -153,6 +164,7 @@ internal sealed class DownloadManagerCoordinator : IDownloadManagerCoordinator
             await _stateWriter.CancelAsync(taskId, cancellationToken).ConfigureAwait(true);
         }
 
+        await _taskQueue.CancelAsync(taskId).ConfigureAwait(true);
         await _fileService.CancelActiveDownloadAsync(item).ConfigureAwait(true);
 
         // Once physical deletion starts, finish the database/list transaction even if app shutdown is requested.

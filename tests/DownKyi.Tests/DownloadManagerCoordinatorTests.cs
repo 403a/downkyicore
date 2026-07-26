@@ -44,6 +44,9 @@ public sealed class DownloadManagerCoordinatorTests
             new DownloadTaskId(item.DownloadBase.Id),
             TestContext.Current.CancellationToken);
         Assert.Equal(DownloadPhase.Queued, Assert.IsType<DownloadTask>(resumed).Phase);
+        Assert.Equal(
+            item.DownloadBase.Id,
+            Assert.Single(context.Queue.Enqueued).Value);
     }
 
     [Fact]
@@ -63,6 +66,9 @@ public sealed class DownloadManagerCoordinatorTests
 
         Assert.False(File.Exists(media));
         Assert.DoesNotContain(item, context.State.Downloading);
+        Assert.Equal(
+            item.DownloadBase.Id,
+            Assert.Single(context.Queue.Canceled).Value);
         Assert.Null(await context.Store.FindAsync(
             new DownloadTaskId(item.DownloadBase.Id),
             TestContext.Current.CancellationToken));
@@ -143,6 +149,7 @@ public sealed class DownloadManagerCoordinatorTests
             TaskService = new DownloadTaskApplicationService(Store, clock);
             Storage = new DownloadTaskProjectionStore(TaskService, clock);
             StateWriter = new DownloadTaskStateWriter(TaskService);
+            Queue = new RecordingDownloadTaskQueue();
             State = new DownloadListState();
             Launcher = new RecordingPlatformLauncher();
             var fileService = new DownloadTaskFileService(
@@ -151,6 +158,7 @@ public sealed class DownloadManagerCoordinatorTests
             Coordinator = new DownloadManagerCoordinator(
                 Storage,
                 StateWriter,
+                Queue,
                 fileService,
                 State,
                 Launcher);
@@ -163,6 +171,8 @@ public sealed class DownloadManagerCoordinatorTests
         public DownloadTaskApplicationService TaskService { get; }
 
         public DownloadTaskStateWriter StateWriter { get; }
+
+        public RecordingDownloadTaskQueue Queue { get; }
 
         public DownloadListState State { get; }
 

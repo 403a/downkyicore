@@ -284,7 +284,7 @@ public sealed class ModuleBoundaryBaselineTests
     }
 
     [Fact]
-    public void UiCollectionPollingCannotSpreadBeyondTheCurrentOrchestrator()
+    public void DownloadRuntimeDoesNotPollUiCollectionsForWork()
     {
         var downloadRoot = Path.Combine(RepositoryRoot, "DownKyi", "Services", "Download");
         var actual = Directory
@@ -298,13 +298,7 @@ public sealed class ModuleBoundaryBaselineTests
             .Select(Relative)
             .ToArray();
 
-        AssertSubset(
-            actual,
-            new HashSet<string>(StringComparer.Ordinal)
-            {
-                "DownKyi/Services/Download/DownloadOrchestrator.cs"
-            },
-            "UI collection polling owner");
+        Assert.Empty(actual);
     }
 
     [Fact]

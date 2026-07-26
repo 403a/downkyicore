@@ -76,6 +76,10 @@ internal static class DesktopComposition
         services.AddSingleton<IDownloadTaskApplicationService, DownloadTaskApplicationService>();
         services.AddSingleton<DownloadTaskProjectionStore>();
         services.AddSingleton<DownloadTaskStateWriter>();
+        services.AddSingleton<DownloadTaskQueueGateway>();
+        services.AddSingleton<IDownloadTaskQueue>(provider =>
+            provider.GetRequiredService<DownloadTaskQueueGateway>());
+        services.AddSingleton<DownloadTaskAdmissionService>();
         services.AddSingleton<DownloadListState>();
         services.AddSingleton<DownloadTaskFileService>();
         services.AddSingleton<AriaRuntimeClientRegistry>();
@@ -120,7 +124,9 @@ internal static class DesktopComposition
         services.AddSingleton<IDownloadRuntimeFactory, DownloadRuntimeFactory>();
         services.AddSingleton<IUiDispatcher, AvaloniaUiDispatcher>();
         services.AddSingleton<IHostedService, StorageMaintenanceHostedService>();
-        services.AddSingleton<IHostedService, DownloadBootstrapHostedService>();
+        services.AddSingleton<DownloadBootstrapHostedService>();
+        services.AddSingleton<IHostedService>(provider =>
+            provider.GetRequiredService<DownloadBootstrapHostedService>());
 
         AddRouteViewModels(services);
         AddDialogViewModelsAndViews(services);

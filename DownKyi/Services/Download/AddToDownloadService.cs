@@ -36,6 +36,7 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
     private IList<VideoSection>? _videoSections;
     private readonly DownloadListState _downloadLists;
     private readonly DownloadTaskProjectionStore _projectionStore;
+    private readonly DownloadTaskAdmissionService _admission;
     private readonly ISettingsStore _settingsStore;
     private readonly IVideoTagProvider _tagProvider;
     private readonly IUserNotificationService _notificationService;
@@ -58,6 +59,7 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
         PlayStreamType streamType,
         DownloadListState downloadLists,
         DownloadTaskProjectionStore projectionStore,
+        DownloadTaskAdmissionService admission,
         ISettingsStore settingsStore,
         IVideoTagProvider tagProvider,
         IWbiKeyProvider wbiKeyProvider,
@@ -67,6 +69,7 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
     {
         _downloadLists = downloadLists ?? throw new ArgumentNullException(nameof(downloadLists));
         _projectionStore = projectionStore ?? throw new ArgumentNullException(nameof(projectionStore));
+        _admission = admission ?? throw new ArgumentNullException(nameof(admission));
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
         _tagProvider = tagProvider ?? throw new ArgumentNullException(nameof(tagProvider));
         _notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
@@ -319,12 +322,9 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
                 var audioCodec = Constant.GetAudioQualities().FirstOrDefault(t => t.Name == page.AudioQualityFormat) ?? new Quality();
 
                 // 判断是否同一个视频，需要cid、画质、音质、视频编码都相同
-
                 // 如果存在正在下载列表，则跳过，并提示
                 var isDownloading = false;
-
-
-                foreach (var item in _downloadLists.Downloading.Concat(addedItems))
+                foreach (var item in _downloadLists.Downloading)
                 {
                     if (item.DownloadBase == null)
                     {
@@ -592,16 +592,11 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
                         cancellationToken).ConfigureAwait(true);
                 }
 
-                await _projectionStore
-                    .AddDownloadingAsync(downloadingItem, cancellationToken)
+                await _admission
+                    .AdmitAsync(downloadingItem, cancellationToken)
                     .ConfigureAwait(true);
                 addedItems.Add(downloadingItem);
             }
-        }
-
-        if (addedItems.Count > 0)
-        {
-            _downloadLists.Downloading.AddRange(addedItems);
         }
 
         return addedItems.Count;

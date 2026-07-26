@@ -1,46 +1,46 @@
 using System;
-using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
+using DownKyi.Application.Downloads;
 using DownKyi.Core.Logging;
-using DownKyi.Core.Settings;
 using DownKyi.Domain.Downloads;
-using DownKyi.Models;
-using DownKyi.ViewModels.DownloadManager;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 
 namespace DownKyi.Services.Download;
 
 internal sealed class DownloadOrchestrator : IDownloadRuntime
 {
-    private readonly DownloadPipeline _pipeline;
+    private readonly IDownloadTaskExecutor _executor;
     private readonly DownloadTaskStateWriter _stateWriter;
-    private readonly DownloadListState _downloadLists;
-    private readonly ISettingsStore _settingsStore;
+    private readonly IDownloadTaskApplicationService _tasks;
+    private readonly int _workerCount;
     private readonly ILogger<DownloadOrchestrator> _logger;
-    private readonly Lock _queueLock = new();
-    private readonly HashSet<DownloadingItem> _queuedDownloads = [];
-    private Channel<DownloadingItem>? _downloadQueue;
+    private readonly ConcurrentDictionary<DownloadTaskId, byte> _scheduledTasks = new();
+    private readonly ConcurrentDictionary<DownloadTaskId, CancellationTokenSource> _activeExecutions = new();
+    private Channel<DownloadTaskId>? _admissionQueue;
+    private Channel<DownloadTaskId>? _downloadQueue;
+    private Task _admissionWorker = Task.CompletedTask;
     private Task[] _downloadWorkers = [];
-    private Task? _dispatchTask;
     private CancellationTokenSource? _tokenSource;
     private bool _disposed;
 
     public DownloadOrchestrator(
-        DownloadPipeline pipeline,
+        IDownloadTaskExecutor executor,
         DownloadTaskStateWriter stateWriter,
-        DownloadListState downloadLists,
-        ISettingsStore settingsStore,
+        IDownloadTaskApplicationService tasks,
+        int workerCount,
         ILogger<DownloadOrchestrator> logger)
     {
-        _pipeline = pipeline ?? throw new ArgumentNullException(nameof(pipeline));
+        _executor = executor ?? throw new ArgumentNullException(nameof(executor));
         _stateWriter = stateWriter ?? throw new ArgumentNullException(nameof(stateWriter));
-        _downloadLists = downloadLists ?? throw new ArgumentNullException(nameof(downloadLists));
-        _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
+        _tasks = tasks ?? throw new ArgumentNullException(nameof(tasks));
+        _workerCount = Math.Max(1, workerCount);
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -53,23 +53,72 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
         }
 
         cancellationToken.ThrowIfCancellationRequested();
-        await _pipeline.StartAsync(cancellationToken).ConfigureAwait(false);
+        await _executor.StartAsync(cancellationToken).ConfigureAwait(false);
 
         _tokenSource = new CancellationTokenSource();
-        var workerCount = Math.Max(1, _settingsStore.Current.Network.MaxCurrentDownloads);
-        _downloadQueue = Channel.CreateBounded<DownloadingItem>(new BoundedChannelOptions(
-            Math.Max(32, workerCount * 8))
+        _admissionQueue = Channel.CreateUnbounded<DownloadTaskId>(new UnboundedChannelOptions
+        {
+            SingleReader = true,
+            SingleWriter = false
+        });
+        _downloadQueue = Channel.CreateBounded<DownloadTaskId>(new BoundedChannelOptions(
+            Math.Max(32, _workerCount * 8))
         {
             FullMode = BoundedChannelFullMode.Wait,
-            SingleReader = workerCount == 1,
-            SingleWriter = true
+            SingleReader = _workerCount == 1,
+            SingleWriter = false
         });
-        _downloadWorkers = Enumerable.Range(0, workerCount)
-            .Select(_ => Task.Run(() => DownloadWorkerAsync(
-                _downloadQueue.Reader,
-                _tokenSource.Token)))
+        _downloadWorkers = Enumerable.Range(0, _workerCount)
+            .Select(_ => DownloadWorkerAsync(_downloadQueue.Reader, _tokenSource.Token))
             .ToArray();
-        _dispatchTask = Task.Run(DispatchAsync, CancellationToken.None);
+        _admissionWorker = ForwardAdmissionsAsync(
+            _admissionQueue.Reader,
+            _downloadQueue.Writer,
+            _tokenSource.Token);
+    }
+
+    public async Task EnqueueAsync(
+        DownloadTaskId taskId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(taskId);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        cancellationToken.ThrowIfCancellationRequested();
+        var queue = _admissionQueue
+            ?? throw new InvalidOperationException("The download runtime has not started.");
+        if (!_scheduledTasks.TryAdd(taskId, 0))
+        {
+            return;
+        }
+
+        try
+        {
+            await queue.Writer.WriteAsync(taskId, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            _scheduledTasks.TryRemove(taskId, out _);
+            throw;
+        }
+    }
+
+    public async Task<bool> CancelAsync(DownloadTaskId taskId)
+    {
+        ArgumentNullException.ThrowIfNull(taskId);
+        if (!_activeExecutions.TryGetValue(taskId, out var execution))
+        {
+            return false;
+        }
+
+        try
+        {
+            await execution.CancelAsync().ConfigureAwait(false);
+            return true;
+        }
+        catch (ObjectDisposedException)
+        {
+            return false;
+        }
     }
 
     public async Task StopAsync(CancellationToken cancellationToken = default)
@@ -79,114 +128,139 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
             return;
         }
 
-        await DownloadShutdownCoordinator.StopAsync(
-            _tokenSource,
-            _dispatchTask,
-            _downloadWorkers,
-            TimeSpan.FromSeconds(30),
-            exception => _logger.LogErrorMessage(
-                "Download workers failed during shutdown.",
-                exception),
-            _pipeline.PersistShutdownStateAsync).ConfigureAwait(false);
-
-        await _pipeline.StopAsync(cancellationToken).ConfigureAwait(false);
-        _tokenSource.Dispose();
-        _tokenSource = null;
-        _dispatchTask = null;
-        _downloadQueue = null;
-        _downloadWorkers = [];
-        lock (_queueLock)
-        {
-            _queuedDownloads.Clear();
-        }
-    }
-
-    private async Task DispatchAsync()
-    {
-        var queue = _downloadQueue ?? throw new InvalidOperationException("Download queue is not initialized.");
-        var token = _tokenSource?.Token ?? CancellationToken.None;
+        _admissionQueue?.Writer.TryComplete();
         try
         {
-            while (!token.IsCancellationRequested)
-            {
-                foreach (var downloading in _downloadLists.Downloading)
-                {
-                    if (downloading.Downloading.DownloadStatus is not (
-                            DownloadStatus.NotStarted or DownloadStatus.WaitForDownload) ||
-                        !TryMarkQueued(downloading))
-                    {
-                        continue;
-                    }
-
-                    try
-                    {
-                        await queue.Writer.WriteAsync(downloading, token).ConfigureAwait(false);
-                    }
-                    catch
-                    {
-                        UnmarkQueued(downloading);
-                        throw;
-                    }
-                }
-
-                await Task.Delay(TimeSpan.FromMilliseconds(500), token).ConfigureAwait(false);
-            }
-        }
-        catch (OperationCanceledException) when (token.IsCancellationRequested)
-        {
-            return;
-        }
-        catch (InvalidOperationException exception)
-        {
-            _logger.LogErrorMessage("Download work loop failed.", exception);
+            await DownloadShutdownCoordinator.StopAsync(
+                _tokenSource,
+                [.. _downloadWorkers, _admissionWorker],
+                TimeSpan.FromSeconds(30),
+                exception => _logger.LogErrorMessage(
+                    "Download workers failed during shutdown.",
+                    exception),
+                _executor.PersistShutdownStateAsync).ConfigureAwait(false);
         }
         finally
         {
-            queue.Writer.TryComplete();
+            try
+            {
+                await _executor.StopAsync(cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                _tokenSource.Dispose();
+                _tokenSource = null;
+                _admissionQueue = null;
+                _downloadQueue = null;
+                _admissionWorker = Task.CompletedTask;
+                _downloadWorkers = [];
+                _scheduledTasks.Clear();
+            }
+        }
+    }
+
+    private static async Task ForwardAdmissionsAsync(
+        ChannelReader<DownloadTaskId> admissions,
+        ChannelWriter<DownloadTaskId> downloads,
+        CancellationToken shutdownToken)
+    {
+        try
+        {
+            await foreach (var taskId in admissions.ReadAllAsync(shutdownToken).ConfigureAwait(false))
+            {
+                await downloads.WriteAsync(taskId, shutdownToken).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
+        {
+            return;
         }
     }
 
     private async Task DownloadWorkerAsync(
-        ChannelReader<DownloadingItem> reader,
-        CancellationToken cancellationToken)
+        ChannelReader<DownloadTaskId> reader,
+        CancellationToken shutdownToken)
     {
         try
         {
-            await foreach (var downloading in reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+            await foreach (var taskId in reader.ReadAllAsync(shutdownToken).ConfigureAwait(false))
             {
-                var taskId = new DownloadTaskId(downloading.DownloadBase.Id);
+                CancellationTokenSource? execution = null;
+                var ownsExecution = false;
                 try
                 {
-                    if (!_downloadLists.Downloading.Contains(downloading) ||
-                        _pipeline.GetTaskPhase(taskId) != DownloadPhase.Queued)
+                    var task = await _tasks.FindAsync(taskId, shutdownToken).ConfigureAwait(false);
+                    if (task?.Phase != DownloadPhase.Queued)
                     {
                         continue;
                     }
 
-                    await _stateWriter.StartAsync(taskId, cancellationToken).ConfigureAwait(false);
-                    await _pipeline.ExecuteAsync(taskId, cancellationToken).ConfigureAwait(false);
+                    execution = CancellationTokenSource.CreateLinkedTokenSource(shutdownToken);
+                    ownsExecution = _activeExecutions.TryAdd(taskId, execution);
+                    if (!ownsExecution)
+                    {
+                        continue;
+                    }
+
+                    await _stateWriter.StartAsync(taskId, execution.Token).ConfigureAwait(false);
+                    await _executor.ExecuteAsync(taskId, execution.Token).ConfigureAwait(false);
                 }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
                 {
                     return;
                 }
+                catch (OperationCanceledException) when (execution?.IsCancellationRequested == true)
+                {
+                    continue;
+                }
                 catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
-                    or InvalidOperationException or HttpRequestException or Newtonsoft.Json.JsonException)
+                    or InvalidOperationException or ArgumentException or FormatException
+                    or NotSupportedException or TimeoutException or HttpRequestException
+                    or Newtonsoft.Json.JsonException or SqliteException)
                 {
                     _logger.LogErrorMessage("Download worker failed.", exception);
-                    await _pipeline.MarkFailedAsync(
-                        taskId).ConfigureAwait(false);
+                    await TryMarkFailedAsync(taskId).ConfigureAwait(false);
                 }
                 finally
                 {
                     await ConfirmPauseAfterWorkerStopsAsync(taskId).ConfigureAwait(false);
-                    UnmarkQueued(downloading);
+                    if (ownsExecution &&
+                        _activeExecutions.TryRemove(taskId, out var ownedExecution))
+                    {
+                        ownedExecution.Dispose();
+                    }
+                    else
+                    {
+                        execution?.Dispose();
+                    }
+
+                    _scheduledTasks.TryRemove(taskId, out _);
+                    await RequeueIfNeededAsync(taskId, shutdownToken).ConfigureAwait(false);
                 }
             }
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
         {
             return;
+        }
+    }
+
+    private async Task TryMarkFailedAsync(DownloadTaskId taskId)
+    {
+        try
+        {
+            var task = await _tasks.FindAsync(taskId, CancellationToken.None).ConfigureAwait(false);
+            if (task?.Phase is not (DownloadPhase.Queued or DownloadPhase.Downloading))
+            {
+                return;
+            }
+
+            await _executor.MarkFailedAsync(taskId, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+            or InvalidOperationException or SqliteException)
+        {
+            _logger.LogErrorMessage("Download failure state could not be persisted.", exception);
         }
     }
 
@@ -194,7 +268,8 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
     {
         try
         {
-            if (_pipeline.GetTaskPhase(taskId) == DownloadPhase.Pausing)
+            var task = await _tasks.FindAsync(taskId, CancellationToken.None).ConfigureAwait(false);
+            if (task?.Phase == DownloadPhase.Pausing)
             {
                 await _stateWriter.ConfirmPausedAsync(taskId, CancellationToken.None)
                     .ConfigureAwait(false);
@@ -206,19 +281,30 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
         }
     }
 
-    private bool TryMarkQueued(DownloadingItem downloading)
+    private async Task RequeueIfNeededAsync(
+        DownloadTaskId taskId,
+        CancellationToken shutdownToken)
     {
-        lock (_queueLock)
+        if (shutdownToken.IsCancellationRequested)
         {
-            return _queuedDownloads.Add(downloading);
+            return;
         }
-    }
 
-    private void UnmarkQueued(DownloadingItem downloading)
-    {
-        lock (_queueLock)
+        try
         {
-            _queuedDownloads.Remove(downloading);
+            var task = await _tasks.FindAsync(taskId, shutdownToken).ConfigureAwait(false);
+            if (task?.Phase == DownloadPhase.Queued)
+            {
+                await EnqueueAsync(taskId, shutdownToken).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (ChannelClosedException)
+        {
+            return;
         }
     }
 
@@ -233,6 +319,6 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
         _tokenSource?.Cancel();
         _tokenSource?.Dispose();
         _tokenSource = null;
-        _pipeline.Dispose();
+        _executor.Dispose();
     }
 }
