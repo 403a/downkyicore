@@ -14,6 +14,8 @@ internal sealed record LoopbackResponse(
 
 internal sealed class LoopbackHttpServer : IAsyncDisposable
 {
+    private readonly TaskCompletionSource _firstRequestReceived =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly CancellationTokenSource _shutdown = new();
     private readonly Func<int, LoopbackResponse> _responseFactory;
     private readonly TcpListener _listener;
@@ -34,6 +36,11 @@ internal sealed class LoopbackHttpServer : IAsyncDisposable
     public Uri Url { get; }
 
     public int RequestCount => Volatile.Read(ref _requestCount);
+
+    public Task WaitForFirstRequestAsync(CancellationToken cancellationToken)
+    {
+        return _firstRequestReceived.Task.WaitAsync(cancellationToken);
+    }
 
     private async Task RunAsync(CancellationToken cancellationToken)
     {
@@ -69,6 +76,7 @@ internal sealed class LoopbackHttpServer : IAsyncDisposable
         }
 
         var requestNumber = Interlocked.Increment(ref _requestCount);
+        _firstRequestReceived.TrySetResult();
         var response = _responseFactory(requestNumber);
         if (response.DelayBeforeResponse > TimeSpan.Zero)
         {

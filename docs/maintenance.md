@@ -62,6 +62,8 @@ PR 03-06 result: legacy GID, partial-file maps, completed asset keys, paused sta
 
 Gate 5 result: strict `AnalysisMode=All` Release build completed with zero warnings, all 565 solution tests passed, format verification and `git diff --check` passed, the module-boundary audit completed, NuGet reported no vulnerable or deprecated packages, and the candidate-file Gitleaks scan reported zero findings. Tests cover direct admission, pre-start buffering, deduplication, 1/4/8 worker execution, per-task cancellation, startup recovery, shutdown recovery, and architecture-test isolation from ignored local tooling trees. PR #88 also passed the Windows/Linux/macOS quality matrix and CodeQL.
 
+Loopback cancellation tests must synchronize on the server receiving the first request before canceling. Fixed timeouts are not an acceptable substitute because a loaded Windows runner can cancel before socket acceptance and produce a false zero-request failure.
+
 PR 07-15 result: Release build completed with zero warnings, 161 tests passed including real FFmpeg/ffprobe seek validation and Host smoke without Prism global container state, format verification passed, and both vulnerable and deprecated package audits were clean. Cross-RID Release builds passed for Windows x86, Linux x64/arm64, and macOS x64/arm64. An isolated Windows process smoke created the main window, accepted close, and exited with code 0 without reading or writing real user data. Native Linux/macOS execution remains owned by their CI runners.
 
 ## Settings Persistence Policy
