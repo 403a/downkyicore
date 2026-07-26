@@ -133,6 +133,7 @@ internal static class DesktopComposition
         services.AddSingleton<IClipboardService, AvaloniaClipboardService>();
         services.AddSingleton<IFilePickerService, AvaloniaFilePickerService>();
         services.AddSingleton<IPlatformLauncher, AvaloniaPlatformLauncher>();
+        services.AddSingleton<ILoginQrCodeRenderer, LoginQrCodeRenderer>();
         services.AddSingleton<IUserNotificationService, DesktopNotificationService>();
         services.AddSingleton<IAppNavigationService, AvaloniaNavigationService>();
         services.AddSingleton<IAppDialogService, AvaloniaDialogService>();

@@ -1,7 +1,5 @@
-using Avalonia.Media.Imaging;
 using DownKyi.Application.Bilibili;
 using DownKyi.Core.BiliApi.Login.Models;
-using DownKyi.Core.Utils;
 using Newtonsoft.Json;
 
 namespace DownKyi.Core.BiliApi.Login;
@@ -51,45 +49,5 @@ public static class LoginQr
             cancellationToken).ConfigureAwait(false);
         BiliApiRequest.RequirePayload(response.Data);
         return response;
-    }
-
-    /// <summary>
-    /// 获得登录二维码
-    /// </summary>
-    /// <returns></returns>
-    public static async Task<Bitmap?> GetLoginQrCodeAsync(
-        this IBilibiliApiClient client,
-        CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var login = await client.GetLoginUrlAsync(cancellationToken).ConfigureAwait(false);
-            var loginAddress = login?.Data?.QrCodeAddress;
-            return Uri.TryCreate(loginAddress, UriKind.Absolute, out var loginUri)
-                ? GetLoginQrCode(loginUri)
-                : null;
-        }
-        catch (ArgumentException)
-        {
-            return null;
-        }
-        catch (InvalidOperationException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// 根据输入url生成二维码
-    /// </summary>
-    /// <param name="loginUri"></param>
-    /// <returns></returns>
-    public static Bitmap? GetLoginQrCode(Uri? loginUri)
-    {
-        if (loginUri == null) return null;
-        // 设置的参数影响app能否成功扫码
-        var qrCode = QrCode.EncodeQrCode(loginUri.AbsoluteUri, 11, 10, null, 0, 0, false);
-
-        return qrCode;
     }
 }

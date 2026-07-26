@@ -88,6 +88,7 @@ flowchart TD
     MainVm["viewmodel.main-window\nsrc/DownKyi.Desktop/ViewModels/MainWindowViewModel.cs"]
     IndexVm["viewmodel.index\nViewIndexViewModel.cs"]
     LoginVm["viewmodel.login\nViewLoginViewModel.cs"]
+    LoginQrRenderer["ui.login-qr-renderer\nLoginQrCodeRenderer.cs"]
     AccountSession["service.account-session\nServices/Account"]
     FriendVms["viewmodel.friend-relations\nFriends ViewModels"]
     FriendRelations["service.friend-relations\nFriendRelationCoordinator.cs"]
@@ -138,7 +139,6 @@ flowchart TD
     AnalyzerInventory["workflow.analyzer-inventory\nscript/analyzer-inventory.ps1"]
 
     Program -->|calls| App
-    Program -->|runs restart helper| Lifecycle
     App -->|creates| Host
     App -->|attaches Host and shell| Lifecycle
     App -->|resolves compatible data paths| Storage
@@ -173,6 +173,7 @@ flowchart TD
     MainVm -->|navigates| VideoVm
     IndexVm -->|refreshes| AccountSession
     LoginVm -->|polls and persists| AccountSession
+    LoginVm -->|renders absolute login URI| LoginQrRenderer
     AccountSession -->|calls| BiliApi
     FriendVms -->|loads pages| FriendRelations
     FriendRelations -->|calls| BiliApi
@@ -576,6 +577,7 @@ inbound:
   - viewmodel.main-window
 outbound:
   - service.account-session
+  - ui.login-qr-renderer
   - viewmodel.video-detail
 contracts:
   - Construction does not start user API work; the first `start` navigation performs exactly one refresh.
@@ -610,7 +612,32 @@ hazards:
   - Wrapping the entire UI workflow in Task.Run causes cross-thread UI/event access and hides cancellation ownership.
 tests:
   - test.account-session
+  - test.ui-smoke
   - test.architecture-boundaries
+```
+
+### ui.login-qr-renderer
+
+```yaml
+id: ui.login-qr-renderer
+type: ui
+paths:
+  - src/DownKyi.Desktop/Services/Account/ILoginQrCodeRenderer.cs
+  - src/DownKyi.Desktop/Services/Account/LoginQrCodeRenderer.cs
+  - src/DownKyi.Desktop/Resources/Bilibili/BilibiliImages.axaml
+  - src/DownKyi.Desktop/Resources/Bilibili/ZoneImages.axaml
+responsibility: Renders an absolute login URI into an Avalonia bitmap and keeps all QR/UI resource dependencies inside Desktop.
+inbound:
+  - viewmodel.login
+outbound: []
+contracts:
+  - Core owns login HTTP contracts but cannot reference Avalonia, QRCoder, Bitmap, or XAML resources.
+  - Relative login URIs are rejected before rendering.
+hazards:
+  - Moving QRCoder back into Core would recreate a UI/package dependency in the protocol layer.
+tests:
+  - test.ui-smoke
+  - test.module-boundary-ratchets
 ```
 
 ### service.account-session
@@ -2254,6 +2281,7 @@ tests:
 sequenceDiagram
     participant OS as OS process
     participant Program as Program
+    participant Desktop as DesktopApplication
     participant App as App.axaml.cs
     participant Host as Microsoft Host
     participant Shell as MainWindow
@@ -2264,7 +2292,8 @@ sequenceDiagram
     participant Runtime as DownloadRuntime
 
     OS->>Program: launch DownKyi
-    Program->>App: BuildAvaloniaApp()
+    Program->>Desktop: RunAsync(args)
+    Desktop->>App: BuildAvaloniaApp()
     App->>Host: Create + AddDownKyiDesktop()
     Host->>Shell: Resolve MainWindow + load full XAML
     App-->>Host: StartAsync after shell creation
@@ -2970,7 +2999,7 @@ test.module-boundary-ratchets:
     - docs/design-docs/module-boundary-naming-audit.md
     - docs/testing/module-boundary-ratchets.md
   guards:
-    - Core UI/Avalonia dependencies can decrease but cannot gain another file, package, or resource owner
+    - Core must contain zero UI/Avalonia/QRCoder dependencies and zero XAML resource owners
     - service contracts cannot add another dependency on ViewModel types
     - duplicate simple-name sets, generic buckets, and file/type mismatch sets cannot grow
     - existing files over 500 physical lines cannot grow and new oversized files are rejected

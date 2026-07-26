@@ -1,0 +1,32 @@
+using DownKyi.Services.Account;
+
+namespace DownKyi.Desktop.Tests;
+
+public sealed class LoginQrCodeRendererTests
+{
+    [Fact]
+    public async Task RendererCreatesAUsableBitmapForAnAbsoluteLoginUri()
+    {
+        await HeadlessUiTestHost.RunAsync(() =>
+        {
+            using var bitmap = new LoginQrCodeRenderer().Render(
+                new Uri("https://passport.bilibili.com/login?test=contract"));
+
+            Assert.True(bitmap.PixelSize.Width > 0);
+            Assert.True(bitmap.PixelSize.Height > 0);
+            Assert.Equal(bitmap.PixelSize.Width, bitmap.PixelSize.Height);
+        }).ConfigureAwait(true);
+    }
+
+    [Fact]
+    public async Task RendererRejectsRelativeUris()
+    {
+        await HeadlessUiTestHost.RunAsync(() =>
+        {
+            var renderer = new LoginQrCodeRenderer();
+
+            Assert.Throws<ArgumentException>(() =>
+                renderer.Render(new Uri("/relative", UriKind.Relative)));
+        }).ConfigureAwait(true);
+    }
+}

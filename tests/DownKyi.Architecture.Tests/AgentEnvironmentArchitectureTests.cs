@@ -158,7 +158,7 @@ public sealed class AgentEnvironmentArchitectureTests
             "docs/design-docs/module-boundary-naming-audit.md");
 
         var ratchets = Read("tests/DownKyi.Architecture.Tests/ModuleBoundaryBaselineTests.cs");
-        Assert.Contains("CoreUiDependenciesCannotGrowBeyondTheKnownBaseline", ratchets, StringComparison.Ordinal);
+        Assert.Contains("CoreHasNoUiOrQrRenderingDependencies", ratchets, StringComparison.Ordinal);
         Assert.Contains("ServiceContractsCannotAddPresentationDependencies", ratchets, StringComparison.Ordinal);
         Assert.Contains("OversizedProductionFilesCannotGrowBeyondTheKnownBaseline", ratchets, StringComparison.Ordinal);
     }

@@ -52,6 +52,8 @@ Rollback:
 
 ## Slice 2: Headless Core
 
+Status: completed
+
 Steps:
 
 1. Keep login HTTP contracts in Core and move QR bitmap rendering to Desktop.
@@ -68,6 +70,15 @@ Verification:
 Completion:
 
 - Core contains no `.axaml`, Avalonia namespace, Bitmap return type, or QR rendering implementation.
+
+Evidence:
+
+- module audit reports 0 Core UI/Avalonia/QRCoder/XAML owners.
+- strict Release build: 0 warnings, 0 errors.
+- Desktop QR renderer and complete XAML smoke: 13/13 passed.
+- Core contract tests: 128/128 passed.
+- architecture ratchets: 177/177 passed.
+- file/type mismatch baseline decreased from 7 to 5.
 
 Rollback:
 

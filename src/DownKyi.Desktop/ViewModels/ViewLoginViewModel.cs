@@ -5,7 +5,6 @@ using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.Input;
 using DownKyi.Application.Desktop;
 using DownKyi.Core.BiliApi;
-using DownKyi.Core.BiliApi.Login;
 using DownKyi.Core.Logging;
 using DownKyi.Services.Account;
 using DownKyi.Utils;
@@ -18,6 +17,7 @@ internal class ViewLoginViewModel : ViewModelBase
     public const string Tag = "PageLogin";
 
     private readonly ILoginCoordinator _loginCoordinator;
+    private readonly ILoginQrCodeRenderer _loginQrCodeRenderer;
     private readonly ILogger<ViewLoginViewModel> _logger;
     private CancellationTokenSource? _tokenSource;
 
@@ -52,9 +52,12 @@ internal class ViewLoginViewModel : ViewModelBase
     public ViewLoginViewModel(
         IDesktopInteractionContext desktopInteractions,
         ILoginCoordinator loginCoordinator,
+        ILoginQrCodeRenderer loginQrCodeRenderer,
         ILogger<ViewLoginViewModel> logger) : base(desktopInteractions)
     {
         _loginCoordinator = loginCoordinator ?? throw new ArgumentNullException(nameof(loginCoordinator));
+        _loginQrCodeRenderer = loginQrCodeRenderer
+            ?? throw new ArgumentNullException(nameof(loginQrCodeRenderer));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -111,7 +114,7 @@ internal class ViewLoginViewModel : ViewModelBase
                 return;
             }
 
-            PropertyChangeAsync(() => { LoginQrCode = LoginQr.GetLoginQrCode(loginUri); });
+            PropertyChangeAsync(() => { LoginQrCode = _loginQrCodeRenderer.Render(loginUri); });
 
             await GetLoginStatusAsync(loginUrl.Data.QrcodeKey, cancellationToken).ConfigureAwait(true);
         }

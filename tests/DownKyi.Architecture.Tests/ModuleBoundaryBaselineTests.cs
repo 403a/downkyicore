@@ -7,19 +7,9 @@ public sealed class ModuleBoundaryBaselineTests
     private static readonly string RepositoryRoot = FindRepositoryRoot();
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(2);
 
-    private static readonly HashSet<string> KnownCoreUiDependencies = new(StringComparer.Ordinal)
-    {
-        "DownKyi.Core/BiliApi/BilibiliImages.axaml",
-        "DownKyi.Core/BiliApi/Login/LoginQR.cs",
-        "DownKyi.Core/BiliApi/Zone/ZoneImages.axaml",
-        "DownKyi.Core/DownKyi.Core.csproj",
-        "DownKyi.Core/Utils/QRCode.cs"
-    };
-
     private static readonly HashSet<string> KnownPresentationBoundServiceContracts = new(StringComparer.Ordinal)
     {
         "src/DownKyi.Desktop/Services/Download/IAddToDownloadSession.cs",
-        "src/DownKyi.Desktop/Services/Download/ITransferBackend.cs",
         "src/DownKyi.Desktop/Services/IFavoritesService.cs",
         "src/DownKyi.Desktop/Services/IInfoService.cs"
     };
@@ -87,12 +77,10 @@ public sealed class ModuleBoundaryBaselineTests
 
     private static readonly HashSet<string> KnownFileTypeMismatches = new(StringComparer.Ordinal)
     {
-        "DownKyi.Core/BiliApi/Login/LoginQR.cs",
         "DownKyi.Core/BiliApi/Users/Models/SpaceSeasonsSeries.cs",
         "DownKyi.Core/BiliApi/Users/Models/SpaceSeriesMeta.cs",
         "DownKyi.Core/Logging/ApplicationLogJsonModels.cs",
         "DownKyi.Core/Models/NfoModels.cs",
-        "DownKyi.Core/Utils/QRCode.cs",
         "src/DownKyi.Desktop/Commands/AsyncDelegateCommand.cs"
     };
 
@@ -115,7 +103,7 @@ public sealed class ModuleBoundaryBaselineTests
     };
 
     [Fact]
-    public void CoreUiDependenciesCannotGrowBeyondTheKnownBaseline()
+    public void CoreHasNoUiOrQrRenderingDependencies()
     {
         var coreRoot = Path.Combine(RepositoryRoot, "DownKyi.Core");
         var actual = Directory
@@ -135,12 +123,14 @@ public sealed class ModuleBoundaryBaselineTests
                     return false;
                 }
 
-                return File.ReadAllText(path).Contains("Avalonia", StringComparison.Ordinal);
+                var source = File.ReadAllText(path);
+                return source.Contains("Avalonia", StringComparison.Ordinal) ||
+                       source.Contains("QRCoder", StringComparison.Ordinal);
             })
             .Select(Relative)
             .ToArray();
 
-        AssertSubset(actual, KnownCoreUiDependencies, "Core UI dependency");
+        Assert.Empty(actual);
     }
 
     [Fact]

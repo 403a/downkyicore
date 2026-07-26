@@ -123,26 +123,17 @@ Gate 7 已建立 `IBilibiliApiClient`、`IBuvidProvider` 與 `IBilibiliCookiePro
 
 Architecture tests 現在禁止重新加入 static client、同步 send/read 與 blocking backoff；Infrastructure tests 固定 retry、取消、stream ownership、partial-file cleanup、buvid single-flight 與 Host registration 契約。
 
-## Finding 7: Core 仍含 UI
+## Resolved Finding 7: Core headless boundary
 
-已確認 baseline：
-
-- `DownKyi.Core/DownKyi.Core.csproj`
-- `DownKyi.Core/BiliApi/Login/LoginQR.cs`
-- `DownKyi.Core/Utils/QRCode.cs`
-- `DownKyi.Core/BiliApi/BilibiliImages.axaml`
-- `DownKyi.Core/BiliApi/Zone/ZoneImages.axaml`
-
-目標是 Core 回傳 login QR payload/descriptor，由 Desktop renderer 產生 Avalonia `Bitmap`；image resource dictionaries 移至 Desktop。
+Core 現在只保留 login URL/status HTTP contracts。`ILoginQrCodeRenderer` 與 QRCoder/Avalonia bitmap 實作位於 Desktop，兩份 image resource dictionaries 也已移至 `src/DownKyi.Desktop/Resources/Bilibili`。Core package graph 不再包含 Avalonia 或 QRCoder，architecture test 對 Core UI/QR dependency 採零容忍而非 baseline。
 
 ## Finding 8: Service contracts 反向依賴 presentation
 
-已確認四個 interface files：
+已確認三個 interface files：
 
-- `DownKyi/Services/IInfoService.cs`
-- `DownKyi/Services/IFavoritesService.cs`
-- `DownKyi/Services/Download/IAddToDownloadSession.cs`
-- `DownKyi/Services/Download/ITransferBackend.cs`
+- `src/DownKyi.Desktop/Services/IInfoService.cs`
+- `src/DownKyi.Desktop/Services/IFavoritesService.cs`
+- `src/DownKyi.Desktop/Services/Download/IAddToDownloadSession.cs`
 
 它們的契約直接使用 `DownKyi.ViewModels` types。這些應先改為 Domain/Application DTO 或 typed transfer context，再移至 Application ports。
 
@@ -167,7 +158,7 @@ Domain task changed
 
 目前 generic-name baseline 有 5 項：兩個 `Utils`、兩個 `Constant`、一個 `StorageManager`。應以責任拆分和具名 owner 取代，不建議建立會禁止所有 `*Manager`、`*Helper` 的全域 analyzer。
 
-目前 file/type mismatch inventory 有 7 項。只有 `LoginQR.cs`/`LoginQr` 與 `QRCode.cs`/`QrCode` 是明確 casing mismatch；其餘包含 multi-type aggregate file 或 intentionally named command wrapper，需逐檔決策。
+目前 file/type mismatch baseline 已由 7 項降為 5 項；`LoginQR.cs`/`LoginQr` 已正名為 `LoginQr.cs`，`QRCode.cs`/`QrCode` 隨 Core QR renderer 移除。其餘包含 multi-type aggregate file 或 intentionally named command wrapper，需逐檔決策。
 
 附件提供的「檔名必須等於第一個型別」正規表示式會誤判 partial、`.axaml.cs`、多型別 DTO 與 interface companion records。此方案不採用。
 
@@ -190,8 +181,8 @@ Logging 風險成立，但「換成熟 sink」需要 ADR 與跨平台/隱私 ben
 | Attachment statement | Audit correction |
 |---|---|
 | 代表證據不是全 repo 統計 | 已加入可重現全 repo inventory script |
-| Core UI 代表證據 4 | 實際 baseline 5，含兩個 `.axaml` resources |
-| service/presentation 代表證據 3 | 實際 interface baseline 4 |
+| Core UI 代表證據 4 | 已移除全部 5 項；目前 Core UI/QR dependency 為 0 |
+| service/presentation 代表證據 3 | 可重現 inventory 確認 interface baseline 3 |
 | duplicate names 4 | 實際跨 namespace group 9，但不是全部都應禁止 |
 | `DownloadPipeline` 934 LOC / 1,058 lines | 使用可重現 physical line count 1,058；不混用未定義 LOC |
 | 先加入會紅的 architecture tests | 不採用；改用 subset/max ratchet，CI 維持綠色 |
@@ -203,7 +194,7 @@ Logging 風險成立，但「換成熟 sink」需要 ADR 與跨平台/隱私 ben
 
 `ModuleBoundaryBaselineTests` 目前保護：
 
-1. Core UI dependencies 不可新增。
+1. Core 必須維持 0 個 UI、Avalonia、QRCoder 或 `.axaml` dependencies。
 2. service contract presentation dependencies 不可新增。
 3. duplicate full-name sets 不可擴大。
 4. generic type-name baseline 不可擴大。
