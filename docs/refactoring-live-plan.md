@@ -34,7 +34,7 @@ Progress (2026-07-26):
 - Every executing task owns a linked cancellation source; deleting one active task does not stop its worker or unrelated tasks.
 - Pre-start admissions are deduplicated in `DownloadTaskQueueGateway` and flushed when the runtime attaches. A closing runtime returns admissions to that pending owner instead of dropping committed work.
 - `DispatchAsync`, the 500 ms delay, `_queuedDownloads`, and UI collection membership checks are removed.
-- Strict Release build is at zero warnings; all 565 solution tests, format verification, `git diff --check`, module-boundary audit, vulnerable/deprecated package audits, and the candidate secret scan are green. Commit/PR publication and remote matrix validation remain.
+- Strict Release build is at zero warnings; all 565 solution tests, format verification, `git diff --check`, module-boundary audit, vulnerable/deprecated package audits, and the candidate secret scan are green. Draft PR #88 is published and its Windows/Linux/macOS quality matrix plus CodeQL are green; merge into the stacked release-hardening base remains.
 
 Scope:
 
