@@ -6,7 +6,7 @@ using DownKyi.Application.Desktop;
 using DownKyi.Core.BiliApi.BiliUtils;
 using DownKyi.Core.Settings;
 
-namespace DownKyi.ViewModels.PageViewModels;
+namespace DownKyi.Presentation;
 
 internal class FavoritesMedia : ObservableObject
 {

@@ -1,15 +1,15 @@
 # DownKyi Module Boundary And Naming Audit
 
-Status: verified baseline
-Baseline date: 2026-07-22
-Baseline commit: `66dbe5161bb1683acff419c618554eb5da5c445a`
-Baseline branch: `refactor/pr-30-32-release-hardening`
+Status: maintained verified audit
+Last verified: 2026-07-26
+Verification base: `550709030210e4fe91113c9b1c05e451a7dc2120`
+Verification branch: `refactor/desktop-boundary`
 
 ## 結論
 
-附件報告指出的七類問題大多成立，但報告使用 `9be3289` 與不可追溯的對話 citation 作為基準，且遺漏了四個更高優先缺口。以目前工作樹重新量測後，專案的 build、test、analyzer 與跨平台 release gate 已相當成熟，但 Domain、Application、Infrastructure、Desktop 仍未成為實際 runtime 的主要責任邊界。
+附件報告指出的七類問題大多成立，但原始證據已被後續重構取代。以目前工作樹重新量測後，Desktop 已成為實際 UI owner、Core 已 headless、下載佇列與 HTTP 邊界也已收斂；剩餘主要缺口是 media execution context 仍讀取一個 UI projection，以及 aria2、FFmpeg、filesystem、logging 的最終 Infrastructure ownership。
 
-目前不得宣告重構完成，也不得發布 v1.1.0。`docs/refactoring-live-plan.md` 原本標示 complete 與實際狀態不符：最終 stacked branch 尚未進入 `main`，PR #75、#77、#79、#80 仍為 open，版本唯一來源仍是 `1.0.32`。
+目前仍不得宣告整體重構完成或發布 v1.1.0：Gate 8 尚待遠端整合，Gate 9 的 logging/naming/large-owner 工作尚未完成，最終 stacked branch 也尚未進入 `main`。版本唯一來源仍是 `1.0.32`。
 
 ## 可重現基線
 
@@ -24,40 +24,38 @@ pwsh ./script/audit-module-boundaries.ps1 `
 
 | Source root | Files | Physical lines |
 |---|---:|---:|
-| `DownKyi` | 280 | 41,238 |
-| `DownKyi.Core` | 275 | 19,742 |
-| `src/DownKyi.Domain` | 11 | 586 |
-| `src/DownKyi.Application` | 17 | 427 |
-| `src/DownKyi.Infrastructure` | 7 | 1,720 |
-| `src/DownKyi.Desktop` | 1 | 39 |
+| `DownKyi` | 1 | 14 |
+| `DownKyi.Core` | 274 | 19,154 |
+| `src/DownKyi.Domain` | 11 | 681 |
+| `src/DownKyi.Application` | 26 | 1,029 |
+| `src/DownKyi.Infrastructure` | 12 | 2,398 |
+| `src/DownKyi.Desktop` | 317 | 44,091 |
 
-既有 `DownKyi` 與 `DownKyi.Core` 佔上述 production source 約 95.7%。行數不能單獨證明設計錯誤，但配合 project references 與 runtime type usage，足以證明新 project boundaries 仍只承接少部分產品責任。
+`DownKyi` executable 已降為單一 14 行 bootstrap；Desktop 是最大的產品 owner。行數不能單獨證明設計品質，因此後續仍以 project references、runtime type usage 與 architecture tests 判定責任邊界。
 
 ## 優先級總表
 
 | Priority | Finding | Current evidence | Verdict |
 |---|---|---|---|
 | P0 | 發布與計畫狀態不一致 | stacked release-hardening branch not in `main`; `version.txt=1.0.32` | confirmed release blocker |
-| P1 | `DownKyi.Desktop` 是名義邊界 | 1 source file, 39 lines; Views/VMs/adapters remain in executable | confirmed, omitted by attachment |
+| resolved | Desktop ownership | 317 files; executable is one 14-line bootstrap | completed by Gate 8 |
 | P1 | Domain aggregate 不是 runtime authority | durable commands and queue identity now use Domain tasks; execution context still exposes one UI projection | durable authority resolved, projection leak remains |
 | P1 | Channel 仍輪詢 UI collection | direct `DownloadTaskId` admission; no dispatcher polling or collection-membership scheduling | resolved by Gate 5 |
 | P1 | `DownloadPipeline` 仍是 mixed-responsibility owner | typed six-stage sequence below 150 lines; presenter/projector isolated | resolved by Gate 6 stage extraction |
 | resolved | HTTP ownership | injected async Application ports plus Infrastructure transport | completed in Gate 7 |
-| P1 | Core 仍依賴 UI | 5 known files/project entries | confirmed |
-| P1 | service contracts 仍依賴 presentation | 3 interfaces | confirmed |
-| P1 | custom collection contract 不完整 | 4 consumers, 5 `NotImplementedException` members | confirmed, omitted by attachment |
+| resolved | Core headless boundary | 0 Avalonia/QRCoder/XAML owners | completed by Gate 8 |
+| resolved | service contracts 依賴 ViewModel | 0 interfaces | completed by Gate 8 |
+| resolved | custom collection contract | 0 custom collection references; standard read-only wrappers | completed by Gate 8 |
 | P2 | naming and folder taxonomy inconsistent | 9 duplicate-name groups, 5 generic names, 7 file/type mismatches | confirmed with qualifications |
 | P2 | oversized owners | 14 production files above 500 physical lines | confirmed, decreasing |
 | P2 | logging owner too broad | `ApplicationLogProvider` 715 lines and multiple responsibilities | confirmed design risk, not proven runtime defect |
 | P1 | AI knowledge environment incomplete | required root/docs structure and reproducible audit scripts now exist | resolved |
 
-## Finding 1: 名義上的 Desktop 邊界
+## Resolved Finding 1: Desktop 實際 ownership
 
-`src/DownKyi.Desktop` 只有 `Composition/DownKyiHost.cs`。真正的 Views、ViewModels、navigation adapters、dialogs、lifecycle 與 UI dispatcher 仍位於 executable project `DownKyi`。`DownKyi.csproj` 直接參考 Core、Application、Desktop、Domain 與 Infrastructure。
+Gate 8 已把 Avalonia App、Views、ViewModels、Presentation models、navigation/dialog adapters、platform services、resources、lifecycle 與 desktop runtime 移入 `src/DownKyi.Desktop`。`DownKyi` 只含 `Program.cs` 且只參考 Desktop。
 
-這不是「project 很薄」本身有錯，而是專案名稱暗示了不存在的隔離。現有 `ProjectDependencyTests` 只嚴格檢查四個 `src` projects，無法阻止 executable 中的 ViewModel 同時依賴 UI、store 與 runtime implementation。
-
-目標：讓 `DownKyi.Desktop` 真正承接桌面層，`DownKyi.exe` 只保留最小啟動與 composition root。
+Host/XAML smoke 直接從 Desktop assembly 建立 App、MainWindow 與關鍵 ViewModels；architecture ratchet 禁止 executable 再取得 runtime、UI 或 package ownership。
 
 ## Finding 2: Domain 不是下載狀態權威
 
@@ -127,21 +125,21 @@ Architecture tests 現在禁止重新加入 static client、同步 send/read 與
 
 Core 現在只保留 login URL/status HTTP contracts。`ILoginQrCodeRenderer` 與 QRCoder/Avalonia bitmap 實作位於 Desktop，兩份 image resource dictionaries 也已移至 `src/DownKyi.Desktop/Resources/Bilibili`。Core package graph 不再包含 Avalonia 或 QRCoder，architecture test 對 Core UI/QR dependency 採零容忍而非 baseline。
 
-## Finding 8: Service contracts 反向依賴 presentation
+## Resolved Finding 8: Service contracts 不再依賴 ViewModel
 
-已確認三個 interface files：
+原本三個 interface files 直接引用 `DownKyi.ViewModels`：
 
 - `src/DownKyi.Desktop/Services/IInfoService.cs`
 - `src/DownKyi.Desktop/Services/IFavoritesService.cs`
 - `src/DownKyi.Desktop/Services/Download/IAddToDownloadSession.cs`
 
-它們的契約直接使用 `DownKyi.ViewModels` types。這些應先改為 Domain/Application DTO 或 typed transfer context，再移至 Application ports。
+相關 projection types 已移到 `DownKyi.Presentation`，interface 對 `DownKyi.ViewModels` 的引用由 3 降為 0。這些 interfaces 目前是 Desktop-internal workflow contracts；日後若移到 Application，必須先替換為 framework-neutral records，不能把 Presentation types 一併上移。
 
-## Finding 9: 自製 collection 名稱與契約不一致
+## Resolved Finding 9: 標準 collection ownership
 
-`ImmutableObservableCollection<T>` 是可變 `IList<T>/IList`，使用 immutable backing list，但五個非泛型介面成員會在 runtime 丟出 `NotImplementedException`。Immutable backing 不會自動提供 atomic update、UI-thread ownership 或 notification ordering。
+`ImmutableObservableCollection<T>` 已刪除。`DownloadListState` 私有持有 `RangeObservableCollection<T>`，只向 ViewModel/View 公開穩定的 `ReadOnlyObservableCollection<T>`；startup、admission、completion、delete、replace 與 sort 都經 owner methods 執行。
 
-目標：
+目前資料流：
 
 ```text
 Domain task changed
@@ -150,7 +148,7 @@ Domain task changed
   -> ReadOnlyObservableCollection exposed to View
 ```
 
-這項必須有 UI binding、collection contract、thread-affinity 與 consumer migration tests。
+collection contract 測試確認外部 mutation 會被拒絕，Host/XAML smoke 確認 binding 未退化，architecture test 則禁止自製集合或 service-to-ViewModel contract 回歸。
 
 ## Finding 10: 命名 inventory 需要分類，不可機械化全域禁止
 
@@ -182,7 +180,7 @@ Logging 風險成立，但「換成熟 sink」需要 ADR 與跨平台/隱私 ben
 |---|---|
 | 代表證據不是全 repo 統計 | 已加入可重現全 repo inventory script |
 | Core UI 代表證據 4 | 已移除全部 5 項；目前 Core UI/QR dependency 為 0 |
-| service/presentation 代表證據 3 | 可重現 inventory 確認 interface baseline 3 |
+| service/presentation 代表證據 3 | 已由 3 收斂為 0，且 architecture test 採零容忍 |
 | duplicate names 4 | 實際跨 namespace group 9，但不是全部都應禁止 |
 | `DownloadPipeline` 934 LOC / 1,058 lines | 使用可重現 physical line count 1,058；不混用未定義 LOC |
 | 先加入會紅的 architecture tests | 不採用；改用 subset/max ratchet，CI 維持綠色 |
@@ -195,7 +193,7 @@ Logging 風險成立，但「換成熟 sink」需要 ADR 與跨平台/隱私 ben
 `ModuleBoundaryBaselineTests` 目前保護：
 
 1. Core 必須維持 0 個 UI、Avalonia、QRCoder 或 `.axaml` dependencies。
-2. service contract presentation dependencies 不可新增。
+2. service contract 對 ViewModel types 的依賴必須維持 0。
 3. duplicate full-name sets 不可擴大。
 4. generic type-name baseline 不可擴大。
 5. file/type mismatch baseline 不可擴大。
@@ -203,7 +201,7 @@ Logging 風險成立，但「換成熟 sink」需要 ADR 與跨平台/隱私 ben
 7. Domain-to-legacy reconstruction 不可離開 projection owner。
 8. UI collection polling 不可擴散。
 9. static/sync HTTP debt 不可擴散。
-10. custom mutable collection 不可增加 consumers 或 unsupported members。
+10. 已刪除的 custom mutable collection 不得返回；下載清單只能公開標準唯讀 wrapper。
 
 這些測試是過渡 ratchet。每移除一項債務，應同步刪除對應 baseline entry；不得把 baseline 當成永久例外清單。
 

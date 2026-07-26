@@ -30,7 +30,7 @@ internal sealed class DownloadTaskAdmissionService
         await _projections.AddDownloadingAsync(item, cancellationToken).ConfigureAwait(true);
 
         // Once persisted, admission must finish even if the originating UI operation is canceled.
-        _downloadLists.Downloading.Add(item);
+        _downloadLists.AddDownloading(item);
         await _taskQueue.EnqueueAsync(
             new DownloadTaskId(item.DownloadBase.Id),
             CancellationToken.None).ConfigureAwait(true);

@@ -21,6 +21,7 @@ The previous `Status: complete` was incorrect.
 - Gate 6 stage extraction passed two complete Windows/Linux/macOS quality and CodeQL rounds, then PR #89 was merged into `refactor/pr-30-32-release-hardening` as merge commit `e288913f`.
 - Gate 6 retry policy passed three complete remote rounds. Final Windows/Linux/macOS quality run `30187455431` and CodeQL run `30187455441` had zero check annotations, then PR #90 was merged into `refactor/pr-30-32-release-hardening` as merge commit `ba0a928e`.
 - Gate 7 async Bilibili Infrastructure ownership passed Windows/Linux/macOS quality run `30189537538`, protobuf run `30189537553`, and CodeQL run `30189537541`, then PR #91 was merged into `refactor/pr-30-32-release-hardening` as merge commit `55070903`.
+- Gate 8 local implementation and final gates are complete in three verified slices: Desktop now owns App/UI/runtime, Core is headless, UI lists expose owner-controlled read-only projections, strict build is warning-free, 610 tests pass, package audits are empty, and the 916-file Gitleaks scan is clean. It is not integrated until its PR passes the remote matrix and CodeQL.
 - `version.txt` remains `1.0.32`; v1.1.0 has not passed its release gate.
 
 No release tag may be created while any release blocker below remains.
@@ -29,22 +30,16 @@ No release tag may be created while any release blocker below remains.
 
 ### Gate 8: Complete Desktop Boundary And UI Projection Ownership
 
-Owner branch: `refactor/desktop-boundary` after runtime ports stabilize.
+Owner branch: `refactor/desktop-boundary`.
 
-Scope:
+Remaining work:
 
-- Move Views, ViewModels, UI projections, navigation/dialog adapters, dispatcher and lifecycle to `DownKyi.Desktop`.
-- Keep executable as minimal startup/composition.
-- Replace `ImmutableObservableCollection<T>` with owner-only `ObservableCollection<T>` exposed as `ReadOnlyObservableCollection<T>`.
-- Move QR rendering and Core XAML resources to Desktop.
-- Replace presentation-bound service contracts with Application DTO/ports.
+- Push one Gate 8 branch and open one PR against `refactor/pr-30-32-release-hardening`.
+- Require Windows/Linux/macOS quality CI, protobuf validation, and CodeQL before merge.
 
 Verification:
 
-- Host smoke resolves full XAML and key ViewModels from the new Desktop assembly.
-- collection contract and UI-thread tests pass.
-- Core has no Avalonia dependency or `.axaml` resource.
-- Application/service interfaces have no `DownKyi.ViewModels` types.
+- Confirm the remote checks use the same strict analyzer settings as local verification.
 
 Completion:
 

@@ -78,8 +78,7 @@ public sealed class DesktopInteractionArchitectureTests
         var pageItemDirectory = Path.Combine(
             RepositoryRoot,
             "src", "DownKyi.Desktop",
-            "ViewModels",
-            "PageViewModels");
+            "Presentation");
         var pageItemNames = new[]
         {
             "BangumiFollowMedia.cs",

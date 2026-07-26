@@ -1,7 +1,7 @@
 using DownKyi.Core.BiliApi.VideoStream.Models;
+using DownKyi.Presentation;
 using DownKyi.Services;
 using DownKyi.Services.Video;
-using DownKyi.ViewModels.PageViewModels;
 
 namespace DownKyi.Tests;
 

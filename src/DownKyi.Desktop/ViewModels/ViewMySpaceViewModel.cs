@@ -11,9 +11,9 @@ using DownKyi.Core.BiliApi.Login;
 using DownKyi.Core.Logging;
 using DownKyi.Core.Settings;
 using DownKyi.Images;
+using DownKyi.Presentation;
 using DownKyi.Services.UserSpace;
 using DownKyi.Utils;
-using DownKyi.ViewModels.PageViewModels;
 using Microsoft.Extensions.Logging;
 
 namespace DownKyi.ViewModels;

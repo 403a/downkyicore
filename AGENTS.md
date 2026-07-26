@@ -25,7 +25,7 @@ DownKyi 是 .NET 10 與 Avalonia 12 的跨平台 Bilibili 下載器。主要技�
 
 Prism、DryIoc、EventAggregator、RegionManager、ContainerLocator、靜態 `LogManager`、Debugging Console wrapper 與 `SettingsManager` singleton 已移除。不得重新引入。
 
-重要現況：`DownKyi.Domain`、`DownKyi.Application`、`DownKyi.Infrastructure`、`DownKyi.Desktop` 已建立，但尚未承接全部目標責任。`DownKyi.Desktop` 目前主要是 Host builder；Views、ViewModels、desktop adapters 與多數 runtime 仍在根層 `DownKyi`，HTTP/aria2/FFmpeg/logging 等相容實作仍多在 `DownKyi.Core`。修改前先執行 `script/audit-module-boundaries.ps1`，不可只依 project 名稱推斷實際 owner。
+重要現況：`DownKyi.Desktop` 已實際擁有 Avalonia App、Views、ViewModels、UI projections、desktop adapters、Host composition 與 desktop runtime；`DownKyi` 只保留最小 `Program.cs`。`DownKyi.Core` 已無 Avalonia、QRCoder 或 XAML，但 aria2、FFmpeg、filesystem 與 logging 等相容實作仍主要位於 Core。修改前先執行 `script/audit-module-boundaries.ps1`，不可只依 project 名稱推斷實際 owner。
 
 ## 儲存庫結構
 
@@ -38,7 +38,7 @@ version.txt                        版本唯一來源
 src/DownKyi.Domain/                immutable domain state 與 typed results
 src/DownKyi.Application/           use-case contracts、desktop contracts、lifetime
 src/DownKyi.Infrastructure/        SQLite store、clock、write-behind 等 adapters
-src/DownKyi.Desktop/               Avalonia App、composition、views、ViewModels、desktop runtime
+src/DownKyi.Desktop/               Avalonia App、composition、Views、ViewModels、Presentation、desktop runtime
 
 DownKyi.Core/                      Bilibili API、設定、日誌、aria2、FFmpeg 相容核心
 DownKyi/                           最小可執行入口，只委派至 DownKyi.Desktop
@@ -99,6 +99,8 @@ Application 層的 desktop contracts 位於 `src/DownKyi.Application/Desktop`。
 導航使用 `AppRoute`、`AppNavigationRegion`、`AppNavigationRequest` 和 `AppNavigationContext`。不得傳遞 View 名稱字串、region 名稱字串或依賴導航 framework 的 journal。
 
 ViewModel 應只保留 binding state、command wiring、導航與 UI 投影。網路、解析、SQLite、下載建立、檔案 IO、FFmpeg 與 aria2 工作屬於 coordinator/service/runtime。
+
+可綁定但不屬於 ViewModel 的畫面資料位於 `src/DownKyi.Desktop/Presentation`。下載清單由 `DownloadListState` 私有持有可變 backing collections，對 ViewModel/View 只公開 `ReadOnlyObservableCollection<T>`；呼叫端不得直接修改投影集合。
 
 ## 下載 Runtime
 

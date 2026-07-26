@@ -1,4 +1,4 @@
-﻿<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="DownKyi.Views.ViewMyFavorites"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -8,7 +8,7 @@
              d:DesignHeight="620"
              xmlns:custom="clr-namespace:DownKyi.CustomControl"
              xmlns:vm="clr-namespace:DownKyi.ViewModels"
-             xmlns:vmp="clr-namespace:DownKyi.ViewModels.PageViewModels"
+             xmlns:vmp="clr-namespace:DownKyi.Presentation"
              xmlns:asyncImageLoader="clr-namespace:DownKyi.CustomControl.AsyncImageLoader"
              x:DataType="vm:ViewMyFavoritesViewModel">
     <UserControl.Resources>

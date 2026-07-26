@@ -23,13 +23,7 @@ internal class ViewDownloadFinishedViewModel : ViewModelBase
 
     #region 页面属性申明
 
-    private ImmutableObservableCollection<DownloadedItem> _downloadedList = new();
-
-    public ImmutableObservableCollection<DownloadedItem> DownloadedList
-    {
-        get => _downloadedList;
-        private set => SetProperty(ref _downloadedList, value);
-    }
+    public ReadOnlyObservableCollection<DownloadedItem> DownloadedList { get; }
 
     private int _finishedSortBy;
 

@@ -5,25 +5,17 @@ using CommunityToolkit.Mvvm.Input;
 using DownKyi.Application.Desktop;
 using DownKyi.Core.BiliApi.BiliUtils;
 
-namespace DownKyi.ViewModels.PageViewModels;
+namespace DownKyi.Presentation;
 
-internal class PublicationMedia : ObservableObject
+internal class ChannelMedia : ObservableObject
 {
     private readonly IAppNavigationService _navigationService;
     private readonly AppRoute _parentRoute;
 
-    public PublicationMedia(IAppNavigationService navigationService, AppRoute parentRoute)
+    public ChannelMedia(IAppNavigationService navigationService, AppRoute parentRoute)
     {
         _navigationService = navigationService ?? throw new ArgumentNullException(nameof(navigationService));
         _parentRoute = parentRoute;
-    }
-
-    private string _coverUrl = string.Empty;
-
-    public string CoverUrl
-    {
-        get => _coverUrl;
-        set => SetProperty(ref _coverUrl, value);
     }
 
     public long Avid { get; set; }
@@ -39,9 +31,9 @@ internal class PublicationMedia : ObservableObject
         set => SetProperty(ref _isSelected, value);
     }
 
-    private Bitmap _cover = null!;
+    private string _cover = string.Empty;
 
-    public Bitmap Cover
+    public string Cover
     {
         get => _cover;
         set => SetProperty(ref _cover, value);
@@ -86,7 +78,7 @@ internal class PublicationMedia : ObservableObject
     // 视频标题点击事件
     private RelayCommand<object>? _titleCommand;
 
-    public RelayCommand<object> TitleCommand => _titleCommand ??= RequiredParameterCommand.Create<object>(ExecuteTitleCommand);
+    public RelayCommand<object> TitleCommand => _titleCommand ?? (_titleCommand = RequiredParameterCommand.Create<object>(ExecuteTitleCommand));
 
     /// <summary>
     /// 视频标题点击事件

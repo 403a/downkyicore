@@ -5,7 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using DownKyi.Application.Desktop;
 using DownKyi.Core.BiliApi.BiliUtils;
 
-namespace DownKyi.ViewModels.PageViewModels;
+namespace DownKyi.Presentation;
 
 internal class BangumiFollowMedia : ObservableObject
 {

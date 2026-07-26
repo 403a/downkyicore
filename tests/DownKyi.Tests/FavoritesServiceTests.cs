@@ -1,4 +1,5 @@
 using DownKyi.Application.Desktop;
+using DownKyi.Presentation;
 using DownKyi.Services;
 using DownKyi.ViewModels;
 using ApiFavoritesMedia = DownKyi.Core.BiliApi.Favorites.Models.FavoritesMedia;
@@ -61,14 +62,14 @@ public sealed class FavoritesServiceTests
     public void SelectionAndDownloadsExcludeUnavailableMedia()
     {
         using var settings = new TestSettingsStore();
-        var available = new ViewModels.PageViewModels.FavoritesMedia(
+        var available = new FavoritesMedia(
             new TestNavigationService(),
             AppRoute.MyFavorites,
             settings.Store)
         {
             Bvid = "BV-available"
         };
-        var unavailable = new ViewModels.PageViewModels.FavoritesMedia(
+        var unavailable = new FavoritesMedia(
             new TestNavigationService(),
             AppRoute.MyFavorites,
             settings.Store)

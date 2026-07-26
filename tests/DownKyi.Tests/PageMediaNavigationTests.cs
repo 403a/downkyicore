@@ -1,6 +1,6 @@
 using DownKyi.Application.Desktop;
 using DownKyi.Core.Settings;
-using DownKyi.ViewModels.PageViewModels;
+using DownKyi.Presentation;
 
 namespace DownKyi.Tests;
 

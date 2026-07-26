@@ -1,6 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using DownKyi.Images;
-using DownKyi.ViewModels.PageViewModels;
+using DownKyi.Presentation;
 
 namespace DownKyi.ViewModels.UiState;
 

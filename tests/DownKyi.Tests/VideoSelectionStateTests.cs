@@ -1,8 +1,8 @@
 using System.ComponentModel;
 using DownKyi.Core.Settings;
 using DownKyi.CustomControl;
+using DownKyi.Presentation;
 using DownKyi.Services.Video;
-using DownKyi.ViewModels.PageViewModels;
 
 namespace DownKyi.Tests;
 

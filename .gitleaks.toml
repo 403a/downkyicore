@@ -16,7 +16,7 @@ targetRules = ["generic-api-key"]
 condition = "AND"
 regexTarget = "line"
 paths = [
-  '''(^|/)DownKyi/Themes/ColorBrush\.axaml$'''
+  '''(^|/)src/DownKyi\.Desktop/Themes/ColorBrush\.axaml$'''
 ]
 regexes = [
   '''^\s*<SolidColorBrush x:Key="Brush[A-Za-z0-9]+" Color="\{DynamicResource Color[A-Za-z0-9]+\}" />\s*$'''

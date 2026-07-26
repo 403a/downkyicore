@@ -10,8 +10,8 @@ using DownKyi.Core.BiliApi.History.Models;
 using DownKyi.Core.Settings;
 using DownKyi.Core.Utils;
 using DownKyi.Images;
+using DownKyi.Presentation;
 using DownKyi.Utils;
-using DownKyi.ViewModels.PageViewModels;
 
 namespace DownKyi.Services.Media;
 

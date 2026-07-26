@@ -17,8 +17,7 @@ public sealed class MediaAndHttpRuntimeArchitectureTests
         var pageSource = File.ReadAllText(Path.Combine(
             RepositoryRoot,
             "src", "DownKyi.Desktop",
-            "ViewModels",
-            "PageViewModels",
+            "Presentation",
             "VideoPage.cs"));
         var addSource = File.ReadAllText(Path.Combine(
             RepositoryRoot,
@@ -226,9 +225,9 @@ public sealed class MediaAndHttpRuntimeArchitectureTests
         var paths = new[]
         {
             Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "ViewModels", "ViewVideoDetailViewModel.cs"),
-            Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "ViewModels", "PageViewModels", "VideoSection.cs"),
-            Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "ViewModels", "PageViewModels", "VideoPage.cs"),
-            Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "ViewModels", "PageViewModels", "VideoQuality.cs"),
+            Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "Presentation", "VideoSection.cs"),
+            Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "Presentation", "VideoPage.cs"),
+            Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "Presentation", "VideoQuality.cs"),
             Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "Services", "Video", "VideoDetailWorkflowCoordinator.cs")
         };
         var source = string.Join(Environment.NewLine, paths.Select(File.ReadAllText));

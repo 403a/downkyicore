@@ -4,7 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DownKyi.Application.Desktop;
 
-namespace DownKyi.ViewModels.PageViewModels;
+namespace DownKyi.Presentation;
 
 internal class FriendInfo : ObservableObject
 {

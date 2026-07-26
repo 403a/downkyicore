@@ -54,8 +54,8 @@ internal sealed class DownloadBootstrapHostedService : IHostedService, IDisposab
             var state = await LoadStartupStateAsync(cancellationToken).ConfigureAwait(false);
             await _uiDispatcher.InvokeAsync(() =>
             {
-                _downloadLists.Downloading.AddRange(state.DownloadingItems);
-                _downloadLists.Downloaded.AddRange(state.DownloadedItems);
+                _downloadLists.AddDownloadingRange(state.DownloadingItems);
+                _downloadLists.AddDownloadedRange(state.DownloadedItems);
             }).ConfigureAwait(false);
 
             _historyLoadTask = LoadRemainingHistoryAsync(cancellationToken);
@@ -156,7 +156,7 @@ internal sealed class DownloadBootstrapHostedService : IHostedService, IDisposab
                 var loadedIds = _downloadLists.Downloaded
                     .Select(item => item.DownloadBase.Id)
                     .ToHashSet(StringComparer.Ordinal);
-                _downloadLists.Downloaded.AddRange(
+                _downloadLists.AddDownloadedRange(
                     allItems.Where(item => loadedIds.Add(item.DownloadBase.Id)));
             }).ConfigureAwait(false);
         }

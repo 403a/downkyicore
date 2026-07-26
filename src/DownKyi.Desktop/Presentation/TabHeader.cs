@@ -1,7 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using DownKyi.Images;
 
-namespace DownKyi.ViewModels.PageViewModels;
+namespace DownKyi.Presentation;
 
 internal class TabHeader : ObservableObject
 {

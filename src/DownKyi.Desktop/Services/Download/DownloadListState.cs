@@ -1,17 +1,68 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using DownKyi.Core.Settings;
-using DownKyi.ViewModels;
+using DownKyi.Presentation;
 using DownKyi.ViewModels.DownloadManager;
 
 namespace DownKyi.Services.Download;
 
 internal sealed class DownloadListState
 {
-    public ImmutableObservableCollection<DownloadingItem> Downloading { get; } = new();
+    private readonly RangeObservableCollection<DownloadingItem> _downloading = new();
+    private readonly RangeObservableCollection<DownloadedItem> _downloaded = new();
 
-    public ImmutableObservableCollection<DownloadedItem> Downloaded { get; } = new();
+    public DownloadListState()
+    {
+        Downloading = new ReadOnlyObservableCollection<DownloadingItem>(_downloading);
+        Downloaded = new ReadOnlyObservableCollection<DownloadedItem>(_downloaded);
+    }
+
+    public ReadOnlyObservableCollection<DownloadingItem> Downloading { get; }
+
+    public ReadOnlyObservableCollection<DownloadedItem> Downloaded { get; }
+
+    public void AddDownloading(DownloadingItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        _downloading.Add(item);
+    }
+
+    public void AddDownloadingRange(IEnumerable<DownloadingItem> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        _downloading.AddRange(items);
+    }
+
+    public bool RemoveDownloading(DownloadingItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        return _downloading.Remove(item);
+    }
+
+    public void AddDownloaded(DownloadedItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        _downloaded.Add(item);
+    }
+
+    public void AddDownloadedRange(IEnumerable<DownloadedItem> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        _downloaded.AddRange(items);
+    }
+
+    public bool RemoveDownloaded(DownloadedItem item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        return _downloaded.Remove(item);
+    }
+
+    public void ClearDownloaded()
+    {
+        _downloaded.Clear();
+    }
 
     public void ReplaceDownloaded(IEnumerable<DownloadedItem> items)
     {
@@ -50,10 +101,6 @@ internal sealed class DownloadListState
 
     private void ReplaceDownloadedCore(IReadOnlyList<DownloadedItem> items)
     {
-        Downloaded.Clear();
-        foreach (var item in items)
-        {
-            Downloaded.Add(item);
-        }
+        _downloaded.ReplaceRange(items);
     }
 }

@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using System.Linq;
 using DownKyi.Core.BiliApi.BiliUtils;
+using DownKyi.Presentation;
 using DownKyi.Services.Media;
-using DownKyi.ViewModels.PageViewModels;
 
 namespace DownKyi.ViewModels;
 

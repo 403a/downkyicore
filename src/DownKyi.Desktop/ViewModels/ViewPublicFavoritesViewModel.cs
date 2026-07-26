@@ -11,11 +11,11 @@ using DownKyi.Core.BiliApi.Favorites;
 using DownKyi.Core.Logging;
 using DownKyi.Core.Settings;
 using DownKyi.Images;
+using DownKyi.Presentation;
 using DownKyi.Services;
 using DownKyi.Services.Download;
 using DownKyi.Services.Media;
 using DownKyi.Utils;
-using DownKyi.ViewModels.PageViewModels;
 using Microsoft.Extensions.Logging;
 
 namespace DownKyi.ViewModels;

@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using CommunityToolkit.Mvvm.Input;
 using DownKyi.Application.Desktop;
 using DownKyi.Images;
+using DownKyi.Presentation;
 using DownKyi.Utils;
 using DownKyi.ViewModels.DownloadManager;
-using DownKyi.ViewModels.PageViewModels;
 
 namespace DownKyi.ViewModels;
 

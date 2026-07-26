@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using DownKyi.Core.BiliApi.BiliUtils;
 using DownKyi.Core.Settings;
-using DownKyi.ViewModels.PageViewModels;
+using DownKyi.Presentation;
 
 namespace DownKyi.Services.Video;
 

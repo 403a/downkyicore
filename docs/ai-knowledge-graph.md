@@ -15,13 +15,14 @@ This document is the first file an AI agent should read before changing DownKyi.
 
 ## Current Boundary Truth
 
-The target projects exist, but the target ownership model is not complete. Read `ARCHITECTURE.md` and `docs/design-docs/module-boundary-naming-audit.md` before interpreting the graph.
+The target projects exist and the Desktop boundary is operational, but Infrastructure ownership and the final runtime projection separation are not complete. Read `ARCHITECTURE.md` and `docs/design-docs/module-boundary-naming-audit.md` before interpreting the graph.
 
-- `src/DownKyi.Desktop` currently owns only Host creation. Views, ViewModels, navigation/dialog adapters, UI projections, and lifecycle remain in the `DownKyi` executable assembly.
+- `src/DownKyi.Desktop` owns Avalonia App/XAML, Views, ViewModels, `Presentation` projections, navigation/dialog/platform adapters, lifecycle, Host composition, and desktop runtime. `DownKyi` contains only the minimal executable bootstrap.
+- `DownKyi.Core` is headless: it contains no Avalonia, QRCoder, or XAML ownership. Login QR bitmap rendering and Bilibili image dictionaries belong to Desktop.
 - `src/DownKyi.Infrastructure` currently owns SQLite task persistence, write-behind, clock, and the injected Bilibili HTTP/buvid runtime. Aria2, FFmpeg, filesystem paths, and logging implementation remain mainly in `DownKyi.Core` or `DownKyi`.
 - `DownKyi.Domain.DownloadTask` is the durable runtime state authority. `DownloadTaskApplicationService` loads by `DownloadTaskId`, invokes legal transitions, persists optimistic versions, and only then publishes committed snapshots. Normal runtime no longer reconstructs Domain state from mutable UI projections.
 - New tasks, resumed tasks, and persisted startup tasks directly enqueue `DownloadTaskId` through `DownloadTaskQueueGateway`; `DownloadOrchestrator` no longer scans a UI collection and each active task has its own linked cancellation owner.
-- Workers and pipeline entry points use `DownloadTaskId`. `DownloadPipeline` is a typed stage sequencer; localized activity rendering and completion-list mutation have separate presenter/projector owners. `DownloadExecutionContext` still exposes a transient `DownloadingItem` projection for playback/UI context. Bilibili HTTP uses injected Application ports with an async Infrastructure implementation; the old static/synchronous compatibility layer is gone.
+- Workers and pipeline entry points use `DownloadTaskId`. `DownloadPipeline` is a typed stage sequencer; localized activity rendering and completion-list mutation have separate Desktop owners. `DownloadListState` privately owns mutable collections and exposes stable `ReadOnlyObservableCollection<T>` projections. `DownloadExecutionContext` still exposes a transient `DownloadingItem` for playback/UI context. Bilibili HTTP uses injected Application ports with an async Infrastructure implementation; the old static/synchronous compatibility layer is gone.
 - These facts are tracked debt, not stable contracts. The ordered migration and release blockers live in `docs/refactoring-live-plan.md`.
 - `ModuleBoundaryBaselineTests` allows every listed debt item to disappear, but rejects new owners, consumers, duplicate names, UI dependencies, synchronous HTTP debt, or oversized-file growth.
 
@@ -298,7 +299,7 @@ contracts:
   - MainWindow defers final close through `IApplicationLifecycle`; App cannot own the cleanup Task, restart process, main-window service locator, Mutex naming, or Host stop implementation.
   - Host stop shares the outer five-second cleanup budget; a shorter nested timeout must not interrupt resumable-state persistence before the outer fallback runs.
   - Storage retention maintenance is an IHostedService and cannot be an App-owned fire-and-forget Task.
-  - `DownloadListState` owns one stable downloading/history collection pair shared by Host services and ViewModels; App must not expose static list properties.
+  - `DownloadListState` privately owns one mutable downloading/history collection pair and exposes stable `ReadOnlyObservableCollection<T>` wrappers shared by Host services and ViewModels; App must not expose static list properties.
   - App cannot contain concrete service, navigation, or dialog registration; `DesktopComposition` is the single registration owner.
   - Download runtime construction and hosted-service wiring stay in `DesktopComposition`, not App.
   - App startup, Host services, and lifecycle adapter share one injected `ISettingsStore`; shutdown flush must not block the UI thread.
@@ -494,7 +495,7 @@ contracts:
   - Start, pause, confirm-paused, resume, retry, interruption recovery, failure, completion, cancel, delete, transfer-file, GID, progress, activity, and output updates remain typed operations.
   - Shutdown recovery preserves GID, partial-file map, completed keys, progress, output, timestamps, and monotonically increasing versions.
 hazards:
-  - The current synchronous event reaches the executable projection owner; Gate 8 must marshal projection mutation through the Desktop UI dispatcher without moving persistence into Desktop.
+  - The synchronous committed event reaches the Desktop projection owner; projection mutation must remain marshaled through the UI dispatcher without moving persistence into Desktop.
   - Per-task synchronization lives for the Application service lifetime; task churn and disposal behavior must remain bounded and race-tested as queue ownership moves in Gate 5.
 tests:
   - test.download-task-application
@@ -1328,7 +1329,7 @@ id: service.video-tag-provider
 type: service
 paths:
   - src/DownKyi.Desktop/Services/Video/VideoTagProvider.cs
-  - src/DownKyi.Desktop/ViewModels/PageViewModels/VideoPage.cs
+  - src/DownKyi.Desktop/Presentation/VideoPage.cs
   - src/DownKyi.Desktop/Services/VideoInfoService.cs
   - src/DownKyi.Desktop/Services/BangumiInfoService.cs
 responsibility: Loads optional video tags on demand with the token owned by the current caller and provides immutable local tag snapshots for media types that already include styles.
@@ -1654,6 +1655,8 @@ inbound:
 outbound: []
 contracts:
   - Sorting and replacement mutate the existing collection instance so XAML bindings and runtime references never diverge.
+  - Mutable `RangeObservableCollection<T>` instances are private to `DownloadListState`; ViewModels and Views receive only `ReadOnlyObservableCollection<T>`.
+  - Admission, bootstrap, completion, deletion, and history operations mutate collections only through `DownloadListState` owner methods.
   - Collection mutation is projected on the UI thread by the calling desktop boundary.
   - Headless construction must not synchronously wait on an uninitialized Avalonia dispatcher.
   - Download-manager ViewModels own only confirmation, localized feedback, binding state, and command wiring; they cannot access storage, generated files, or platform launch APIs directly.
@@ -1663,8 +1666,7 @@ contracts:
   - File and folder probing belongs to the coordinator and returns a typed open result without exposing filesystem checks to ViewModels.
 hazards:
   - Replacing the collection object disconnects existing views and download workers.
-  - `ImmutableObservableCollection<T>` is mutable, is consumed by runtime services, and has non-generic `IList` members that throw `NotImplementedException`.
-  - Immutable backing storage does not make collection updates atomic or remove Avalonia UI-thread requirements.
+  - Exposing the mutable backing collection or adding a second collection owner would bypass notification ordering and UI-thread ownership.
   - Dispatching resource lookup without an initialized Application can deadlock parallel tests and early startup.
   - aria2 cancellation still crosses a static RPC client compatibility boundary; configuration mutation must not race active runtimes.
 tests:
@@ -1830,14 +1832,14 @@ contracts:
   - `DownloadArtifactWriter` owns cover, subtitle, danmaku, and NFO generation; `DownloadTaskStateWriter` is a typed Application-command adapter and never accepts a UI task model.
   - `DownloadPipeline` creates one context and orders `ResolvePlaybackStage`, `DownloadMediaStage`, `DownloadArtifactsStage`, `MuxStage`, `ValidateStage`, and `FinalizeStage`; the first typed failure stops later stages.
   - `DownloadExecutionContext` captures one immutable settings snapshot and accepts the current operation token at each active check; it cannot retain a short-lived command token.
-  - `DownloadActivityPresenter` is the only stage-adjacent localized resource owner. `DownloadCompletionProjector` owns UI-thread completion-list mutation until both move to Desktop in Gate 8.
+  - `DownloadActivityPresenter` is the only stage-adjacent localized resource owner. `DownloadCompletionProjector` owns UI-thread completion-list mutation; both belong to Desktop.
   - `DownloadPipeline` cannot regain subtitle API, danmaku converter, NFO XML, direct projection-update, localized resource, FFmpeg, or SQLite implementation details.
   - Diagnostic logs should include downloader, split/parallel count, speed, and limit values without full local paths or sensitive URLs.
 hazards:
   - Blocking waits in download lifecycle can freeze UI or prevent process exit.
   - Media stages still resolve a `DownloadingItem` projection for playback metadata even though queue identity and all durable transitions are Domain-authoritative.
   - aria2 reports a machine-readable failure code but does not expose HTTP `Retry-After`; those 429 responses use the policy's bounded fallback delay instead of a server-provided value.
-  - The stage presenter/projector are transitional executable-assembly owners until Gate 8 moves them and removes `DownloadingItem` from the execution context.
+  - `DownloadingItem` still crosses into the media execution context; later extraction must replace it with a typed execution input without weakening Domain authority.
   - Letting an expected shutdown `OperationCanceledException` escape before state recovery leaves rows stored as active and prevents clean resume after restart.
   - Resume behavior depends on preserving partial files while delete behavior must remove them.
   - aria2 process cleanup is platform-sensitive.
@@ -1874,7 +1876,7 @@ outbound:
 contracts:
   - The projection owner never opens SQLite or serializes storage JSON directly.
   - Normal runtime projection is one-way Domain to UI. It may create a brand-new queued task from add input, but cannot reconstruct an existing aggregate from mutable UI state.
-  - Replacing an internal projection model raises every dependent binding notification; Gate 8 remains responsible for marshaling committed events to the UI dispatcher.
+  - Replacing an internal projection model raises every dependent binding notification and is marshaled through the Desktop UI dispatcher.
   - Startup restores all unfinished tasks and only the newest 100 history items before loading remaining keyset pages later.
 hazards:
   - `DownloadingItem` and `DownloadedItem` remain UI projection models, never persistence models.
@@ -3000,11 +3002,11 @@ test.module-boundary-ratchets:
     - docs/testing/module-boundary-ratchets.md
   guards:
     - Core must contain zero UI/Avalonia/QRCoder dependencies and zero XAML resource owners
-    - service contracts cannot add another dependency on ViewModel types
+    - service contracts must contain zero dependencies on ViewModel types
     - duplicate simple-name sets, generic buckets, and file/type mismatch sets cannot grow
     - existing files over 500 physical lines cannot grow and new oversized files are rejected
     - Domain-to-legacy reconstruction and static/synchronous HTTP debt cannot spread to another owner; download work polling from UI collections is rejected entirely
-    - the custom mutable observable collection cannot gain consumers or unsupported interface members
+    - the deleted custom mutable observable collection cannot return; download lists must expose standard read-only wrappers over owner-only backing collections
     - repository knowledge, testing, operations, and release entry points remain discoverable by an Agent
     - inventory output records the exact commit SHA and current measurable state
 ```

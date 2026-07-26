@@ -11,8 +11,8 @@ using DownKyi.Core.BiliApi.Users.Models;
 using DownKyi.Core.Logging;
 using DownKyi.Core.Settings;
 using DownKyi.Core.Utils;
+using DownKyi.Presentation;
 using DownKyi.Utils;
-using DownKyi.ViewModels.PageViewModels;
 using Microsoft.Extensions.Logging;
 using BiliUserSpace = DownKyi.Core.BiliApi.Users.UserSpace;
 

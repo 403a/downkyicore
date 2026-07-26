@@ -7,13 +7,6 @@ public sealed class ModuleBoundaryBaselineTests
     private static readonly string RepositoryRoot = FindRepositoryRoot();
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(2);
 
-    private static readonly HashSet<string> KnownPresentationBoundServiceContracts = new(StringComparer.Ordinal)
-    {
-        "src/DownKyi.Desktop/Services/Download/IAddToDownloadSession.cs",
-        "src/DownKyi.Desktop/Services/IFavoritesService.cs",
-        "src/DownKyi.Desktop/Services/IInfoService.cs"
-    };
-
     private static readonly Dictionary<string, HashSet<string>> KnownDuplicateSimpleNames =
         new(StringComparer.Ordinal)
         {
@@ -30,7 +23,7 @@ public sealed class ModuleBoundaryBaselineTests
             ["FavoritesMedia"] =
             [
                 "DownKyi.Core.BiliApi.Favorites.Models.FavoritesMedia",
-                "DownKyi.ViewModels.PageViewModels.FavoritesMedia"
+                "DownKyi.Presentation.FavoritesMedia"
             ],
             ["Subtitle"] =
             [
@@ -52,7 +45,7 @@ public sealed class ModuleBoundaryBaselineTests
             ["VideoPage"] =
             [
                 "DownKyi.Core.BiliApi.Video.Models.VideoPage",
-                "DownKyi.ViewModels.PageViewModels.VideoPage"
+                "DownKyi.Presentation.VideoPage"
             ],
             ["ViewSeasonsSeries"] =
             [
@@ -144,7 +137,7 @@ public sealed class ModuleBoundaryBaselineTests
             .Select(Relative)
             .ToArray();
 
-        AssertSubset(actual, KnownPresentationBoundServiceContracts, "presentation-bound service contract");
+        Assert.Empty(actual);
     }
 
     [Fact]
@@ -316,36 +309,41 @@ public sealed class ModuleBoundaryBaselineTests
     }
 
     [Fact]
-    public void CustomMutableObservableCollectionCannotGainNewConsumersOrMissingMembers()
+    public void DownloadListsExposeOnlyReadOnlyObservableCollections()
     {
-        var consumers = EnumerateProductionFiles("*.cs")
+        var customCollectionReferences = EnumerateProductionFiles("*.cs")
             .Where(path => File.ReadAllText(path).Contains("ImmutableObservableCollection", StringComparison.Ordinal))
             .Select(Relative)
             .ToArray();
-        var knownConsumers = new HashSet<string>(StringComparer.Ordinal)
-        {
-            "src/DownKyi.Desktop/Services/Download/DownloadListState.cs",
-            "src/DownKyi.Desktop/ViewModels/DownloadManager/ViewDownloadFinishedViewModel.cs",
-            "src/DownKyi.Desktop/ViewModels/DownloadManager/ViewDownloadingViewModel.cs",
-            "src/DownKyi.Desktop/ViewModels/ImmutableObservableCollection.cs"
-        };
 
-        AssertSubset(consumers, knownConsumers, "custom mutable observable collection consumer");
-
-        var collectionSource = File.ReadAllText(Path.Combine(
+        Assert.Empty(customCollectionReferences);
+        Assert.False(File.Exists(Path.Combine(
             RepositoryRoot,
             "src", "DownKyi.Desktop",
             "ViewModels",
-            "ImmutableObservableCollection.cs"));
-        var notImplementedCount = Regex.Count(
-            collectionSource,
-            @"throw\s+new\s+NotImplementedException\s*\(",
-            RegexOptions.CultureInvariant,
-            RegexTimeout);
+            "ImmutableObservableCollection.cs")));
 
-        Assert.True(
-            notImplementedCount <= 5,
-            $"ImmutableObservableCollection added unsupported interface members: {notImplementedCount}.");
+        var stateSource = File.ReadAllText(Path.Combine(
+            RepositoryRoot,
+            "src", "DownKyi.Desktop",
+            "Services", "Download",
+            "DownloadListState.cs"));
+        Assert.Contains(
+            "ReadOnlyObservableCollection<DownloadingItem> Downloading",
+            stateSource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "ReadOnlyObservableCollection<DownloadedItem> Downloaded",
+            stateSource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "private readonly RangeObservableCollection<DownloadingItem> _downloading",
+            stateSource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "private readonly RangeObservableCollection<DownloadedItem> _downloaded",
+            stateSource,
+            StringComparison.Ordinal);
     }
 
     private static TypeDeclaration[] ReadTypeDeclarations()

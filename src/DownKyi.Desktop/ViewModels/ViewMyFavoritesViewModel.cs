@@ -12,11 +12,11 @@ using DownKyi.Commands;
 using DownKyi.Core.Logging;
 using DownKyi.CustomControl;
 using DownKyi.Images;
+using DownKyi.Presentation;
 using DownKyi.Services;
 using DownKyi.Services.Download;
 using DownKyi.Services.Media;
 using DownKyi.Utils;
-using DownKyi.ViewModels.PageViewModels;
 using Microsoft.Extensions.Logging;
 
 namespace DownKyi.ViewModels;

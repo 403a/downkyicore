@@ -8,8 +8,8 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using Avalonia.Xaml.Interactivity;
+using DownKyi.Presentation;
 using DownKyi.Services.Video;
-using DownKyi.ViewModels.PageViewModels;
 
 namespace DownKyi.CustomAction;
 

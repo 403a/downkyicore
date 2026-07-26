@@ -8,7 +8,7 @@ using DownKyi.Application.Desktop;
 using DownKyi.Core.BiliApi.Favorites;
 using DownKyi.Core.Settings;
 using DownKyi.Core.Utils;
-using DownKyi.ViewModels.PageViewModels;
+using DownKyi.Presentation;
 using ApiFavoritesMedia = DownKyi.Core.BiliApi.Favorites.Models.FavoritesMedia;
 using ApiFavoritesMediaResource = DownKyi.Core.BiliApi.Favorites.Models.FavoritesMediaResource;
 

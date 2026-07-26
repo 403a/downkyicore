@@ -86,6 +86,8 @@ Rollback:
 
 ## Slice 3: Projection And Contract Ownership
 
+Status: completed
+
 Steps:
 
 1. Replace `ImmutableObservableCollection<T>` with owner-only mutable collections exposed as `ReadOnlyObservableCollection<T>`.
@@ -102,6 +104,24 @@ Completion:
 
 - Views cannot mutate projected collections.
 - Application/service boundaries do not expose `DownKyi.ViewModels` types.
+
+Evidence:
+
+- 14 projection types and `RangeObservableCollection<T>` now live under `src/DownKyi.Desktop/Presentation`.
+- `DownloadListState` privately owns mutable backing collections and exposes stable `ReadOnlyObservableCollection<T>` wrappers.
+- admission, bootstrap, completion, deletion, replacement, and sorting mutate lists only through owner methods.
+- the deleted `ImmutableObservableCollection<T>` has 0 production references and 0 unsupported members.
+- service-interface references to `DownKyi.ViewModels` decreased from 3 to 0.
+- strict Release build: 0 warnings, 0 errors.
+- collection/coordinator/service regression tests: 13/13 passed.
+- Desktop Host/XAML/QR smoke: 13/13 passed.
+- architecture ratchets: 177/177 passed.
+- complete solution: 610/610 passed.
+- format verification: 0/791 files changed.
+- NuGet vulnerable/deprecated package findings: 0/0.
+- Gitleaks candidate scan: 0 findings across 916 files.
+- module audit: Core UI 0, ViewModel-bound service contracts 0, custom collection references/unsupported members 0/0.
+- `git diff --check`: passed.
 
 Rollback:
 

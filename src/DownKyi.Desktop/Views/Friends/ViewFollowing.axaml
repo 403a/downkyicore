@@ -1,8 +1,8 @@
-﻿<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="DownKyi.Views.Friends.ViewFollowing"
              xmlns:vmf="clr-namespace:DownKyi.ViewModels.Friends"
-             xmlns:vmp="clr-namespace:DownKyi.ViewModels.PageViewModels"
+             xmlns:vmp="clr-namespace:DownKyi.Presentation"
              xmlns:custom="clr-namespace:DownKyi.CustomControl"
              x:DataType="vmf:ViewFollowingViewModel"
              xmlns:asyncImageLoader="clr-namespace:DownKyi.CustomControl.AsyncImageLoader">

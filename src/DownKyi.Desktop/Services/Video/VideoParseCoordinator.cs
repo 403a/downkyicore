@@ -8,7 +8,7 @@ using DownKyi.Application.Media;
 using DownKyi.Core.BiliApi.Sign;
 using DownKyi.Core.BiliApi.VideoStream.Models;
 using DownKyi.Core.Settings;
-using DownKyi.ViewModels.PageViewModels;
+using DownKyi.Presentation;
 
 namespace DownKyi.Services.Video;
 

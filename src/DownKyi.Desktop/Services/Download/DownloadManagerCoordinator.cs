@@ -177,7 +177,7 @@ internal sealed class DownloadManagerCoordinator : IDownloadManagerCoordinator
         }
 
         await _stateWriter.DeleteAsync(taskId, CancellationToken.None).ConfigureAwait(true);
-        _downloadLists.Downloading.Remove(item);
+        _downloadLists.RemoveDownloading(item);
     }
 
     public async Task DeleteAllAsync(
@@ -195,7 +195,7 @@ internal sealed class DownloadManagerCoordinator : IDownloadManagerCoordinator
     public async Task ClearDownloadedAsync(CancellationToken cancellationToken = default)
     {
         await _storage.ClearDownloadedAsync(cancellationToken).ConfigureAwait(true);
-        _downloadLists.Downloaded.Clear();
+        _downloadLists.ClearDownloaded();
     }
 
     public async Task RemoveDownloadedAsync(
@@ -204,7 +204,7 @@ internal sealed class DownloadManagerCoordinator : IDownloadManagerCoordinator
     {
         ArgumentNullException.ThrowIfNull(item);
         await _storage.RemoveDownloadedAsync(item, cancellationToken).ConfigureAwait(true);
-        _downloadLists.Downloaded.Remove(item);
+        _downloadLists.RemoveDownloaded(item);
     }
 
     public Task<DownloadArtifactOpenResult> OpenVideoAsync(

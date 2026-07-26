@@ -8,7 +8,7 @@
              d:DesignHeight="620"
              xmlns:custom="clr-namespace:DownKyi.CustomControl"
              xmlns:vm="clr-namespace:DownKyi.ViewModels"
-             xmlns:vmp="clr-namespace:DownKyi.ViewModels.PageViewModels"
+             xmlns:vmp="clr-namespace:DownKyi.Presentation"
              xmlns:asyncImageLoader="clr-namespace:DownKyi.CustomControl.AsyncImageLoader"
              x:DataType="vm:ViewMyToViewVideoViewModel">
     <UserControl.Resources>

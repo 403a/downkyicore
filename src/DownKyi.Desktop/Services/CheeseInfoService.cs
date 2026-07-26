@@ -12,8 +12,8 @@ using DownKyi.Core.BiliApi.VideoStream.Models;
 using DownKyi.Core.Settings;
 using DownKyi.Core.Storage;
 using DownKyi.Core.Utils;
+using DownKyi.Presentation;
 using DownKyi.Utils;
-using DownKyi.ViewModels.PageViewModels;
 
 namespace DownKyi.Services;
 

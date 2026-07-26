@@ -3,7 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using DownKyi.Images;
 using DownKyi.Utils;
 
-namespace DownKyi.ViewModels.PageViewModels;
+namespace DownKyi.Presentation;
 
 internal class FavoritesPageItem : ObservableObject
 {

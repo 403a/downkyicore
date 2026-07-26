@@ -9,9 +9,9 @@ using DownKyi.Application.Desktop;
 using DownKyi.Core.Logging;
 using DownKyi.Core.Settings;
 using DownKyi.CustomControl;
+using DownKyi.Presentation;
 using DownKyi.Services.Friends;
 using DownKyi.Utils;
-using DownKyi.ViewModels.PageViewModels;
 using Microsoft.Extensions.Logging;
 
 namespace DownKyi.ViewModels.Friends;

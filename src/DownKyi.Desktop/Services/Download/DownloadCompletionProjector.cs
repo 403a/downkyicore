@@ -29,8 +29,8 @@ internal sealed class DownloadCompletionProjector
             DownloadTaskProjectionStore.CreateDownloadedProjection(completedTask);
         return _uiDispatcher.InvokeAsync(() =>
         {
-            _downloadLists.Downloaded.Add(downloadedItem);
-            _downloadLists.Downloading.Remove(context.Downloading);
+            _downloadLists.AddDownloaded(downloadedItem);
+            _downloadLists.RemoveDownloading(context.Downloading);
             _downloadLists.SortDownloaded(context.Settings.Basic.DownloadFinishedSort);
         });
     }

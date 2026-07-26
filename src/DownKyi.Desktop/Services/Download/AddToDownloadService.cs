@@ -18,10 +18,10 @@ using DownKyi.Core.Logging;
 using DownKyi.Core.Settings;
 using DownKyi.Core.Utils;
 using DownKyi.Models;
+using DownKyi.Presentation;
 using DownKyi.Services.Video;
 using DownKyi.Utils;
 using DownKyi.ViewModels.DownloadManager;
-using DownKyi.ViewModels.PageViewModels;
 using Microsoft.Extensions.Logging;
 
 namespace DownKyi.Services.Download;
@@ -394,7 +394,7 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
                                         await _projectionStore
                                             .RemoveDownloadedAsync(item, cancellationToken)
                                             .ConfigureAwait(true);
-                                        _downloadLists.Downloaded.Remove(item);
+                                        _downloadLists.RemoveDownloaded(item);
                                         isDownloaded = false;
                                     }
                                     else

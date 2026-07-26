@@ -1,4 +1,5 @@
 using System;
+using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 using DownKyi.Application.Desktop;
 using DownKyi.Commands;
@@ -18,13 +19,7 @@ namespace DownKyi.ViewModels.DownloadManager
 
         #region 页面属性申明
 
-        private ImmutableObservableCollection<DownloadingItem> _downloadingList = new();
-
-        public ImmutableObservableCollection<DownloadingItem> DownloadingList
-        {
-            get => _downloadingList;
-            private set => SetProperty(ref _downloadingList, value);
-        }
+        public ReadOnlyObservableCollection<DownloadingItem> DownloadingList { get; }
 
         #endregion
 

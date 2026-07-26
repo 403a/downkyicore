@@ -4,9 +4,9 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.Input;
 using DownKyi.Application.Desktop;
 using DownKyi.Images;
+using DownKyi.Presentation;
 using DownKyi.Utils;
 using DownKyi.ViewModels.Friends;
-using DownKyi.ViewModels.PageViewModels;
 
 namespace DownKyi.ViewModels
 {

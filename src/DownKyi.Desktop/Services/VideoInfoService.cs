@@ -15,9 +15,9 @@ using DownKyi.Core.BiliApi.VideoStream.Models;
 using DownKyi.Core.BiliApi.Zone;
 using DownKyi.Core.Settings;
 using DownKyi.Core.Utils;
+using DownKyi.Presentation;
 using DownKyi.Services.Video;
-using DownKyi.ViewModels.PageViewModels;
-using VideoPage = DownKyi.ViewModels.PageViewModels.VideoPage;
+using VideoPage = DownKyi.Presentation.VideoPage;
 
 namespace DownKyi.Services;
 

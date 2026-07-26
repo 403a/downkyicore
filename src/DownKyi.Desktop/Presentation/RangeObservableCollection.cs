@@ -5,7 +5,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq;
 
-namespace DownKyi.ViewModels;
+namespace DownKyi.Presentation;
 
 internal sealed class RangeObservableCollection<T> : ObservableCollection<T>
 {
