@@ -2,8 +2,8 @@
 
 Status: active
 Last updated: 2026-07-26
-Current group: Gate 6 DownloadPipeline stage extraction
-Current branch: `refactor/download-pipeline-stages`
+Current group: Gate 6 centralized download retry policy
+Current branch: `refactor/download-retry-policy`
 
 This file contains only unfinished or not-yet-integrated work. Completed PR 02-32 items are not restored. Design rationale belongs in `design-docs`; product acceptance belongs in `product-specs`.
 
@@ -18,6 +18,7 @@ The previous `Status: complete` was incorrect.
 - Gate 4 passed Windows/Linux/macOS quality CI and CodeQL, then PR #87 was merged into `refactor/pr-30-32-release-hardening` as merge commit `d8342abc`.
 - Gate 5 and the authenticated read-only Bilibili audit passed Windows/Linux/macOS quality CI and CodeQL, then PR #88 was merged into `refactor/pr-30-32-release-hardening` as merge commit `fadd7eb3`.
 - The authenticated audit passed its `/nav` login gate and all 14 contract probes. Only the allowlisted sanitized diagnostics artifact is retained; the candidate-file Gitleaks scan reported zero findings.
+- Gate 6 stage extraction passed two complete Windows/Linux/macOS quality and CodeQL rounds, then PR #89 was merged into `refactor/pr-30-32-release-hardening` as merge commit `e288913f`.
 - `version.txt` remains `1.0.32`; v1.1.0 has not passed its release gate.
 
 No release tag may be created while any release blocker below remains.
@@ -26,36 +27,35 @@ No release tag may be created while any release blocker below remains.
 
 ### Gate 6: Split DownloadPipeline And Centralize Retry
 
-Owner branches: one stage extraction PR, followed by one retry-policy PR.
+Owner branch: `refactor/download-retry-policy`.
 
-Stage extraction progress (2026-07-26):
+Current progress (2026-07-26):
 
-- `DownloadPipeline` is reduced from 1,058 physical lines to a typed stage sequencer below 150 lines.
-- `DownloadExecutionContext` captures one immutable settings snapshot and never stores an operation cancellation token.
-- The ordered stages are `ResolvePlaybackStage`, `DownloadMediaStage`, `DownloadArtifactsStage`, `MuxStage`, `ValidateStage`, and `FinalizeStage`.
-- Localized status rendering is isolated in `DownloadActivityPresenter`; observable collection completion updates are isolated in `DownloadCompletionProjector`.
-- DURL ordering/key behavior, empty-DASH versus DURL selection, path/image helpers, mux output choice, injected completion clock, stage ordering, cancellation-token forwarding, first-failure short circuit, and output validation have deterministic tests.
-- The duplicate `VideoPlayUrlBasic` adapter is removed; `DownloadTransferKey` is the single stable key owner and selected DASH streams retain `ExpectedSize`.
-- The oversized-file and mutable-collection-consumer allowlists no longer include `DownloadPipeline`.
-- Strict Release build has zero warnings; all 574 solution tests, format verification, `git diff --check`, module-boundary audit, vulnerable/deprecated package audits, and the 894-candidate secret scan are green. Draft PR #89 passed Windows/Linux/macOS quality CI and CodeQL; final documentation CI and integration into the stacked release-hardening base remain.
+- `DownloadTransferCoordinator` owns one global five-attempt budget across primary, backup and one refreshed playback-address set.
+- `DownloadRetryPolicy` returns typed decisions for transient network/5xx, 429, expired address/403, rejected resume state, invalid media, disk/permission, permanent failure and cancellation.
+- `DownloadMediaStage` calls the coordinator once per selected DASH stream or ordered DURL segment; it no longer owns retry loops.
+- Built-in and aria2 backends accept exactly one URL and return `DownloadTransferResult`. Downloader's `MaxTryAgainOnFailure` is zero; aria2 receives `max-tries=1`, `retry-wait=0`, `always-resume=false` and `max-resume-failure-tries=0`.
+- Expired addresses can trigger one playback re-resolution. Rejected resume state clears only that transfer's file and sidecars before one same-address retry; invalid media moves to a backup after deleting corrupt output; retryable network failures preserve partial files and resume sidecars.
+- aria2 performs one physical RPC request per client call; error or empty envelopes fail immediately with typed diagnostics instead of consuming hidden retries. RPC-layer failure preserves the latest GID, while terminal aria2 task failure or an explicit not-found response clears stale identity.
+- Retry diagnostics record only backend, attempt, failure kind, sanitized error code, next action and bounded delay. They never record URL, path, GID or account data.
+- Strict `AnalysisMode=All` Release build has zero warnings and all 615 solution tests pass locally. Format verification, `git diff --check`, module-boundary audit and vulnerable/deprecated package audits are green; Gitleaks reports zero findings across 900 candidate files. Remote matrix and CodeQL remain required before integration.
 
 Scope:
 
-- Complete and integrate the stage extraction PR without changing stored task, partial-file, GID, or resume formats.
-- Move the transitional presenter/projector into the final Desktop owner during Gate 8.
-- Establish one retry budget owner with typed decisions for timeout/5xx, 429, expired URL, invalid media, disk error and cancellation.
+- Establish one retry budget owner with typed decisions for timeout/5xx, 429, expired URL, rejected resume state, invalid media, disk error and cancellation.
+- Publish and integrate the retry-policy PR without changing stored task, partial-file, GID, or resume formats.
 
 Verification:
 
 - each stage has deterministic unit tests.
 - fake HTTP tests cover interrupted, empty, wrong length, 403, 429, 500 and slow responses.
 - retry-count tests prove no multiplicative pipeline x backend attempts.
+- architecture tests keep both backend-internal retry counts at one physical attempt per coordinator call.
 
 Completion:
 
-- pipeline only orders stages.
-- no stage directly references `DictionaryResource`, UI collection or ViewModel types.
 - pipeline and backend do not multiply independent retry budgets.
+- retryable failures preserve resumable files, while invalid media removes corrupt files and sidecars.
 
 Rollback:
 

@@ -1730,6 +1730,11 @@ paths:
   - DownKyi/Services/Download/DownloadExecutionContext.cs
   - DownKyi/Services/Download/DownloadExecutionContextFactory.cs
   - DownKyi/Services/Download/DownloadTransferKey.cs
+  - DownKyi/Services/Download/DownloadPlaybackResolver.cs
+  - DownKyi/Services/Download/ITransferBackend.cs
+  - DownKyi/Services/Download/DownloadTransferCoordinator.cs
+  - DownKyi/Services/Download/DownloadRetryPolicy.cs
+  - DownKyi/Services/Download/DownloadTransferFileCleanup.cs
   - DownKyi/Services/Download/ResolvePlaybackStage.cs
   - DownKyi/Services/Download/DownloadMediaStage.cs
   - DownKyi/Services/Download/DownloadArtifactsStage.cs
@@ -1740,6 +1745,7 @@ paths:
   - DownKyi/Services/Download/DownloadCompletionProjector.cs
   - DownKyi/Services/Download/BuiltinTransferBackend.cs
   - DownKyi/Services/Download/Aria2TransferBackend.cs
+  - DownKyi/Services/Download/Aria2TransferFailureClassifier.cs
   - DownKyi/Services/Download/AriaRuntimeClientRegistry.cs
   - DownKyi/Services/Download/DownloadArtifactWriter.cs
   - DownKyi/Services/Download/DownloadTaskStateWriter.cs
@@ -1750,7 +1756,7 @@ paths:
   - DownKyi/Services/Download/DownloadFileIntegrity.cs
   - DownKyi/Services/Download/DownloadDiagnosticLogger.cs
   - DownKyi/Services/Download/DownloadShutdownCoordinator.cs
-responsibility: Admits committed task IDs directly, selects one transfer backend, dispatches bounded workers, orders typed download stages, writes auxiliary artifacts and task state through dedicated owners, verifies integrity, and projects completed tasks.
+responsibility: Admits committed task IDs directly, selects one transfer backend, dispatches bounded workers, orders typed download stages, centrally budgets transfer retries, writes auxiliary artifacts and task state through dedicated owners, verifies integrity, and projects completed tasks.
 inbound:
   - service.download-bootstrap
   - service.download-add
@@ -1765,9 +1771,13 @@ outbound:
 contracts:
   - A bounded Channel and fixed workers own queue consumption; global shutdown and per-task cancellation cannot create unbounded transfer tasks.
   - New, resumed, and persisted startup tasks enqueue `DownloadTaskId` directly; no runtime owner scans an observable UI collection for work.
+  - `DownloadTransferCoordinator` is the only media-transfer retry budget owner. It supplies exactly one URL to a backend call, rotates backup addresses, and permits one playback-address refresh.
+  - `DownloadRetryPolicy` maps transient network/5xx to bounded exponential backoff, 429 to bounded server delay when available, expired address/403 to backup or one refresh, rejected resume state to one cleanup plus same-address retry, invalid media to the next backup, disk/permanent failure to immediate stop, and cancellation to propagation.
+  - Built-in and aria2 backends return typed results and cannot own a second retry budget. Downloader uses `MaxTryAgainOnFailure=0`; aria2 uses `max-tries=1`, `retry-wait=0`, `always-resume=false` and `max-resume-failure-tries=0`.
   - Built-in and aria2 backends share key generation, resume path selection, integrity checks, and awaited persistence; custom aria settings select the same aria backend with external process ownership.
   - Incomplete, empty, HTML/JSON error, and sidecar files are not valid completed media.
-  - Pause and app shutdown preserve resumable partial files; explicit deletion removes media plus `.aria2` and `.download` sidecars.
+  - Pause, shutdown, transient network failure and expired addresses preserve resumable partial files; explicit deletion and confirmed invalid media remove media plus `.aria2` and `.download` sidecars.
+  - A resume-rejected result deletes only that transfer's output and sidecars before its single cleanup retry; this cleanup is owned by the coordinator and cannot start a backend-local retry loop.
   - Each multi-segment DURL key includes stable `DURL.Order`; BVID, codec, and runtime hash codes are not segment identities.
   - An empty default `Dash` DTO does not mask a populated DURL response; media kind is selected from actual stream content, and the selected DASH object retains its expected byte length.
   - DURL merge input is sorted by Order and success requires ffprobe stream, duration, and middle/tail seek-decode validation.
@@ -1778,6 +1788,7 @@ contracts:
   - Runtime factory, backends, workers, and diagnostic logger share the Host-injected `ISettingsStore`; no download service reads the global settings singleton.
   - Runtime factory captures one immutable network settings snapshot and creates a dedicated `AriaClient`; local and custom endpoints cannot overwrite process-global host, port, or token fields.
   - The same runtime client is injected into transfer, polling, server shutdown, and task cancellation. `AriaRuntimeClientRegistry` exposes only the currently active runtime client and releases it deterministically on stop or failed startup.
+  - aria2 failure mapping lives in `Aria2TransferFailureClassifier` and follows aria2's documented error-code meanings. Each RPC client call makes one physical request; error and empty envelopes terminate the current status request immediately. RPC-layer failure preserves the latest GID; terminal task failure or explicit not-found clears stale identity.
   - Runtime alerts depend on `IAppDialogService`; backend constructors cannot accept framework-specific dialog services.
   - Runtime factory creates a typed backend logger, and every download/file-lifecycle/maintenance owner uses the shared provider; this directory cannot call static `LogManager`.
   - Download diagnostic throttling belongs to the injected runtime logger instance; scopes contain only a SHA-256-derived short task ID and cannot retain raw task IDs in process-wide static state.
@@ -1793,7 +1804,7 @@ contracts:
 hazards:
   - Blocking waits in download lifecycle can freeze UI or prevent process exit.
   - Media stages still resolve a `DownloadingItem` projection for playback metadata even though queue identity and all durable transitions are Domain-authoritative.
-  - Pipeline retry and backend URL fallback can multiply attempts because one typed retry budget does not yet own both decisions.
+  - aria2 reports a machine-readable failure code but does not expose HTTP `Retry-After`; those 429 responses use the policy's bounded fallback delay instead of a server-provided value.
   - The stage presenter/projector are transitional executable-assembly owners until Gate 8 moves them and removes `DownloadingItem` from the execution context.
   - Letting an expected shutdown `OperationCanceledException` escape before state recovery leaves rows stored as active and prevents clean resume after restart.
   - Resume behavior depends on preserving partial files while delete behavior must remove them.
@@ -1803,6 +1814,7 @@ tests:
   - test.download-orchestrator
   - test.download-queue-gateway
   - test.download-pipeline-stages
+  - test.download-retry-policy
   - test.download-file-integrity
   - test.fake-http-download
   - test.download-lifecycle

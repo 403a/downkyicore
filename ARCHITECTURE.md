@@ -188,6 +188,17 @@ FinalizeStage
 
 每個 stage 接受 `DownloadExecutionContext` 與 `CancellationToken`，回傳 typed result。UI 文字由 Desktop presenter 依 domain/application phase 投影，不可由 pipeline 直接讀取資源字典。
 
+下載重試只有一個預算 owner：
+
+```text
+DownloadMediaStage
+  -> DownloadTransferCoordinator (global attempt budget)
+  -> DownloadRetryPolicy (typed decision)
+  -> ITransferBackend (exactly one URL, one backend attempt)
+```
+
+`DownloadTransferResult` 區分 transient network、rate limit、expired address、resume rejected、invalid media、disk 與 permanent failure。403 可觸發一次播放地址重解；429 在 backend 能提供 `Retry-After` 時遵守最多 30 秒的 bounded delay；resume rejected 只允許清理該 transfer 的檔案與 sidecar 後重試一次；cancellation 不會轉成失敗或 retry。Built-in Downloader 與 aria2 的內部 retry 必須停用，每個 aria RPC client call 只能送出一次實體請求，避免和 coordinator 的 budget 相乘。網路失敗保留 partial/resume sidecar，只有確定無效的 media 或被拒絕的續傳狀態才清理。aria2 RPC 層失敗必須保留最新 GID；只有 terminal task failure 或明確的 task-not-found 才能清除。
+
 ## 邊界規則
 
 ### Domain
