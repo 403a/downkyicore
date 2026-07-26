@@ -1103,35 +1103,17 @@ public sealed class AriaClient
     /// <param name="parameters"></param>
     /// <param name="retry"></param>
     /// <returns></returns>
-    private static async Task<string?> RequestAsync(Uri url, string parameters, int retry = 3)
+    private static async Task<string?> RequestAsync(Uri url, string parameters)
     {
-        for (var attempt = 0; attempt < retry; attempt++)
+        using var request = new HttpRequestMessage(HttpMethod.Post, url)
         {
-            try
-            {
-                using var request = new HttpRequestMessage(HttpMethod.Post, url)
-                {
-                    Content = new StringContent(parameters, Encoding.UTF8, "application/json")
-                };
-                using var response = await HttpClient.SendAsync(
-                    request,
-                    HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
-                response.EnsureSuccessStatusCode();
-
-                return await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-            }
-            catch (Exception e) when (e is HttpRequestException or IOException)
-            {
-                if (attempt + 1 >= retry)
-                {
-                    return null;
-                }
-
-                await Task.Delay(TimeSpan.FromMilliseconds(150 * (attempt + 1))).ConfigureAwait(false);
-            }
-        }
-
-        return null;
+            Content = new StringContent(parameters, Encoding.UTF8, "application/json")
+        };
+        using var response = await HttpClient.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync().ConfigureAwait(false);
     }
 
 }

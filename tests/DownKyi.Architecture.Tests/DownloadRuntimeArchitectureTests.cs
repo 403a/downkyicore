@@ -400,15 +400,78 @@ public sealed class DownloadRuntimeArchitectureTests
         Assert.DoesNotContain("paused.Phase == DownloadPhase.Pausing", stateSource, StringComparison.Ordinal);
         Assert.Contains("ConfirmPauseAfterWorkerStopsAsync", orchestratorSource, StringComparison.Ordinal);
         Assert.Contains("_stateWriter.ConfirmPausedAsync", orchestratorSource, StringComparison.Ordinal);
-        Assert.Contains("outcome == DownloadTransferOutcome.Paused", mediaStageSource, StringComparison.Ordinal);
-        Assert.Contains("return DownloadTransferOutcome.Paused", builtinSource, StringComparison.Ordinal);
-        Assert.Contains("return DownloadTransferOutcome.Paused", ariaSource, StringComparison.Ordinal);
+        Assert.Contains("result.Outcome == DownloadTransferOutcome.Paused", mediaStageSource, StringComparison.Ordinal);
+        Assert.Contains("return DownloadTransferResult.Paused()", builtinSource, StringComparison.Ordinal);
+        Assert.Contains("return DownloadTransferResult.Paused()", ariaSource, StringComparison.Ordinal);
         Assert.True(
             builtinSource.IndexOf("if (request.IsPauseRequested())", StringComparison.Ordinal) <
             builtinSource.IndexOf("request.EnsureActive();", StringComparison.Ordinal));
         Assert.True(
             ariaSource.IndexOf("if (request.IsPauseRequested())", StringComparison.Ordinal) <
                    ariaSource.IndexOf("request.EnsureActive();", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void TransferRetryHasOneTypedBudgetOwner()
+    {
+        var directory = Path.Combine(RepositoryRoot, "DownKyi", "Services", "Download");
+        var coordinatorSource = File.ReadAllText(Path.Combine(
+            directory,
+            "DownloadTransferCoordinator.cs"));
+        var policySource = File.ReadAllText(Path.Combine(
+            directory,
+            "DownloadRetryPolicy.cs"));
+        var mediaStageSource = File.ReadAllText(Path.Combine(
+            directory,
+            "DownloadMediaStage.cs"));
+        var builtinSource = File.ReadAllText(Path.Combine(
+            directory,
+            "BuiltinTransferBackend.cs"));
+        var ariaSource = File.ReadAllText(Path.Combine(
+            directory,
+            "Aria2TransferBackend.cs"));
+
+        Assert.Contains(
+            "attempt <= _retryPolicy.MaximumAttempts",
+            coordinatorSource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "DownloadTransferFailureKind",
+            policySource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "RefreshAddresses",
+            policySource,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("RetryLimit", mediaStageSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("DownloadWithRetryAsync", mediaStageSource, StringComparison.Ordinal);
+        Assert.Contains(
+            "DownloadTransferFileCleanup.DeleteInvalidArtifacts",
+            coordinatorSource,
+            StringComparison.Ordinal);
+        Assert.Contains("request.Urls.Count != 1", builtinSource, StringComparison.Ordinal);
+        Assert.Contains("request.Urls.Count != 1", ariaSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("foreach (var url in", builtinSource, StringComparison.Ordinal);
+        Assert.Contains("MaxTryAgainOnFailure = 0", builtinSource, StringComparison.Ordinal);
+        Assert.Contains("MaxTries = \"1\"", ariaSource, StringComparison.Ordinal);
+        Assert.Contains("RetryWait = \"0\"", ariaSource, StringComparison.Ordinal);
+        Assert.Contains("AlwaysResume = \"false\"", ariaSource, StringComparison.Ordinal);
+        Assert.Contains("MaxResumeFailureTries = \"0\"", ariaSource, StringComparison.Ordinal);
+        Assert.Contains("GetDownloadStatusDetailAsync", ariaSource, StringComparison.Ordinal);
+        var ariaClientSource = File.ReadAllText(Path.Combine(
+            RepositoryRoot,
+            "DownKyi.Core",
+            "Aria2cNet",
+            "Client",
+            "AriaClient.cs"));
+        Assert.DoesNotContain(
+            "int retry =",
+            ariaClientSource,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "attempt < retry",
+            ariaClientSource,
+            StringComparison.Ordinal);
     }
 
     [Fact]

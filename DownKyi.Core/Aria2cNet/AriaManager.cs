@@ -30,6 +30,11 @@ public sealed class AriaGlobalStatusEventArgs(long speed) : EventArgs
     public long Speed { get; } = speed;
 }
 
+public sealed record AriaDownloadStatus(
+    DownloadResult Result,
+    string? ErrorCode,
+    string? ErrorMessage);
+
 public class AriaManager
 {
     private const int PollDelayMilliseconds = 500;
@@ -74,9 +79,27 @@ public class AriaManager
         Func<CancellationToken, ValueTask>? statusCallback = null,
         CancellationToken cancellationToken = default)
     {
+        var status = await GetDownloadStatusDetailAsync(
+            gid,
+            statusCallback,
+            cancellationToken).ConfigureAwait(false);
+        return status.Result;
+    }
+
+    /// <summary>
+    /// Gets the download status while preserving aria2's machine-readable failure code.
+    /// </summary>
+    public async Task<AriaDownloadStatus> GetDownloadStatusDetailAsync(
+        string gid,
+        Func<CancellationToken, ValueTask>? statusCallback = null,
+        CancellationToken cancellationToken = default)
+    {
         if (string.IsNullOrWhiteSpace(gid))
         {
-            return DownloadResult.FAILED;
+            return new AriaDownloadStatus(
+                DownloadResult.FAILED,
+                "invalid-gid",
+                null);
         }
 
         string? filePath = null;
@@ -87,14 +110,27 @@ public class AriaManager
             var status = await _ariaClient.TellStatus(gid).ConfigureAwait(false);
             if (status?.Result == null)
             {
-                if (status?.Error?.Message?.Contains("is not found", StringComparison.OrdinalIgnoreCase) == true)
+                if (status?.Error is { } rpcError)
                 {
-                    OnDownloadFinish(false, null, gid, status.Error.Message);
-                    return DownloadResult.ABORT;
+                    var errorCode = rpcError.Message.Contains(
+                        "is not found",
+                        StringComparison.OrdinalIgnoreCase)
+                        ? "not-found"
+                        : $"rpc-{rpcError.Code}";
+                    OnDownloadFinish(false, null, gid, rpcError.Message);
+                    return new AriaDownloadStatus(
+                        errorCode == "not-found"
+                            ? DownloadResult.ABORT
+                            : DownloadResult.FAILED,
+                        errorCode,
+                        rpcError.Message);
                 }
 
-                await Task.Delay(PollDelayMilliseconds, cancellationToken).ConfigureAwait(false);
-                continue;
+                OnDownloadFinish(false, null, gid, null);
+                return new AriaDownloadStatus(
+                    DownloadResult.FAILED,
+                    "rpc-empty",
+                    null);
             }
 
             var result = status.Result;
@@ -119,15 +155,16 @@ public class AriaManager
             if (result.Status == "complete")
             {
                 OnDownloadFinish(true, filePath, gid, null);
-                return DownloadResult.SUCCESS;
+                return new AriaDownloadStatus(
+                    DownloadResult.SUCCESS,
+                    null,
+                    null);
             }
 
             if (!string.IsNullOrEmpty(result.ErrorCode) && result.ErrorCode != "0")
             {
-                if (!string.IsNullOrEmpty(result.ErrorMessage))
-                {
-                    _logger.LogErrorMessage($"aria2 reported a download failure: {result.ErrorMessage}");
-                }
+                _logger.LogErrorMessage(
+                    $"aria2 reported a download failure; errorCode={result.ErrorCode}.");
 
                 var ariaRemove = await _ariaClient.RemoveDownloadResultAsync(gid).ConfigureAwait(false);
                 if (ariaRemove?.Result != null)
@@ -136,7 +173,10 @@ public class AriaManager
                 }
 
                 OnDownloadFinish(false, null, gid, result.ErrorMessage);
-                return DownloadResult.FAILED;
+                return new AriaDownloadStatus(
+                    DownloadResult.FAILED,
+                    result.ErrorCode,
+                    result.ErrorMessage);
             }
 
             await Task.Delay(PollDelayMilliseconds, cancellationToken).ConfigureAwait(false);
