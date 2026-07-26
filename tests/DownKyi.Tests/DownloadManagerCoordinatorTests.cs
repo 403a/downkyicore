@@ -19,7 +19,7 @@ public sealed class DownloadManagerCoordinatorTests
     {
         using var context = new CoordinatorContext();
         var item = context.CreateDownloadingItem("pause-resume", DownloadStatus.WaitForDownload);
-        context.State.Downloading.Add(item);
+        context.State.AddDownloading(item);
         await context.Storage.AddDownloadingAsync(item, TestContext.Current.CancellationToken);
         await context.StateWriter.StartAsync(
             new DownloadTaskId(item.DownloadBase.Id),
@@ -55,7 +55,7 @@ public sealed class DownloadManagerCoordinatorTests
         using var context = new CoordinatorContext();
         var item = context.CreateDownloadingItem("delete-retry", DownloadStatus.WaitForDownload);
         item.Downloading.DownloadFiles["video"] = "delete-retry.mp4";
-        context.State.Downloading.Add(item);
+        context.State.AddDownloading(item);
         await context.Storage.AddDownloadingAsync(item, TestContext.Current.CancellationToken);
         await context.StateWriter.CancelAsync(
             new DownloadTaskId(item.DownloadBase.Id),
@@ -80,7 +80,7 @@ public sealed class DownloadManagerCoordinatorTests
         using var context = new CoordinatorContext();
         var item = context.CreateDownloadingItem("delete-complete", DownloadStatus.WaitForDownload);
         item.Downloading.DownloadFiles["video"] = "delete-complete.mp4";
-        context.State.Downloading.Add(item);
+        context.State.AddDownloading(item);
         await context.Storage.AddDownloadingAsync(item, TestContext.Current.CancellationToken);
         var media = context.CreateFile("delete-complete.mp4", "partial media");
         var sidecar = context.CreateFile("delete-complete.mp4.aria2", "resume state");
@@ -101,7 +101,7 @@ public sealed class DownloadManagerCoordinatorTests
         using var context = new CoordinatorContext();
         var item = context.CreateDownloadingItem("delete-canceled", DownloadStatus.WaitForDownload);
         item.Downloading.DownloadFiles["video"] = "delete-canceled.mp4";
-        context.State.Downloading.Add(item);
+        context.State.AddDownloading(item);
         await context.Storage.AddDownloadingAsync(item, TestContext.Current.CancellationToken);
         var media = context.CreateFile("delete-canceled.mp4", "partial media");
         using var cancellation = new CancellationTokenSource();

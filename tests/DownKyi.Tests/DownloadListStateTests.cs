@@ -14,8 +14,8 @@ public sealed class DownloadListStateTests
         var collection = state.Downloaded;
         var later = CreateDownloadedItem("B", order: 2, finishedTimestamp: 20);
         var earlier = CreateDownloadedItem("A", order: 1, finishedTimestamp: 10);
-        collection.Add(later);
-        collection.Add(earlier);
+        state.AddDownloaded(later);
+        state.AddDownloaded(earlier);
 
         state.SortDownloaded(DownloadFinishedSort.DownloadAsc);
 
@@ -28,7 +28,7 @@ public sealed class DownloadListStateTests
     {
         var state = new DownloadListState();
         var item = CreateDownloadedItem("A", order: 1, finishedTimestamp: 10);
-        state.Downloaded.Add(item);
+        state.AddDownloaded(item);
 
         state.ReplaceDownloaded(state.Downloaded);
 
@@ -42,11 +42,21 @@ public sealed class DownloadListStateTests
         var secondEpisode = CreateDownloadedItem("Series", order: 2, finishedTimestamp: 10);
         var otherTitle = CreateDownloadedItem("Another", order: 5, finishedTimestamp: 30);
         var firstEpisode = CreateDownloadedItem("Series", order: 1, finishedTimestamp: 20);
-        state.Downloaded.AddRange([secondEpisode, otherTitle, firstEpisode]);
+        state.AddDownloadedRange([secondEpisode, otherTitle, firstEpisode]);
 
         state.SortDownloaded(DownloadFinishedSort.Number);
 
         Assert.Equal([otherTitle, firstEpisode, secondEpisode], state.Downloaded);
+    }
+
+    [Fact]
+    public void ExposedCollectionsRejectExternalMutation()
+    {
+        var state = new DownloadListState();
+        var item = CreateDownloadedItem("A", order: 1, finishedTimestamp: 10);
+
+        Assert.Throws<NotSupportedException>(() =>
+            ((ICollection<DownloadedItem>)state.Downloaded).Add(item));
     }
 
     private static DownloadedItem CreateDownloadedItem(

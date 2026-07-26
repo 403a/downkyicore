@@ -24,7 +24,7 @@ public sealed class BackNavigationArchitectureTests
     {
         var source = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "ViewModels",
             fileName));
 

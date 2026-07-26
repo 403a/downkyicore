@@ -20,3 +20,14 @@
 5. 同步更新 `module-boundary-naming-audit.md`、live plan 與 knowledge graph。
 
 全域「simple type name 不可重複」與「檔名必須等於第一個宣告型別」規則不採用，因為 protocol DTO、partial class、`.axaml.cs` 和 companion records 會被誤判。
+
+## 已收緊為零的邊界
+
+下列 Gate 8 債務已不再使用 baseline，而是任何命中都直接失敗：
+
+- Core 中的 Avalonia、QRCoder 與 XAML ownership。
+- Desktop service interfaces 對 `DownKyi.ViewModels` 的引用。
+- production code 中的 `ImmutableObservableCollection<T>`。
+- executable project 中除最小 Desktop bootstrap 之外的程式、資源與套件 ownership。
+
+下載清單必須由 `DownloadListState` 私有持有可變 backing collections，並只公開 `ReadOnlyObservableCollection<T>`。

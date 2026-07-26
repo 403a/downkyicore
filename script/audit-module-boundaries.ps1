@@ -150,7 +150,7 @@ $coreUiDependencies = @(
         Sort-Object
 )
 
-$servicesRoot = Join-Path $repositoryRoot "DownKyi/Services"
+$servicesRoot = Join-Path $repositoryRoot "src/DownKyi.Desktop/Services"
 $presentationBoundContracts = @(
     Get-ChildItem -LiteralPath $servicesRoot -Recurse -File -Filter "I*.cs" |
         Where-Object {
@@ -242,7 +242,7 @@ $oversizedFiles = @(
         Sort-Object lines -Descending
 )
 
-$downloadRoot = Join-Path $repositoryRoot "DownKyi/Services/Download"
+$downloadRoot = Join-Path $repositoryRoot "src/DownKyi.Desktop/Services/Download"
 $downloadSources = @(Get-ChildItem -LiteralPath $downloadRoot -Recurse -File -Filter "*.cs")
 $downloadingItemReferences = 0
 $domainTaskReferences = 0
@@ -264,8 +264,16 @@ $bilibiliHttpSource = (
         ForEach-Object { Get-ChildItem -LiteralPath $_ -Recurse -File -Filter "*.cs" } |
         ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw }
 ) -join "`n"
-$collectionPath = Join-Path $repositoryRoot "DownKyi/ViewModels/ImmutableObservableCollection.cs"
-$collectionSource = Get-Content -LiteralPath $collectionPath -Raw
+$customCollectionFiles = @(
+    Get-ProductionFiles -Patterns "*.cs" |
+        Where-Object {
+            (Get-Content -LiteralPath $_.FullName -Raw).Contains("ImmutableObservableCollection")
+        }
+)
+$collectionSource = (
+    $customCollectionFiles |
+        ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw }
+) -join "`n"
 $logProviderPath = Join-Path $repositoryRoot "DownKyi.Core/Logging/ApplicationLogProvider.cs"
 
 $requiredKnowledgePaths = @(
@@ -295,7 +303,7 @@ catch {
 }
 
 $result = [ordered]@{
-    schemaVersion = 1
+    schemaVersion = 2
     generatedAtUtc = [DateTimeOffset]::UtcNow.ToString("O")
     commitSha = $commitSha
     projects = $projects
@@ -320,6 +328,7 @@ $result = [ordered]@{
             httpUsesSynchronousSend = $bilibiliHttpSource.Contains("_httpClient.Send(")
             httpUsesSynchronousRead = $bilibiliHttpSource.Contains("reader.ReadToEnd()")
             httpUsesBlockingBackoff = $bilibiliHttpSource.Contains("WaitHandle.WaitOne")
+            customMutableObservableCollectionReferences = $customCollectionFiles.Count
             customCollectionUnsupportedMembers = [regex]::Matches(
                 $collectionSource,
                 'throw\s+new\s+NotImplementedException\s*\(').Count

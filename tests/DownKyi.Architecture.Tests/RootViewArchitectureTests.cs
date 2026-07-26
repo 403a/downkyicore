@@ -10,7 +10,7 @@ public sealed class RootViewArchitectureTests
     [Fact]
     public void ProductionViewsDoNotUsePrismCompositionAttachedProperties()
     {
-        var viewRoot = Path.Combine(RepositoryRoot, "DownKyi");
+        var viewRoot = Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop");
         var violations = new List<string>();
         foreach (var path in Directory.EnumerateFiles(viewRoot, "*.axaml", SearchOption.AllDirectories)
                      .Where(path => !IsUnderDirectory(path, "obj"))
@@ -55,7 +55,8 @@ public sealed class RootViewArchitectureTests
     public void ProductCodeDoesNotReferencePrismNamespaces()
     {
         var violations = Directory
-            .EnumerateFiles(Path.Combine(RepositoryRoot, "DownKyi"), "*.cs", SearchOption.AllDirectories)
+            .EnumerateFiles(RepositoryRoot, "*.cs", SearchOption.AllDirectories)
+            .Where(path => !IsUnderDirectory(path, "tests"))
             .Where(path => !IsUnderDirectory(path, "obj"))
             .Where(path => !IsUnderDirectory(path, "bin"))
             .Where(path => File.ReadAllText(path).Contains("Prism", StringComparison.Ordinal))

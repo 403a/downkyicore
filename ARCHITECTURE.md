@@ -12,35 +12,33 @@
 
 ## 目前拓樸
 
-目前分支已建立 Domain、Application、Infrastructure 與 Desktop 專案，但主要產品程式仍集中在既有 `DownKyi` 與 `DownKyi.Core` 組件。
+目前分支已建立 Domain、Application、Infrastructure 與 Desktop 專案。Avalonia 產品程式已由 `DownKyi.Desktop` 實際擁有；`DownKyi` executable 只保留最小啟動入口。
 
 ```mermaid
 flowchart TD
-    Entry["DownKyi executable\nApp + Views + ViewModels + runtime services"]
-    Core["DownKyi.Core\nBilibili API + settings + logging + media + storage compatibility"]
-    Desktop["DownKyi.Desktop\nHost builder only"]
+    Entry["DownKyi executable\nminimal Program bootstrap"]
+    Core["DownKyi.Core\nheadless Bilibili API + settings + logging + media + storage compatibility"]
+    Desktop["DownKyi.Desktop\nAvalonia + Host + Views + ViewModels + desktop runtime"]
     Application["DownKyi.Application\nselected contracts and use cases"]
     Domain["DownKyi.Domain\ndownload aggregate and typed results"]
     Infrastructure["DownKyi.Infrastructure\nSQLite + async Bilibili HTTP + write-behind + clock"]
 
-    Entry --> Core
     Entry --> Desktop
-    Entry --> Application
-    Entry --> Domain
-    Entry --> Infrastructure
+    Desktop --> Core
     Desktop --> Application
     Desktop --> Domain
     Desktop --> Infrastructure
     Infrastructure --> Application
     Infrastructure --> Domain
+    Core --> Application
     Application --> Domain
 ```
 
 目前的正確事實：
 
-- `DownKyi.exe` 同時是啟動入口、Avalonia Desktop 層與多數 runtime implementation owner。
-- `DownKyi.Desktop` 只含 Host builder，尚未形成完整 Desktop assembly boundary。
-- `DownKyi.Core` 仍直接依賴 Avalonia QR bitmap 與 XAML resources，尚未是 headless core。
+- `DownKyi.exe` 只含 `Program.cs`，只引用 `DownKyi.Desktop`，不持有 UI、套件、資源或生命週期實作。
+- `DownKyi.Desktop` 是 Avalonia App、Views、ViewModels、`Presentation` projections、desktop adapters、Host composition 與 desktop runtime owner。Service contracts 不再引用 `DownKyi.ViewModels`。
+- `DownKyi.Core` 不含 `.axaml`、Avalonia 或 QRCoder；登入 API 留在 Core，QR bitmap renderer 與 Bilibili image dictionaries 位於 Desktop。
 - `DownKyi.Domain.DownloadTask` 已是持久化狀態轉換的權威；worker 與 pipeline 入口使用 `DownloadTaskId`，但 orchestrator channel 與部分 media stage 仍暫時持有 UI projection。
 - `DownKyi.Application` 已擁有 Bilibili HTTP/buvid/cookie ports；`DownKyi.Infrastructure` 已擁有其 async `IHttpClientFactory` transport、single-flight buvid provider、SQLite 與 write-behind，但 aria2、FFmpeg、file system 與 logging sink 尚待後續切片搬入。
 - Prism、DryIoc、EventAggregator、RegionManager 和 ContainerLocator 已從 production source 移除，不得重新引入。
@@ -49,6 +47,7 @@ flowchart TD
 
 ```text
 Program
+  -> DesktopApplication.RunAsync()
   -> Avalonia App
   -> DownKyiHost.Create()
   -> DesktopComposition.AddDownKyiDesktop()
@@ -57,7 +56,7 @@ Program
   -> AvaloniaApplicationLifecycle.StartHostAsync()
 ```
 
-`DownKyiHost` 與 `DesktopComposition` 目前共同形成 composition root。這是受測試保護的相容狀態，但目標是讓 executable 只保留最小啟動與最外層組合。
+`DesktopApplication`、`DownKyiHost` 與 `DesktopComposition` 共同形成 Desktop composition root；executable 只做單次委派。
 
 Bilibili endpoint adapters 仍位於 `DownKyi.Core/BiliApi` 以保留 DTO 與外部協定相容性，但所有 production 呼叫都接收注入的 `IBilibiliApiClient` 並使用 async API。Host 是 client、cookie provider、buvid provider 與網路設定的唯一組合點；static client、全域 `Configure()` 和同步 HTTP compatibility path 已刪除。
 
@@ -114,7 +113,7 @@ flowchart LR
 
 目前所有 durable command 都先載入 Domain aggregate、執行合法 transition、以 optimistic version 寫入 SQLite，再發布 committed snapshot。一般 runtime 不再從 mutable UI model 反向重建 Domain；`DownloadTask.Restore` 只允許出現在 SQLite materializer 與 legacy migration adapter。
 
-佇列已不再掃描 UI collection；新增、續傳與一次性啟動恢復都直接傳遞 `DownloadTaskId`。啟動查詢在同一份結果中提供 Domain snapshots 與 UI projections，runtime 只使用前者。`DownloadPipeline` 只建立單次 execution context 並依序執行 typed stages；階段失敗會立即停止並經 typed state writer 標記失敗。這條流程仍不是最終架構，因為 execution context 仍以 projection 作為播放流和畫面上下文，且 presenter/projector 尚未搬入 `DownKyi.Desktop`；Gate 8 擁有這兩項遷移。
+佇列已不再掃描 UI collection；新增、續傳與一次性啟動恢復都直接傳遞 `DownloadTaskId`。啟動查詢在同一份結果中提供 Domain snapshots 與 UI projections，runtime 只使用前者。`DownloadPipeline` 只建立單次 execution context 並依序執行 typed stages；階段失敗會立即停止並經 typed state writer 標記失敗。Presenter、projector 與 projection models 已由 Desktop 擁有，`DownloadListState` 只公開穩定的 `ReadOnlyObservableCollection<T>`。剩餘過渡債是 media execution context 仍讀取 `DownloadingItem` 作為播放流與畫面上下文，後續需改為明確 execution input，而不是讓 UI projection 進入 runtime。
 
 ## 目標拓樸
 

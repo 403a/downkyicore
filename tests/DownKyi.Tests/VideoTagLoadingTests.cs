@@ -5,13 +5,13 @@ using DownKyi.Application.Downloads;
 using DownKyi.Domain.Downloads;
 using DownKyi.Domain.Results;
 using DownKyi.Infrastructure.Time;
+using DownKyi.Presentation;
 using DownKyi.Services;
 using DownKyi.Services.Download;
 using DownKyi.Services.Video;
-using DownKyi.ViewModels.PageViewModels;
 using Microsoft.Extensions.Logging;
 using CoreVideoPage = DownKyi.Core.BiliApi.Video.Models.VideoPage;
-using VideoPage = DownKyi.ViewModels.PageViewModels.VideoPage;
+using VideoPage = DownKyi.Presentation.VideoPage;
 
 namespace DownKyi.Tests;
 

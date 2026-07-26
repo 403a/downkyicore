@@ -17,12 +17,12 @@ using DownKyi.CustomControl.AsyncImageLoader.Loaders;
 using DownKyi.Desktop.Composition;
 using DownKyi.Infrastructure.Downloads;
 using DownKyi.Platform;
+using DownKyi.Presentation;
 using DownKyi.Services;
 using DownKyi.Services.Download;
 using DownKyi.Services.Media;
 using DownKyi.Services.UserSpace;
 using DownKyi.ViewModels;
-using DownKyi.ViewModels.PageViewModels;
 using DownKyi.ViewModels.Settings;
 using DownKyi.Views;
 using Microsoft.Extensions.DependencyInjection;
@@ -322,7 +322,7 @@ public sealed class UiSmokeTests
                     .Navigate(new AppNavigationRequest(AppRoute.Index, Parameter: "smoke"));
 
                 Assert.IsType<ViewIndexViewModel>(mainViewModel.MainContent);
-                Assert.NotNull(Program.BuildAvaloniaApp());
+                Assert.NotNull(DesktopApplication.BuildAvaloniaApp());
                 AssertPrismRuntimeIsNotLoaded();
             }
             finally
@@ -470,7 +470,7 @@ public sealed class UiSmokeTests
         application.Resources.MergedDictionaries.Add(new ResourceInclude(
             new Uri("avares://DownKyi.Desktop.Tests/"))
         {
-            Source = new Uri("avares://DownKyi/Themes/ThemeDefault.axaml")
+            Source = new Uri("avares://DownKyi.Desktop/Themes/ThemeDefault.axaml")
         });
         return application;
     }

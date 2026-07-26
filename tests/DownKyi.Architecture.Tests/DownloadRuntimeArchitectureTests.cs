@@ -8,7 +8,7 @@ public sealed class DownloadRuntimeArchitectureTests
     public void DownloadRuntimeDoesNotUseSynchronousAsyncWaits()
     {
         var files = Directory.EnumerateFiles(
-            Path.Combine(RepositoryRoot, "DownKyi", "Services", "Download"),
+            Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "Services", "Download"),
             "*.cs",
             SearchOption.TopDirectoryOnly).Append(
             Path.Combine(RepositoryRoot, "DownKyi.Core", "Aria2cNet", "AriaManager.cs")).Append(
@@ -36,7 +36,7 @@ public sealed class DownloadRuntimeArchitectureTests
     {
         var directory = Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Services",
             "Download");
         var factorySource = File.ReadAllText(Path.Combine(directory, "DownloadRuntimeFactory.cs"));
@@ -58,7 +58,7 @@ public sealed class DownloadRuntimeArchitectureTests
             "Aria2cNet",
             "Client",
             "AriaClient.cs"));
-        var runtimeDirectory = Path.Combine(RepositoryRoot, "DownKyi", "Services", "Download");
+        var runtimeDirectory = Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "Services", "Download");
         var factorySource = File.ReadAllText(Path.Combine(runtimeDirectory, "DownloadRuntimeFactory.cs"));
         var backendSource = File.ReadAllText(Path.Combine(runtimeDirectory, "Aria2TransferBackend.cs"));
 
@@ -79,7 +79,7 @@ public sealed class DownloadRuntimeArchitectureTests
     {
         var source = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Services",
             "Download",
             "DownloadOrchestrator.cs"));
@@ -99,7 +99,7 @@ public sealed class DownloadRuntimeArchitectureTests
 
         var recoverySource = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Services",
             "Download",
             "DownloadTaskShutdownRecovery.cs"));
@@ -111,7 +111,7 @@ public sealed class DownloadRuntimeArchitectureTests
     [Fact]
     public void DownloadArtifactsAndTaskStateHaveDedicatedOwners()
     {
-        var directory = Path.Combine(RepositoryRoot, "DownKyi", "Services", "Download");
+        var directory = Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "Services", "Download");
         var pipelineSource = File.ReadAllText(Path.Combine(directory, "DownloadPipeline.cs"))
             .Replace("\r\n", "\n", StringComparison.Ordinal);
         var artifactSource = File.ReadAllText(Path.Combine(directory, "DownloadArtifactWriter.cs"));
@@ -142,7 +142,7 @@ public sealed class DownloadRuntimeArchitectureTests
     [Fact]
     public void DownloadRuntimeUsesInjectedListAndStorageOwners()
     {
-        var directory = Path.Combine(RepositoryRoot, "DownKyi", "Services", "Download");
+        var directory = Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "Services", "Download");
         var violations = Directory.EnumerateFiles(directory, "*.cs", SearchOption.TopDirectoryOnly)
             .Select(path => new
             {
@@ -161,7 +161,7 @@ public sealed class DownloadRuntimeArchitectureTests
     [Fact]
     public void DesktopProjectionUsesTheApplicationStoreWithoutOwningSqlite()
     {
-        var directory = Path.Combine(RepositoryRoot, "DownKyi", "Services", "Download");
+        var directory = Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "Services", "Download");
         var projectionSource = File.ReadAllText(Path.Combine(
             directory,
             "DownloadTaskProjectionStore.cs"));
@@ -178,7 +178,7 @@ public sealed class DownloadRuntimeArchitectureTests
             .ToArray();
         var compositionSource = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Composition",
             "DesktopComposition.cs"));
 
@@ -197,7 +197,7 @@ public sealed class DownloadRuntimeArchitectureTests
     [Fact]
     public void DownloadRuntimeUsesInjectedSettingsAndDiagnosticOwners()
     {
-        var directory = Path.Combine(RepositoryRoot, "DownKyi", "Services", "Download");
+        var directory = Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "Services", "Download");
         string[] runtimeOwners =
         [
             "DownloadRuntimeFactory.cs",
@@ -217,7 +217,7 @@ public sealed class DownloadRuntimeArchitectureTests
         var diagnosticSource = File.ReadAllText(Path.Combine(directory, "DownloadDiagnosticLogger.cs"));
         var compositionSource = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Composition",
             "DesktopComposition.cs"));
 
@@ -230,7 +230,7 @@ public sealed class DownloadRuntimeArchitectureTests
     [Fact]
     public void DownloadManagerUsesCoordinatorAndInjectedRuntimeBoundaries()
     {
-        var directory = Path.Combine(RepositoryRoot, "DownKyi", "Services", "Download");
+        var directory = Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "Services", "Download");
         var violations = Directory.EnumerateFiles(directory, "*.cs", SearchOption.TopDirectoryOnly)
             .Where(path =>
             {
@@ -243,25 +243,25 @@ public sealed class DownloadRuntimeArchitectureTests
         var taskFileSource = File.ReadAllText(Path.Combine(directory, "DownloadTaskFileService.cs"));
         var viewModelSource = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "ViewModels",
             "DownloadManager",
             "ViewDownloadingViewModel.cs"));
         var finishedViewModelSource = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "ViewModels",
             "DownloadManager",
             "ViewDownloadFinishedViewModel.cs"));
         var itemSource = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "ViewModels",
             "DownloadManager",
             "DownloadingItem.cs"));
         var viewSource = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Views",
             "DownloadManager",
             "ViewDownloading.axaml"));
@@ -270,7 +270,7 @@ public sealed class DownloadRuntimeArchitectureTests
             "DownloadManagerCoordinator.cs"));
         var compositionSource = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Composition",
             "DesktopComposition.cs"));
 
@@ -310,12 +310,12 @@ public sealed class DownloadRuntimeArchitectureTests
         var serverSource = File.ReadAllText(Path.Combine(ariaDirectory, "Server", "AriaServer.cs"));
         var compositionSource = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Composition",
             "DesktopComposition.cs"));
         var lifecycleSource = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Platform",
             "AvaloniaApplicationLifecycle.cs"));
 
@@ -333,7 +333,7 @@ public sealed class DownloadRuntimeArchitectureTests
     {
         var source = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Services",
             "Download",
             "DownloadBootstrapHostedService.cs"));
@@ -357,7 +357,7 @@ public sealed class DownloadRuntimeArchitectureTests
     {
         var source = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Services",
             "Download",
             "DownloadCompletionProjector.cs"));
@@ -371,7 +371,7 @@ public sealed class DownloadRuntimeArchitectureTests
     [Fact]
     public void RuntimeApisUseTaskIdentityAndTransferCallbacksInsteadOfUiItems()
     {
-        var directory = Path.Combine(RepositoryRoot, "DownKyi", "Services", "Download");
+        var directory = Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "Services", "Download");
         var pipelineSource = File.ReadAllText(Path.Combine(directory, "DownloadPipeline.cs"))
             .Replace("\r\n", "\n", StringComparison.Ordinal);
         var transferSource = File.ReadAllText(Path.Combine(directory, "ITransferBackend.cs"));
@@ -390,7 +390,7 @@ public sealed class DownloadRuntimeArchitectureTests
     [Fact]
     public void PauseIsAcknowledgedOnlyAfterTheTransferWorkerStops()
     {
-        var directory = Path.Combine(RepositoryRoot, "DownKyi", "Services", "Download");
+        var directory = Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "Services", "Download");
         var stateSource = File.ReadAllText(Path.Combine(directory, "DownloadTaskStateWriter.cs"));
         var orchestratorSource = File.ReadAllText(Path.Combine(directory, "DownloadOrchestrator.cs"));
         var mediaStageSource = File.ReadAllText(Path.Combine(directory, "DownloadMediaStage.cs"));
@@ -414,7 +414,7 @@ public sealed class DownloadRuntimeArchitectureTests
     [Fact]
     public void TransferRetryHasOneTypedBudgetOwner()
     {
-        var directory = Path.Combine(RepositoryRoot, "DownKyi", "Services", "Download");
+        var directory = Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "Services", "Download");
         var coordinatorSource = File.ReadAllText(Path.Combine(
             directory,
             "DownloadTransferCoordinator.cs"));
@@ -477,7 +477,7 @@ public sealed class DownloadRuntimeArchitectureTests
     [Fact]
     public void DownloadPipelineOnlyOrdersTypedStages()
     {
-        var directory = Path.Combine(RepositoryRoot, "DownKyi", "Services", "Download");
+        var directory = Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop", "Services", "Download");
         var pipelineSource = File.ReadAllText(Path.Combine(directory, "DownloadPipeline.cs"));
         var factorySource = File.ReadAllText(Path.Combine(directory, "DownloadRuntimeFactory.cs"));
         var mediaSource = File.ReadAllText(Path.Combine(directory, "DownloadMediaStage.cs"));
@@ -507,7 +507,7 @@ public sealed class DownloadRuntimeArchitectureTests
         Assert.True(File.ReadAllLines(Path.Combine(directory, "DownloadPipeline.cs")).Length < 150);
         Assert.False(File.Exists(Path.Combine(
             RepositoryRoot,
-            "DownKyi",
+            "src", "DownKyi.Desktop",
             "Models",
             "VideoPlayUrlBasic.cs")));
         Assert.Contains("DownloadTransferKey.Create", mediaSource, StringComparison.Ordinal);
