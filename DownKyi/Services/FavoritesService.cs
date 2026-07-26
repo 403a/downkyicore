@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Threading;
+using System.Threading.Tasks;
+using DownKyi.Application.Bilibili;
 using DownKyi.Application.Desktop;
 using DownKyi.Core.BiliApi.Favorites;
 using DownKyi.Core.Settings;
@@ -17,16 +19,24 @@ internal sealed class FavoritesService : IFavoritesService
     internal const string UnavailableMediaTitle = "已失效视频";
     private readonly ISettingsStore _settingsStore;
     private readonly IAppNavigationService _navigationService;
+    private readonly IBilibiliApiClient _client;
 
-    public FavoritesService(ISettingsStore settingsStore, IAppNavigationService navigationService)
+    public FavoritesService(
+        ISettingsStore settingsStore,
+        IAppNavigationService navigationService,
+        IBilibiliApiClient client)
     {
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
         _navigationService = navigationService ?? throw new ArgumentNullException(nameof(navigationService));
+        _client = client ?? throw new ArgumentNullException(nameof(client));
     }
 
-    public FavoritesPageItem? GetFavorites(long mediaId, CancellationToken cancellationToken = default)
+    public async Task<FavoritesPageItem?> GetFavoritesAsync(
+        long mediaId,
+        CancellationToken cancellationToken = default)
     {
-        var metadata = FavoritesInfo.GetFavoritesInfo(mediaId, cancellationToken);
+        var metadata = await _client.GetFavoritesInfoAsync(mediaId, cancellationToken)
+            .ConfigureAwait(false);
         if (metadata == null)
         {
             return null;
@@ -52,14 +62,14 @@ internal sealed class FavoritesService : IFavoritesService
         };
     }
 
-    public ApiFavoritesMediaResource GetFavoritesMediaPage(
+    public Task<ApiFavoritesMediaResource> GetFavoritesMediaPageAsync(
         long mediaId,
         int page,
         int pageSize,
         string? keyword,
         CancellationToken cancellationToken)
     {
-        return FavoritesResource.GetFavoritesMediaResource(
+        return _client.GetFavoritesMediaResourceAsync(
             mediaId,
             page,
             pageSize,
@@ -67,11 +77,11 @@ internal sealed class FavoritesService : IFavoritesService
             cancellationToken);
     }
 
-    public IReadOnlyList<ApiFavoritesMedia> GetAllFavoritesMedia(
+    public Task<IReadOnlyList<ApiFavoritesMedia>> GetAllFavoritesMediaAsync(
         long mediaId,
         CancellationToken cancellationToken)
     {
-        return FavoritesResource.GetAllFavoritesMedia(mediaId, cancellationToken);
+        return _client.GetAllFavoritesMediaAsync(mediaId, cancellationToken);
     }
 
     public IReadOnlyList<FavoritesMedia> MapFavoritesMedia(
@@ -119,9 +129,12 @@ internal sealed class FavoritesService : IFavoritesService
                string.Equals(media.Title, UnavailableMediaTitle, StringComparison.Ordinal);
     }
 
-    public IReadOnlyList<TabHeader> GetCreatedFavorites(long mid, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<TabHeader>> GetCreatedFavoritesAsync(
+        long mid,
+        CancellationToken cancellationToken)
     {
-        var favorites = FavoritesInfo.GetAllCreatedFavorites(mid, cancellationToken);
+        var favorites = await _client.GetAllCreatedFavoritesAsync(mid, cancellationToken)
+            .ConfigureAwait(false);
         var result = new List<TabHeader>(favorites.Count);
         foreach (var item in favorites)
         {
@@ -137,9 +150,12 @@ internal sealed class FavoritesService : IFavoritesService
         return result;
     }
 
-    public IReadOnlyList<TabHeader> GetCollectedFavorites(long mid, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<TabHeader>> GetCollectedFavoritesAsync(
+        long mid,
+        CancellationToken cancellationToken)
     {
-        var favorites = FavoritesInfo.GetAllCollectedFavorites(mid, cancellationToken);
+        var favorites = await _client.GetAllCollectedFavoritesAsync(mid, cancellationToken)
+            .ConfigureAwait(false);
         var result = new List<TabHeader>(favorites.Count);
         foreach (var item in favorites)
         {

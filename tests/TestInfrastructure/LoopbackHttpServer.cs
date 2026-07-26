@@ -2,7 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 
-namespace DownKyi.Core.Tests.Infrastructure;
+namespace DownKyi.TestInfrastructure;
 
 internal sealed record LoopbackResponse(
     HttpStatusCode StatusCode,
@@ -29,7 +29,7 @@ internal sealed class LoopbackHttpServer : IAsyncDisposable
         _listener.Start();
 
         var endpoint = (IPEndPoint)_listener.LocalEndpoint;
-        Url = new Uri($"http://127.0.0.1:{endpoint.Port}/getLogin");
+        Url = new Uri($"http://127.0.0.1:{endpoint.Port}/api");
         _serverTask = RunAsync(_shutdown.Token);
     }
 
@@ -48,7 +48,8 @@ internal sealed class LoopbackHttpServer : IAsyncDisposable
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                using var client = await _listener.AcceptTcpClientAsync(cancellationToken).ConfigureAwait(false);
+                using var client = await _listener.AcceptTcpClientAsync(cancellationToken)
+                    .ConfigureAwait(false);
                 await HandleClientAsync(client, cancellationToken).ConfigureAwait(false);
             }
         }
@@ -60,7 +61,9 @@ internal sealed class LoopbackHttpServer : IAsyncDisposable
         }
     }
 
-    private async Task HandleClientAsync(TcpClient client, CancellationToken cancellationToken)
+    private async Task HandleClientAsync(
+        TcpClient client,
+        CancellationToken cancellationToken)
     {
         var stream = client.GetStream();
         await using var streamLifetime = stream.ConfigureAwait(false);
@@ -71,7 +74,8 @@ internal sealed class LoopbackHttpServer : IAsyncDisposable
             bufferSize: 1024,
             leaveOpen: true);
 
-        while (await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { Length: > 0 })
+        while (await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false)
+               is { Length: > 0 })
         {
         }
 
@@ -80,7 +84,8 @@ internal sealed class LoopbackHttpServer : IAsyncDisposable
         var response = _responseFactory(requestNumber);
         if (response.DelayBeforeResponse > TimeSpan.Zero)
         {
-            await Task.Delay(response.DelayBeforeResponse, cancellationToken).ConfigureAwait(false);
+            await Task.Delay(response.DelayBeforeResponse, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         var body = Encoding.UTF8.GetBytes(response.Body);
@@ -112,12 +117,16 @@ internal sealed class LoopbackHttpServer : IAsyncDisposable
         }
 
         headers.Append("\r\n");
-        await stream.WriteAsync(Encoding.ASCII.GetBytes(headers.ToString()), cancellationToken).ConfigureAwait(false);
+        await stream.WriteAsync(
+            Encoding.ASCII.GetBytes(headers.ToString()),
+            cancellationToken).ConfigureAwait(false);
 
         var bytesToSend = Math.Clamp(response.BytesToSend ?? body.Length, 0, body.Length);
         if (bytesToSend > 0)
         {
-            await stream.WriteAsync(body.AsMemory(0, bytesToSend), cancellationToken).ConfigureAwait(false);
+            await stream.WriteAsync(
+                body.AsMemory(0, bytesToSend),
+                cancellationToken).ConfigureAwait(false);
         }
 
         await stream.FlushAsync(cancellationToken).ConfigureAwait(false);

@@ -168,7 +168,7 @@ public sealed class AgentEnvironmentArchitectureTests
     {
         AssertPathsExist(
             "tests/DownKyi.Architecture.Tests/LegacyPatternArchitectureTests.cs",
-            "tests/DownKyi.Core.Tests/WebClientTests.cs",
+            "tests/DownKyi.Infrastructure.Tests/BilibiliHttpTransportTests.cs",
             "tests/DownKyi.Core.Tests/BiliApiContractSampleTests.cs");
 
         var policy = Read("tests/DownKyi.Architecture.Tests/LegacyPatternArchitectureTests.cs");

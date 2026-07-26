@@ -1,3 +1,4 @@
+using DownKyi.Application.Bilibili;
 using DownKyi.Core.BiliApi.Users.Models;
 using DownKyi.Core.Logging;
 using Newtonsoft.Json;
@@ -14,14 +15,19 @@ public static class Nickname
     /// </summary>
     /// <param name="nickName"></param>
     /// <returns></returns>
-    public static NicknameStatus? CheckNickname(string nickName)
+    public static Task<NicknameStatus> CheckNicknameAsync(
+        this IBilibiliApiClient client,
+        string nickName,
+        CancellationToken cancellationToken = default)
     {
         var url = $"https://api.bilibili.com/x/relation/stat?nickName={nickName}";
         const string referer = "https://www.bilibili.com";
-        return BiliApiRequest.RequestJson<NicknameStatus>(
+        return BiliApiRequest.RequestJsonAsync<NicknameStatus>(
+            client,
             url,
             referer,
-            nameof(CheckNickname),
-            "Nickname");
+            nameof(CheckNicknameAsync),
+            "Nickname",
+            cancellationToken: cancellationToken);
     }
 }

@@ -90,15 +90,17 @@ public sealed class MediaAndHttpRuntimeArchitectureTests
             "DesktopComposition.cs"));
         var registrationSource = File.ReadAllText(Path.Combine(
             RepositoryRoot,
-            "DownKyi.Core",
-            "BiliApi",
-            "BilibiliHttpClientRegistration.cs"));
+            "src",
+            "DownKyi.Infrastructure",
+            "Bilibili",
+            "BilibiliServiceCollectionExtensions.cs"));
 
-        Assert.DoesNotContain("AddDownKyiBilibiliHttpClient()", appSource, StringComparison.Ordinal);
-        Assert.Contains("AddDownKyiBilibiliHttpClient()", compositionSource, StringComparison.Ordinal);
-        Assert.Contains("AddHttpClient<BilibiliHttpClient>", registrationSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("AddDownKyiBilibiliInfrastructure", appSource, StringComparison.Ordinal);
+        Assert.Contains("AddDownKyiBilibiliInfrastructure", compositionSource, StringComparison.Ordinal);
+        Assert.Contains("AddHttpClient(HttpClientName", registrationSource, StringComparison.Ordinal);
         Assert.Contains("ConfigurePrimaryHttpMessageHandler", registrationSource, StringComparison.Ordinal);
-        Assert.Contains("ISettingsStore settingsStore", registrationSource, StringComparison.Ordinal);
+        Assert.Contains("IBilibiliApiClient", registrationSource, StringComparison.Ordinal);
+        Assert.Contains("IBuvidProvider", registrationSource, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -115,7 +117,12 @@ public sealed class MediaAndHttpRuntimeArchitectureTests
             })
             .Select(path => Path.GetRelativePath(RepositoryRoot, path))
             .ToArray();
-        var webClientSource = File.ReadAllText(Path.Combine(apiDirectory, "WebClient.cs"));
+        var transportSource = File.ReadAllText(Path.Combine(
+            RepositoryRoot,
+            "src",
+            "DownKyi.Infrastructure",
+            "Bilibili",
+            "BilibiliHttpTransport.cs"));
         var loginCoordinatorSource = File.ReadAllText(Path.Combine(
             RepositoryRoot,
             "DownKyi",
@@ -130,8 +137,10 @@ public sealed class MediaAndHttpRuntimeArchitectureTests
             "UserSpacePageCoordinator.cs"));
 
         Assert.True(violations.Length == 0, string.Join(Environment.NewLine, violations));
-        Assert.Contains("GetConfiguredClient().Send(", webClientSource, StringComparison.Ordinal);
-        Assert.DoesNotContain("catch (Exception", webClientSource, StringComparison.Ordinal);
+        Assert.Contains("SendAsync(", transportSource, StringComparison.Ordinal);
+        Assert.Contains("BilibiliHttpRequestException", transportSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("Console.", transportSource, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(apiDirectory, "WebClient.cs")));
         Assert.Contains("ILogger<LoginCoordinator>", loginCoordinatorSource, StringComparison.Ordinal);
         Assert.Contains("ILogger<UserSpacePageCoordinator>", userSpaceCoordinatorSource, StringComparison.Ordinal);
     }
@@ -369,7 +378,9 @@ public sealed class MediaAndHttpRuntimeArchitectureTests
         var coordinatorSource = string.Join(
             Environment.NewLine,
             coordinatorPaths.Select(File.ReadAllText));
-        Assert.Contains("Task.Run", coordinatorSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("Task.Run(async", coordinatorSource, StringComparison.Ordinal);
+        Assert.Contains("GetUserInfoForNavigationAsync", coordinatorSource, StringComparison.Ordinal);
+        Assert.Contains("GetLoginUrlAsync", coordinatorSource, StringComparison.Ordinal);
         Assert.Contains("CancellationToken", coordinatorSource, StringComparison.Ordinal);
         Assert.Contains("IUserSessionCoordinator", coordinatorSource, StringComparison.Ordinal);
         Assert.Contains("ILoginCoordinator", coordinatorSource, StringComparison.Ordinal);
@@ -401,7 +412,8 @@ public sealed class MediaAndHttpRuntimeArchitectureTests
         Assert.Contains("OnNavigatedFrom", viewModelSource, StringComparison.Ordinal);
         Assert.Contains("CancelAndDispose(ref _loadCancellation)", viewModelSource, StringComparison.Ordinal);
         Assert.Contains("IsEnabled = true", viewModelSource, StringComparison.Ordinal);
-        Assert.Contains("Task.Run", coordinatorSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("Task.Run", coordinatorSource, StringComparison.Ordinal);
+        Assert.Contains("await _client.", coordinatorSource, StringComparison.Ordinal);
         Assert.Contains("CancellationToken", coordinatorSource, StringComparison.Ordinal);
     }
 
@@ -429,7 +441,8 @@ public sealed class MediaAndHttpRuntimeArchitectureTests
         Assert.Contains("ISeasonsSeriesCoordinator", viewModelSource, StringComparison.Ordinal);
         Assert.DoesNotContain("IAddToDownloadServiceFactory", viewModelSource, StringComparison.Ordinal);
         Assert.DoesNotContain("SetDirectory", viewModelSource, StringComparison.Ordinal);
-        Assert.Contains("Task.Run", coordinatorSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("Task.Run", coordinatorSource, StringComparison.Ordinal);
+        Assert.Contains("await _client.", coordinatorSource, StringComparison.Ordinal);
         Assert.Contains("CancellationToken", coordinatorSource, StringComparison.Ordinal);
         Assert.Contains("_downloadCoordinator.AddAsync", coordinatorSource, StringComparison.Ordinal);
     }
@@ -467,7 +480,8 @@ public sealed class MediaAndHttpRuntimeArchitectureTests
         Assert.Contains("AddRange", viewModelSource, StringComparison.Ordinal);
         Assert.Contains("IFavoritesCoordinator", viewModelSource, StringComparison.Ordinal);
         Assert.Contains("IContentDownloadCoordinator", viewModelSource, StringComparison.Ordinal);
-        Assert.Contains("Task.Run", favoritesCoordinatorSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("Task.Run", favoritesCoordinatorSource, StringComparison.Ordinal);
+        Assert.Contains("await _favoritesService.", favoritesCoordinatorSource, StringComparison.Ordinal);
         Assert.Contains("CancellationToken", favoritesCoordinatorSource, StringComparison.Ordinal);
         Assert.Contains("Task.Run", downloadCoordinatorSource, StringComparison.Ordinal);
         Assert.Contains("_serviceFactory.Create", downloadCoordinatorSource, StringComparison.Ordinal);
@@ -521,10 +535,11 @@ public sealed class MediaAndHttpRuntimeArchitectureTests
         Assert.Contains("IPersonalMediaCoordinator", viewModelSource, StringComparison.Ordinal);
         Assert.Contains("IContentDownloadCoordinator", viewModelSource, StringComparison.Ordinal);
         Assert.Contains("AddRange", viewModelSource, StringComparison.Ordinal);
-        Assert.Contains("Task.Run", coordinatorSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("Task.Run", coordinatorSource, StringComparison.Ordinal);
+        Assert.Contains("await _client.", coordinatorSource, StringComparison.Ordinal);
         Assert.Contains("CancellationToken", coordinatorSource, StringComparison.Ordinal);
         Assert.Contains("CancellationToken cancellationToken = default", toViewApiSource, StringComparison.Ordinal);
-        Assert.Contains("cancellationToken);", toViewApiSource, StringComparison.Ordinal);
+        Assert.Contains("cancellationToken: cancellationToken", toViewApiSource, StringComparison.Ordinal);
         Assert.DoesNotContain("LoadMoreCommand => new(", viewModelSource, StringComparison.Ordinal);
 
         foreach (var source in viewModelPaths.Select(File.ReadAllText))
@@ -590,7 +605,8 @@ public sealed class MediaAndHttpRuntimeArchitectureTests
         Assert.Contains("LoadMyProfileAsync", File.ReadAllText(mySpacePath), StringComparison.Ordinal);
         Assert.Contains("LoadMyStatsAsync", File.ReadAllText(mySpacePath), StringComparison.Ordinal);
         Assert.Contains("LoadBangumiFollowPageAsync", File.ReadAllText(bangumiPath), StringComparison.Ordinal);
-        Assert.Contains("Task.Run", coordinatorSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("Task.Run(async", coordinatorSource, StringComparison.Ordinal);
+        Assert.Contains("await _client.", coordinatorSource, StringComparison.Ordinal);
         Assert.Contains("CancellationToken", coordinatorSource, StringComparison.Ordinal);
 
         foreach (var source in new[] { File.ReadAllText(publicationPath), File.ReadAllText(bangumiPath) })

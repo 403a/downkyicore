@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using DownKyi.Application.Bilibili;
 using DownKyi.Core.BiliApi.Sign;
 using DownKyi.Core.Settings;
 using DownKyi.ViewModels.PageViewModels;
@@ -49,9 +50,10 @@ internal sealed class VideoDetailWorkflowCoordinator : IVideoDetailWorkflowCoord
     public VideoDetailWorkflowCoordinator(
         ISettingsStore settingsStore,
         IVideoTagProvider tagProvider,
-        IWbiKeyProvider wbiKeyProvider)
+        IWbiKeyProvider wbiKeyProvider,
+        IBilibiliApiClient client)
         : this(
-            new VideoParseCoordinator(settingsStore, tagProvider, wbiKeyProvider),
+            new VideoParseCoordinator(settingsStore, tagProvider, wbiKeyProvider, client),
             new VideoSearchState())
     {
     }

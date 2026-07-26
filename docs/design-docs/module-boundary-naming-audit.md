@@ -42,7 +42,7 @@ pwsh ./script/audit-module-boundaries.ps1 `
 | P1 | Domain aggregate 不是 runtime authority | durable commands and queue identity now use Domain tasks; execution context still exposes one UI projection | durable authority resolved, projection leak remains |
 | P1 | Channel 仍輪詢 UI collection | direct `DownloadTaskId` admission; no dispatcher polling or collection-membership scheduling | resolved by Gate 5 |
 | P1 | `DownloadPipeline` 仍是 mixed-responsibility owner | typed six-stage sequence below 150 lines; presenter/projector isolated | resolved by Gate 6 stage extraction |
-| P1 | HTTP DI 只完成一半 | static `WebClient` facade plus sync `Send`, `ReadToEnd`, `WaitOne` | confirmed, omitted by attachment |
+| resolved | HTTP ownership | injected async Application ports plus Infrastructure transport | completed in Gate 7 |
 | P1 | Core 仍依賴 UI | 5 known files/project entries | confirmed |
 | P1 | service contracts 仍依賴 presentation | 3 interfaces | confirmed |
 | P1 | custom collection contract 不完整 | 4 consumers, 5 `NotImplementedException` members | confirmed, omitted by attachment |
@@ -117,11 +117,11 @@ Implemented policy:
 
 The architecture test `TransferRetryHasOneTypedBudgetOwner` rejects a reintroduced stage retry loop, multi-URL backend call, Downloader retry, or aria2 retry. Deterministic coordinator tests prove that primary and backup addresses share one budget and playback refresh occurs at most once.
 
-## Finding 6: HTTP 抽象仍是 static/synchronous facade
+## Resolved Finding 6: HTTP ownership
 
-`BilibiliHttpClient` 已由 `IHttpClientFactory` 建立，但 `WebClient` 保存 static client/configuration，核心請求仍使用同步 `HttpClient.Send`、`StreamReader.ReadToEnd` 與 `WaitHandle.WaitOne` backoff。
+Gate 7 已建立 `IBilibiliApiClient`、`IBuvidProvider` 與 `IBilibiliCookieProvider` ports，並由 Infrastructure 使用 `IHttpClientFactory`、`SendAsync`、async content/stream copy 與 cancellation-aware `Task.Delay` 實作。所有 production endpoint 已改為注入式 async 呼叫，static `WebClient`、`BilibiliHttpClient` 及全域 `Configure()` 已刪除。
 
-目標是注入 `IBilibiliApiClient`、`IBuvidProvider`、`IWbiKeyProvider`，使用 `SendAsync`、`ReadAsStringAsync`、`CopyToAsync` 和 `Task.Delay`。移除 static `WebClient.Configure()` 前，所有 endpoint 必須具備 deterministic fixture tests。
+Architecture tests 現在禁止重新加入 static client、同步 send/read 與 blocking backoff；Infrastructure tests 固定 retry、取消、stream ownership、partial-file cleanup、buvid single-flight 與 Host registration 契約。
 
 ## Finding 7: Core 仍含 UI
 

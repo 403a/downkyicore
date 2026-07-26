@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using DownKyi.Application.Bilibili;
 using DownKyi.Core.BiliApi.Sign;
 using DownKyi.Core.BiliApi.Users;
 using DownKyi.Core.BiliApi.Users.Models;
@@ -22,46 +23,49 @@ internal interface IUserSessionCoordinator
 internal sealed class UserSessionCoordinator : IUserSessionCoordinator
 {
     private readonly ISettingsStore _settingsStore;
-    private readonly Func<CancellationToken, UserInfoForNavigation?> _fetchNavigation;
+    private readonly Func<CancellationToken, Task<UserInfoForNavigation?>> _fetchNavigationAsync;
 
-    public UserSessionCoordinator(ISettingsStore settingsStore)
-        : this(settingsStore, UserInfo.GetUserInfoForNavigation)
+    public UserSessionCoordinator(
+        ISettingsStore settingsStore,
+        IBilibiliApiClient client)
+        : this(
+            settingsStore,
+            (client ?? throw new ArgumentNullException(nameof(client)))
+            .GetUserInfoForNavigationAsync)
     {
     }
 
     internal UserSessionCoordinator(
         ISettingsStore settingsStore,
-        Func<CancellationToken, UserInfoForNavigation?> fetchNavigation)
+        Func<CancellationToken, Task<UserInfoForNavigation?>> fetchNavigationAsync)
     {
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
-        _fetchNavigation = fetchNavigation ?? throw new ArgumentNullException(nameof(fetchNavigation));
+        _fetchNavigationAsync = fetchNavigationAsync
+                                ?? throw new ArgumentNullException(nameof(fetchNavigationAsync));
     }
 
-    public Task<UserSessionSnapshot> RefreshAsync(CancellationToken cancellationToken)
+    public async Task<UserSessionSnapshot> RefreshAsync(CancellationToken cancellationToken)
     {
-        return Task.Run(() =>
+        cancellationToken.ThrowIfCancellationRequested();
+        var userInfo = await _fetchNavigationAsync(cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        _settingsStore.Update(settings =>
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var userInfo = _fetchNavigation(cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-            _settingsStore.Update(settings =>
+            var mapped = MapSettings(userInfo);
+            var keys = new WbiKeys(mapped.ImgKey, mapped.SubKey);
+            if (!keys.IsValid)
             {
-                var mapped = MapSettings(userInfo);
-                var keys = new WbiKeys(mapped.ImgKey, mapped.SubKey);
-                if (!keys.IsValid)
+                mapped = mapped with
                 {
-                    mapped = mapped with
-                    {
-                        ImgKey = settings.User.ImgKey,
-                        SubKey = settings.User.SubKey
-                    };
-                }
+                    ImgKey = settings.User.ImgKey,
+                    SubKey = settings.User.SubKey
+                };
+            }
 
-                return settings with { User = mapped };
-            });
-            cancellationToken.ThrowIfCancellationRequested();
-            return new UserSessionSnapshot(userInfo, File.Exists(StorageManager.GetLogin()));
-        }, cancellationToken);
+            return settings with { User = mapped };
+        });
+        cancellationToken.ThrowIfCancellationRequested();
+        return new UserSessionSnapshot(userInfo, File.Exists(StorageManager.GetLogin()));
     }
 
     internal static UserApplicationSettings MapSettings(UserInfoForNavigation? userInfo)

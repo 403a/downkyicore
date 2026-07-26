@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Threading.Tasks;
+using DownKyi.Application.Bilibili;
 using DownKyi.Core.BiliApi.BiliUtils;
 using DownKyi.Core.BiliApi.Cheese;
 using DownKyi.Core.BiliApi.Cheese.Models;
@@ -20,29 +21,59 @@ internal class CheeseInfoService : IInfoService
 {
     private readonly CheeseView? _cheeseView;
     private readonly ISettingsStore _settingsStore;
+    private readonly IBilibiliApiClient _client;
 
     public CheeseInfoService(
-        string? input,
         ISettingsStore settingsStore,
-        System.Threading.CancellationToken cancellationToken = default)
+        IBilibiliApiClient client)
     {
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
+        _client = client ?? throw new ArgumentNullException(nameof(client));
+    }
+
+    private CheeseInfoService(
+        CheeseView cheeseView,
+        ISettingsStore settingsStore,
+        IBilibiliApiClient client)
+        : this(settingsStore, client)
+    {
+        _cheeseView = cheeseView ?? throw new ArgumentNullException(nameof(cheeseView));
+    }
+
+    public static async Task<CheeseInfoService> CreateAsync(
+        string? input,
+        ISettingsStore settingsStore,
+        IBilibiliApiClient client,
+        System.Threading.CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(settingsStore);
+        ArgumentNullException.ThrowIfNull(client);
         if (input == null)
         {
-            return;
+            return new CheeseInfoService(settingsStore, client);
         }
 
+        CheeseView? cheeseView = null;
         if (ParseEntrance.IsCheeseSeasonUrl(input))
         {
             var seasonId = ParseEntrance.GetCheeseSeasonId(input);
-            _cheeseView = CheeseInfo.CheeseViewInfo(seasonId, cancellationToken: cancellationToken);
+            cheeseView = await client.CheeseViewInfoAsync(
+                seasonId,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 
         if (ParseEntrance.IsCheeseEpisodeUrl(input))
         {
             var episodeId = ParseEntrance.GetCheeseEpisodeId(input);
-            _cheeseView = CheeseInfo.CheeseViewInfo(-1, episodeId, cancellationToken);
+            cheeseView = await client.CheeseViewInfoAsync(
+                -1,
+                episodeId,
+                cancellationToken).ConfigureAwait(false);
         }
+
+        return cheeseView == null
+            ? new CheeseInfoService(settingsStore, client)
+            : new CheeseInfoService(cheeseView, settingsStore, client);
     }
 
     /// <summary>
@@ -141,12 +172,12 @@ internal class CheeseInfoService : IInfoService
     {
         ArgumentNullException.ThrowIfNull(page);
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(VideoStreamApi.GetCheesePlayUrl(
+        return _client.GetCheesePlayUrlAsync(
             page.Avid,
             page.Bvid,
             page.Cid,
             page.EpisodeId,
-            cancellationToken: cancellationToken));
+            cancellationToken: cancellationToken);
     }
 
     /// <summary>

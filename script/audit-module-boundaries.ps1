@@ -255,8 +255,15 @@ foreach ($file in $downloadSources) {
 $orchestratorSource = Get-Content -LiteralPath (Join-Path $downloadRoot "DownloadOrchestrator.cs") -Raw
 $pipelinePath = Join-Path $downloadRoot "DownloadPipeline.cs"
 $pipelineSource = Get-Content -LiteralPath $pipelinePath -Raw
-$httpClientSource = Get-Content -LiteralPath (Join-Path $repositoryRoot "DownKyi.Core/BiliApi/BilibiliHttpClient.cs") -Raw
-$webClientSource = Get-Content -LiteralPath (Join-Path $repositoryRoot "DownKyi.Core/BiliApi/WebClient.cs") -Raw
+$bilibiliHttpRoots = @(
+    (Join-Path $repositoryRoot "DownKyi.Core/BiliApi"),
+    (Join-Path $repositoryRoot "src/DownKyi.Infrastructure/Bilibili")
+)
+$bilibiliHttpSource = (
+    $bilibiliHttpRoots |
+        ForEach-Object { Get-ChildItem -LiteralPath $_ -Recurse -File -Filter "*.cs" } |
+        ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw }
+) -join "`n"
 $collectionPath = Join-Path $repositoryRoot "DownKyi/ViewModels/ImmutableObservableCollection.cs"
 $collectionSource = Get-Content -LiteralPath $collectionPath -Raw
 $logProviderPath = Join-Path $repositoryRoot "DownKyi.Core/Logging/ApplicationLogProvider.cs"
@@ -309,10 +316,10 @@ $result = [ordered]@{
             orchestratorDelayMilliseconds = if ($orchestratorSource.Contains("FromMilliseconds(500)")) { 500 } else { $null }
             pipelineLines = (Get-Content -LiteralPath $pipelinePath).Count
             pipelineRetryLimit = if ($pipelineSource.Contains("private const int Retry = 5")) { 5 } else { $null }
-            httpUsesStaticFacade = $webClientSource.Contains("static BilibiliHttpClient? _client")
-            httpUsesSynchronousSend = $httpClientSource.Contains("_httpClient.Send(")
-            httpUsesSynchronousRead = $httpClientSource.Contains("reader.ReadToEnd()")
-            httpUsesBlockingBackoff = $httpClientSource.Contains("WaitHandle.WaitOne")
+            httpUsesStaticFacade = $bilibiliHttpSource.Contains("static BilibiliHttpClient? _client")
+            httpUsesSynchronousSend = $bilibiliHttpSource.Contains("_httpClient.Send(")
+            httpUsesSynchronousRead = $bilibiliHttpSource.Contains("reader.ReadToEnd()")
+            httpUsesBlockingBackoff = $bilibiliHttpSource.Contains("WaitHandle.WaitOne")
             customCollectionUnsupportedMembers = [regex]::Matches(
                 $collectionSource,
                 'throw\s+new\s+NotImplementedException\s*\(').Count

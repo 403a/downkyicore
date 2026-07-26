@@ -1,3 +1,4 @@
+using DownKyi.Application.Bilibili;
 using DownKyi.Core.BiliApi.Cheese.Models;
 using DownKyi.Core.Logging;
 using Newtonsoft.Json;
@@ -12,7 +13,11 @@ public static class CheeseInfo
     /// <param name="seasonId"></param>
     /// <param name="episodeId"></param>
     /// <returns></returns>
-    public static CheeseView? CheeseViewInfo(long seasonId = -1, long episodeId = -1, CancellationToken cancellationToken = default)
+    public static async Task<CheeseView?> CheeseViewInfoAsync(
+        this IBilibiliApiClient client,
+        long seasonId = -1,
+        long episodeId = -1,
+        CancellationToken cancellationToken = default)
     {
         const string baseUrl = "https://api.bilibili.com/pugv/view/web/season";
         const string referer = "https://www.bilibili.com";
@@ -30,12 +35,13 @@ public static class CheeseInfo
             return null;
         }
 
-        var cheese = BiliApiRequest.RequestJson<CheeseViewOrigin>(
+        var cheese = await BiliApiRequest.RequestJsonAsync<CheeseViewOrigin>(
+            client,
             url,
             referer,
-            nameof(CheeseViewInfo),
+            nameof(CheeseViewInfoAsync),
             "CheeseInfo",
-            cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return BiliApiRequest.RequirePayload(cheese.Data);
     }
@@ -47,16 +53,22 @@ public static class CheeseInfo
     /// <param name="ps"></param>
     /// <param name="pn"></param>
     /// <returns></returns>
-    public static CheeseEpisodeList? CheeseEpisodeList(long seasonId, int ps = 50, int pn = 1, CancellationToken cancellationToken = default)
+    public static async Task<CheeseEpisodeList?> CheeseEpisodeListAsync(
+        this IBilibiliApiClient client,
+        long seasonId,
+        int ps = 50,
+        int pn = 1,
+        CancellationToken cancellationToken = default)
     {
         var url = $"https://api.bilibili.com/pugv/view/web/ep/list?season_id={seasonId}&pn={pn}&ps={ps}";
         const string referer = "https://www.bilibili.com";
-        var cheese = BiliApiRequest.RequestJson<CheeseEpisodeListOrigin>(
+        var cheese = await BiliApiRequest.RequestJsonAsync<CheeseEpisodeListOrigin>(
+            client,
             url,
             referer,
-            nameof(CheeseEpisodeList),
+            nameof(CheeseEpisodeListAsync),
             "CheeseInfo",
-            cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return BiliApiRequest.RequirePayload(cheese.Data);
     }

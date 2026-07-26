@@ -45,7 +45,7 @@ public sealed partial class BilibiliApiInventoryArchitectureTests
                 "*.cs",
                 SearchOption.AllDirectories)
             .Where(path => File.ReadAllText(path).Contains(
-                "RequestJsonAllowingCode<",
+                "RequestJsonAllowingCodeAsync<",
                 StringComparison.Ordinal))
             .Select(path => Path.GetRelativePath(RepositoryRoot, path).Replace('\\', '/'))
             .Order(StringComparer.Ordinal)

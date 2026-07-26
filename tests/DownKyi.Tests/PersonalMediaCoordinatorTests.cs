@@ -9,11 +9,14 @@ public sealed class PersonalMediaCoordinatorTests
     public async Task PreCanceledToViewLoadDoesNotStartApiWork()
     {
         using var settings = new TestSettingsStore();
-        var coordinator = new PersonalMediaCoordinator(settings.Store, new TestNavigationService());
+        var coordinator = new PersonalMediaCoordinator(
+            settings.Store,
+            new TestNavigationService(),
+            new TestBilibiliApiClient());
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync();
 
-        await Assert.ThrowsAsync<TaskCanceledException>(
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => coordinator.LoadToViewAsync(cancellation.Token));
     }
 
@@ -21,11 +24,14 @@ public sealed class PersonalMediaCoordinatorTests
     public async Task PreCanceledHistoryLoadDoesNotStartApiWork()
     {
         using var settings = new TestSettingsStore();
-        var coordinator = new PersonalMediaCoordinator(settings.Store, new TestNavigationService());
+        var coordinator = new PersonalMediaCoordinator(
+            settings.Store,
+            new TestNavigationService(),
+            new TestBilibiliApiClient());
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync();
 
-        await Assert.ThrowsAsync<TaskCanceledException>(
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => coordinator.LoadHistoryPageAsync(0, 0, 30, cancellation.Token));
     }
 

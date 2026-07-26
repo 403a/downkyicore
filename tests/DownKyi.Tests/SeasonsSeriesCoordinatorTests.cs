@@ -14,12 +14,13 @@ public sealed class SeasonsSeriesCoordinatorTests
     public async Task PreCanceledPageRequestDoesNotStartUserSpaceApiWork(int kindValue)
     {
         var coordinator = new SeasonsSeriesCoordinator(
-            new ContentDownloadCoordinator(new ThrowingFactory(), new ThrowingInfoServiceFactory()));
+            new ContentDownloadCoordinator(new ThrowingFactory(), new ThrowingInfoServiceFactory()),
+            new TestBilibiliApiClient());
         var kind = (SeasonsSeriesKind)kindValue;
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync();
 
-        await Assert.ThrowsAsync<TaskCanceledException>(
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => coordinator.LoadPageAsync(42, 24, kind, 1, 30, cancellation.Token));
     }
 

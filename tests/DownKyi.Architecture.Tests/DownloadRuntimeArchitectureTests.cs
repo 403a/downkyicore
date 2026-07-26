@@ -129,7 +129,7 @@ public sealed class DownloadRuntimeArchitectureTests
         Assert.DoesNotContain("UpdateDownloadingAsync", pipelineSource, StringComparison.Ordinal);
         Assert.DoesNotContain("Microsoft.Data.Sqlite", pipelineSource, StringComparison.Ordinal);
 
-        Assert.Contains("VideoStreamApi.GetSubtitle", artifactSource, StringComparison.Ordinal);
+        Assert.Contains("_client.GetSubtitleAsync", artifactSource, StringComparison.Ordinal);
         Assert.Contains("new BilibiliDanmakuConverter()", artifactSource, StringComparison.Ordinal);
         Assert.Contains("XmlWriter.Create", artifactSource, StringComparison.Ordinal);
         Assert.Contains("DownloadArtifactWriter _artifactWriter", artifactStageSource, StringComparison.Ordinal);

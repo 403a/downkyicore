@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using DownKyi.Application.Bilibili;
 using DownKyi.Core.BiliApi.Users;
 using DownKyi.Core.BiliApi.Users.Models;
 
@@ -42,25 +43,28 @@ internal interface IFriendRelationCoordinator
 
 internal sealed class FriendRelationCoordinator : IFriendRelationCoordinator
 {
-    public Task<FollowingOverview> LoadFollowingOverviewAsync(
+    private readonly IBilibiliApiClient _client;
+
+    public FriendRelationCoordinator(IBilibiliApiClient client)
+    {
+        _client = client ?? throw new ArgumentNullException(nameof(client));
+    }
+
+    public async Task<FollowingOverview> LoadFollowingOverviewAsync(
         long mid,
         bool includePrivateGroups,
         CancellationToken cancellationToken)
     {
-        return Task.Run(() =>
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var relation = UserStatus.GetUserRelationStat(mid);
-            cancellationToken.ThrowIfCancellationRequested();
-            var groups = includePrivateGroups
-                ? UserRelation.GetFollowingGroup() ?? Array.Empty<FollowingGroup>()
-                : Array.Empty<FollowingGroup>();
-            cancellationToken.ThrowIfCancellationRequested();
-            return new FollowingOverview(relation, groups);
-        }, cancellationToken);
+        var relation = await _client.GetUserRelationStatAsync(mid, cancellationToken)
+            .ConfigureAwait(false);
+        var groups = includePrivateGroups
+            ? await _client.GetFollowingGroupAsync(cancellationToken).ConfigureAwait(false)
+              ?? Array.Empty<FollowingGroup>()
+            : Array.Empty<FollowingGroup>();
+        return new FollowingOverview(relation, groups);
     }
 
-    public Task<IReadOnlyList<RelationFollowInfo>> LoadFollowingPageAsync(
+    public async Task<IReadOnlyList<RelationFollowInfo>> LoadFollowingPageAsync(
         long mid,
         FollowingListKind kind,
         long tagId,
@@ -68,19 +72,35 @@ internal sealed class FriendRelationCoordinator : IFriendRelationCoordinator
         int pageSize,
         CancellationToken cancellationToken)
     {
-        return Task.Run<IReadOnlyList<RelationFollowInfo>>(() =>
+        IReadOnlyList<RelationFollowInfo>? contents;
+        switch (kind)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var contents = kind switch
-            {
-                FollowingListKind.All => UserRelation.GetFollowings(mid, page, pageSize)?.List,
-                FollowingListKind.Whisper => UserRelation.GetWhispers(page, pageSize),
-                FollowingListKind.Group => UserRelation.GetFollowingGroupContent(tagId, page, pageSize),
-                _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
-            };
-            cancellationToken.ThrowIfCancellationRequested();
-            return contents ?? Array.Empty<RelationFollowInfo>();
-        }, cancellationToken);
+            case FollowingListKind.All:
+                var following = await _client.GetFollowingsAsync(
+                    mid,
+                    page,
+                    pageSize,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+                contents = following?.List;
+                break;
+            case FollowingListKind.Whisper:
+                contents = await _client.GetWhispersAsync(
+                    page,
+                    pageSize,
+                    cancellationToken).ConfigureAwait(false);
+                break;
+            case FollowingListKind.Group:
+                contents = await _client.GetFollowingGroupContentAsync(
+                    tagId,
+                    page,
+                    pageSize,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(kind), kind, null);
+        }
+
+        return contents ?? Array.Empty<RelationFollowInfo>();
     }
 
     public Task<RelationFollow?> LoadFollowerPageAsync(
@@ -89,12 +109,6 @@ internal sealed class FriendRelationCoordinator : IFriendRelationCoordinator
         int pageSize,
         CancellationToken cancellationToken)
     {
-        return Task.Run(() =>
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var result = UserRelation.GetFollowers(mid, page, pageSize);
-            cancellationToken.ThrowIfCancellationRequested();
-            return result;
-        }, cancellationToken);
+        return _client.GetFollowersAsync(mid, page, pageSize, cancellationToken);
     }
 }

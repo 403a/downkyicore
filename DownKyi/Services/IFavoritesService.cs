@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
 using DownKyi.Application.Desktop;
 using DownKyi.ViewModels.PageViewModels;
 using ApiFavoritesMedia = DownKyi.Core.BiliApi.Favorites.Models.FavoritesMedia;
@@ -9,16 +10,18 @@ namespace DownKyi.Services;
 
 internal interface IFavoritesService
 {
-    FavoritesPageItem? GetFavorites(long mediaId, CancellationToken cancellationToken = default);
+    Task<FavoritesPageItem?> GetFavoritesAsync(
+        long mediaId,
+        CancellationToken cancellationToken = default);
 
-    ApiFavoritesMediaResource GetFavoritesMediaPage(
+    Task<ApiFavoritesMediaResource> GetFavoritesMediaPageAsync(
         long mediaId,
         int page,
         int pageSize,
         string? keyword,
         CancellationToken cancellationToken);
 
-    IReadOnlyList<ApiFavoritesMedia> GetAllFavoritesMedia(
+    Task<IReadOnlyList<ApiFavoritesMedia>> GetAllFavoritesMediaAsync(
         long mediaId,
         CancellationToken cancellationToken);
 
@@ -27,7 +30,11 @@ internal interface IFavoritesService
         AppRoute parentRoute,
         CancellationToken cancellationToken);
 
-    IReadOnlyList<TabHeader> GetCreatedFavorites(long mid, CancellationToken cancellationToken);
+    Task<IReadOnlyList<TabHeader>> GetCreatedFavoritesAsync(
+        long mid,
+        CancellationToken cancellationToken);
 
-    IReadOnlyList<TabHeader> GetCollectedFavorites(long mid, CancellationToken cancellationToken);
+    Task<IReadOnlyList<TabHeader>> GetCollectedFavoritesAsync(
+        long mid,
+        CancellationToken cancellationToken);
 }

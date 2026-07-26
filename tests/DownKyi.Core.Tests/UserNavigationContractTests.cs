@@ -1,22 +1,19 @@
-using System.Net;
 using DownKyi.Core.BiliApi;
 using DownKyi.Core.BiliApi.Sign;
 using DownKyi.Core.BiliApi.Users;
 using DownKyi.Core.BiliApi.Users.Models;
-using BiliWebClient = DownKyi.Core.BiliApi.WebClient;
 
 namespace DownKyi.Core.Tests;
 
-public sealed class UserNavigationContractTests : IDisposable
+public sealed class UserNavigationContractTests
 {
-    private readonly WebClientTestContext _context = new();
-
     [Fact]
-    public void AnonymousNavigationResponsePreservesPublicWbiMetadata()
+    public async Task AnonymousNavigationResponsePreservesPublicWbiMetadata()
     {
-        ConfigureAnonymousResponse();
+        var client = CreateAnonymousClient();
 
-        var navigation = UserInfo.GetUserInfoForNavigation(TestContext.Current.CancellationToken);
+        var navigation = await client.GetUserInfoForNavigationAsync(
+            TestContext.Current.CancellationToken);
 
         Assert.NotNull(navigation);
         Assert.False(navigation.IsLogin);
@@ -26,12 +23,13 @@ public sealed class UserNavigationContractTests : IDisposable
     }
 
     [Fact]
-    public void AnonymousCodeRemainsRejectedOutsideTheNavigationContract()
+    public async Task AnonymousCodeRemainsRejectedOutsideTheNavigationContract()
     {
-        ConfigureAnonymousResponse();
+        var client = CreateAnonymousClient();
 
-        var exception = Assert.Throws<BilibiliApiResponseException>(() =>
-            BiliApiRequest.RequestJson<UserInfoForNavigationOrigin>(
+        var exception = await Assert.ThrowsAsync<BilibiliApiResponseException>(() =>
+            BiliApiRequest.RequestJsonAsync<UserInfoForNavigationOrigin>(
+                client,
                 "https://example.test/not-nav",
                 referer: null,
                 operationName: "ordinary-contract",
@@ -41,13 +39,7 @@ public sealed class UserNavigationContractTests : IDisposable
         Assert.Equal(-101, exception.Code);
     }
 
-    public void Dispose()
-    {
-        _context.Dispose();
-        GC.SuppressFinalize(this);
-    }
-
-    private static void ConfigureAnonymousResponse()
+    private static StubBilibiliApiClient CreateAnonymousClient()
     {
         var body = File.ReadAllText(Path.Combine(
             FindRepositoryRoot(),
@@ -56,10 +48,7 @@ public sealed class UserNavigationContractTests : IDisposable
             "BiliApi",
             "JsonSamples",
             "user-navigation-anonymous.json"));
-        BiliWebClient.SendOverrideForTests = (_, _) => new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(body)
-        };
+        return new StubBilibiliApiClient((_, _) => Task.FromResult(body));
     }
 
     private static string FindRepositoryRoot()

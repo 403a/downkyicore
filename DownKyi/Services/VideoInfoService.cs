@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using DownKyi.Application.Bilibili;
 using DownKyi.Core.BiliApi.BiliUtils;
 using DownKyi.Core.BiliApi.Models;
 using DownKyi.Core.BiliApi.Sign;
@@ -26,27 +27,32 @@ internal class VideoInfoService : IInfoService
     private readonly ISettingsStore _settingsStore;
     private readonly IVideoTagProvider _tagProvider;
     private readonly IWbiKeyProvider _wbiKeyProvider;
+    private readonly IBilibiliApiClient _client;
 
     public VideoInfoService(
         ISettingsStore settingsStore,
         IVideoTagProvider tagProvider,
-        IWbiKeyProvider wbiKeyProvider)
+        IWbiKeyProvider wbiKeyProvider,
+        IBilibiliApiClient client)
     {
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
         _tagProvider = tagProvider ?? throw new ArgumentNullException(nameof(tagProvider));
         _wbiKeyProvider = wbiKeyProvider ?? throw new ArgumentNullException(nameof(wbiKeyProvider));
+        _client = client ?? throw new ArgumentNullException(nameof(client));
     }
 
     internal VideoInfoService(
         VideoView videoView,
         ISettingsStore settingsStore,
         IVideoTagProvider tagProvider,
-        IWbiKeyProvider wbiKeyProvider)
+        IWbiKeyProvider wbiKeyProvider,
+        IBilibiliApiClient client)
     {
         _videoView = videoView ?? throw new ArgumentNullException(nameof(videoView));
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
         _tagProvider = tagProvider ?? throw new ArgumentNullException(nameof(tagProvider));
         _wbiKeyProvider = wbiKeyProvider ?? throw new ArgumentNullException(nameof(wbiKeyProvider));
+        _client = client ?? throw new ArgumentNullException(nameof(client));
     }
 
     public static async Task<VideoInfoService> CreateAsync(
@@ -54,12 +60,14 @@ internal class VideoInfoService : IInfoService
         ISettingsStore settingsStore,
         IVideoTagProvider tagProvider,
         IWbiKeyProvider wbiKeyProvider,
+        IBilibiliApiClient client,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(input);
         ArgumentNullException.ThrowIfNull(settingsStore);
         ArgumentNullException.ThrowIfNull(tagProvider);
         ArgumentNullException.ThrowIfNull(wbiKeyProvider);
+        ArgumentNullException.ThrowIfNull(client);
 
         VideoView? videoView = null;
         if (ParseEntrance.IsAvId(input) || ParseEntrance.IsAvUrl(input))
@@ -67,6 +75,7 @@ internal class VideoInfoService : IInfoService
             var avid = ParseEntrance.GetAvId(input);
             videoView = await LoadVideoViewAsync(
                 wbiKeyProvider,
+                client,
                 bvid: null,
                 avid,
                 cancellationToken).ConfigureAwait(false);
@@ -76,25 +85,27 @@ internal class VideoInfoService : IInfoService
             var bvid = ParseEntrance.GetBvId(input);
             videoView = await LoadVideoViewAsync(
                 wbiKeyProvider,
+                client,
                 bvid,
                 avid: -1,
                 cancellationToken).ConfigureAwait(false);
         }
 
         return videoView == null
-            ? new VideoInfoService(settingsStore, tagProvider, wbiKeyProvider)
-            : new VideoInfoService(videoView, settingsStore, tagProvider, wbiKeyProvider);
+            ? new VideoInfoService(settingsStore, tagProvider, wbiKeyProvider, client)
+            : new VideoInfoService(videoView, settingsStore, tagProvider, wbiKeyProvider, client);
     }
 
     private static Task<VideoView?> LoadVideoViewAsync(
         IWbiKeyProvider wbiKeyProvider,
+        IBilibiliApiClient client,
         string? bvid,
         long avid,
         CancellationToken cancellationToken)
     {
         return WbiRequestExecutor.ExecuteAsync(
             wbiKeyProvider,
-            (keys, unixTimeSeconds) => VideoInfo.VideoViewInfo(
+            (keys, unixTimeSeconds) => client.VideoViewInfoAsync(
                 keys,
                 unixTimeSeconds,
                 bvid,
@@ -331,24 +342,24 @@ internal class VideoInfoService : IInfoService
         return await WbiRequestExecutor.ExecuteAsync(
             _wbiKeyProvider,
             (keys, unixTimeSeconds) => videoParseType switch
-        {
-            0 => VideoStreamApi.GetVideoPlayUrl(
-                keys,
-                unixTimeSeconds,
-                page.Avid,
-                page.Bvid,
-                page.Cid,
-                cancellationToken: cancellationToken),
-            1 => VideoStreamApi.GetVideoPlayUrlWebPage(
-                keys,
-                unixTimeSeconds,
-                page.Avid,
-                page.Bvid,
-                page.Cid,
-                page.Page,
-                cancellationToken),
-            _ => null
-        },
+            {
+                0 => _client.GetVideoPlayUrlAsync(
+                    keys,
+                    unixTimeSeconds,
+                    page.Avid,
+                    page.Bvid,
+                    page.Cid,
+                    cancellationToken: cancellationToken),
+                1 => _client.GetVideoPlayUrlWebPageAsync(
+                    keys,
+                    unixTimeSeconds,
+                    page.Avid,
+                    page.Bvid,
+                    page.Cid,
+                    page.Page,
+                    cancellationToken),
+                _ => Task.FromResult<PlayUrl?>(null)
+            },
             TimeProvider.System,
             cancellationToken).ConfigureAwait(false);
     }

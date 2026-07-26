@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using DownKyi.Application.Bilibili;
 using DownKyi.Core.BiliApi.Login;
 using DownKyi.Core.BiliApi.Login.Models;
 using DownKyi.Core.Logging;
@@ -20,41 +21,41 @@ internal interface ILoginCoordinator
 internal sealed class LoginCoordinator : ILoginCoordinator
 {
     private readonly ILogger<LoginCoordinator> _logger;
+    private readonly IBilibiliApiClient _client;
 
-    public LoginCoordinator(ILogger<LoginCoordinator> logger)
+    public LoginCoordinator(
+        ILogger<LoginCoordinator> logger,
+        IBilibiliApiClient client)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _client = client ?? throw new ArgumentNullException(nameof(client));
     }
 
-    public Task<LoginUrlOrigin?> RequestLoginUrlAsync(CancellationToken cancellationToken)
+    public async Task<LoginUrlOrigin?> RequestLoginUrlAsync(
+        CancellationToken cancellationToken)
     {
-        return RunAsync(() =>
+        var result = await _client.GetLoginUrlAsync(cancellationToken).ConfigureAwait(false);
+        if (result == null)
         {
-            var result = LoginQr.GetLoginUrl();
-            if (result == null)
-            {
-                _logger.LogWarningMessage("Bilibili login URL could not be created.");
-            }
+            _logger.LogWarningMessage("Bilibili login URL could not be created.");
+        }
 
-            return result;
-        }, cancellationToken);
+        return result;
     }
 
-    public Task<LoginStatus?> GetLoginStatusAsync(
+    public async Task<LoginStatus?> GetLoginStatusAsync(
         string qrcodeKey,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrEmpty(qrcodeKey);
-        return RunAsync(() =>
+        var result = await _client.GetLoginStatusAsync(qrcodeKey, cancellationToken)
+            .ConfigureAwait(false);
+        if (result == null)
         {
-            var result = LoginQr.GetLoginStatus(qrcodeKey);
-            if (result == null)
-            {
-                _logger.LogWarningMessage("Bilibili login status could not be read.");
-            }
+            _logger.LogWarningMessage("Bilibili login status could not be read.");
+        }
 
-            return result;
-        }, cancellationToken);
+        return result;
     }
 
     public Task<bool> SaveLoginCookiesAsync(Uri redirectUri, CancellationToken cancellationToken)

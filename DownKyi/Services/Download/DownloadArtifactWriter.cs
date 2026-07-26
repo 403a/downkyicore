@@ -6,7 +6,7 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml;
-using DownKyi.Core.BiliApi;
+using DownKyi.Application.Bilibili;
 using DownKyi.Core.BiliApi.Sign;
 using DownKyi.Core.BiliApi.VideoStream;
 using DownKyi.Core.Danmaku2Ass;
@@ -25,15 +25,18 @@ internal sealed class DownloadArtifactWriter
     private readonly IWbiKeyProvider _wbiKeyProvider;
     private readonly DownloadTaskStateWriter _stateWriter;
     private readonly ILogger _logger;
+    private readonly IBilibiliApiClient _client;
 
     public DownloadArtifactWriter(
         IWbiKeyProvider wbiKeyProvider,
         DownloadTaskStateWriter stateWriter,
-        ILogger logger)
+        ILogger logger,
+        IBilibiliApiClient client)
     {
         _wbiKeyProvider = wbiKeyProvider ?? throw new ArgumentNullException(nameof(wbiKeyProvider));
         _stateWriter = stateWriter ?? throw new ArgumentNullException(nameof(stateWriter));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _client = client ?? throw new ArgumentNullException(nameof(client));
     }
 
     public async Task<string?> DownloadCoverAsync(
@@ -61,7 +64,10 @@ internal sealed class DownloadArtifactWriter
                 return null;
             }
 
-            WebClient.DownloadFile(coverUrl, fileName, cancellationToken: cancellationToken);
+            await _client.DownloadFileAsync(
+                new BilibiliHttpRequest(coverUrl),
+                fileName,
+                cancellationToken).ConfigureAwait(false);
             await _stateWriter.RecordTransferFileAsync(
                 taskId,
                 coverUrl,
@@ -136,7 +142,13 @@ internal sealed class DownloadArtifactWriter
             .SetScrollFilter(settings.ScrollFilter == AllowStatus.Yes);
         var downloadBase = downloading.DownloadBase
                            ?? throw new InvalidOperationException("DownloadBase is required to download danmaku.");
-        converter.Create(downloadBase.Avid, downloadBase.Cid, subtitleConfig, assFile, cancellationToken);
+        await converter.CreateAsync(
+            _client,
+            downloadBase.Avid,
+            downloadBase.Cid,
+            subtitleConfig,
+            assFile,
+            cancellationToken).ConfigureAwait(false);
         return assFile;
     }
 
@@ -159,7 +171,7 @@ internal sealed class DownloadArtifactWriter
         var srtFiles = new List<string>();
         var subRipTexts = await WbiRequestExecutor.ExecuteAsync(
             _wbiKeyProvider,
-            (keys, unixTimeSeconds) => VideoStreamApi.GetSubtitle(
+            (keys, unixTimeSeconds) => _client.GetSubtitleAsync(
                 keys,
                 unixTimeSeconds,
                 downloading.DownloadBase.Avid,

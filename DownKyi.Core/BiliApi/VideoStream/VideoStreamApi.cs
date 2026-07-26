@@ -1,189 +1,17 @@
 using System.Text.RegularExpressions;
-using DownKyi.Core.BiliApi.Models.Json;
+using DownKyi.Application.Bilibili;
 using DownKyi.Core.BiliApi.Sign;
 using DownKyi.Core.BiliApi.VideoStream.Models;
 using Newtonsoft.Json;
 
 namespace DownKyi.Core.BiliApi.VideoStream;
 
-public static class VideoStreamApi
+public static partial class VideoStreamApi
 {
     internal enum PlayUrlPayloadField
     {
         Data,
         Result
-    }
-
-    /// <summary>
-    /// 获取播放器信息（web端）
-    /// </summary>
-    /// <param name="avid"></param>
-    /// <param name="bvid"></param>
-    /// <param name="cid"></param>
-    /// <returns></returns>
-    public static PlayerV2? PlayerV2(
-        WbiKeys keys,
-        long unixTimeSeconds,
-        long avid,
-        string? bvid,
-        long cid,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(keys);
-        var parameters = new Dictionary<string, object?>();
-
-        if (!string.IsNullOrEmpty(bvid))
-        {
-            parameters.Add("bvid", bvid);
-        }
-
-        if (avid > 0)
-        {
-            parameters.Add("aid", avid);
-        }
-
-        if (cid > 0)
-        {
-            parameters.Add("cid", cid);
-        }
-
-        var query = WbiSign.ParametersToQuery(WbiSign.EncodeWbi(
-            parameters,
-            keys.ImgKey,
-            keys.SubKey,
-            unixTimeSeconds));
-        var url = $"https://api.bilibili.com/x/player/wbi/v2?{query}";
-        const string referer = "https://www.bilibili.com";
-        var playUrl = BiliApiRequest.RequestJson<PlayerV2Origin>(
-            url,
-            referer,
-            nameof(PlayerV2),
-            "PlayerV2()",
-            cancellationToken);
-
-        return BiliApiRequest.RequirePayload(playUrl.Data);
-    }
-
-    /// <summary>
-    /// 获取所有字幕<br/>
-    /// 若视频没有字幕，返回空列表
-    /// </summary>
-    /// <param name="avid"></param>
-    /// <param name="bvid"></param>
-    /// <param name="cid"></param>
-    /// <returns></returns>
-    public static IReadOnlyList<SubRipText> GetSubtitle(
-        WbiKeys keys,
-        long unixTimeSeconds,
-        long avid,
-        string? bvid,
-        long cid,
-        CancellationToken cancellationToken = default)
-    {
-        return GetSubtitle(
-            keys,
-            unixTimeSeconds,
-            avid,
-            bvid,
-            cid,
-            reportParseFailure: null,
-            cancellationToken);
-    }
-
-    public static IReadOnlyList<SubRipText> GetSubtitle(
-        WbiKeys keys,
-        long unixTimeSeconds,
-        long avid,
-        string? bvid,
-        long cid,
-        Action<Exception>? reportParseFailure,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(keys);
-        var subRipTexts = new List<SubRipText>();
-
-        // 获取播放器信息
-        var player = PlayerV2(keys, unixTimeSeconds, avid, bvid, cid, cancellationToken);
-        if (player == null)
-        {
-            return subRipTexts;
-        }
-
-        if (player.Subtitle?.Subtitles == null || player.Subtitle.Subtitles.Count == 0)
-        {
-            return subRipTexts;
-        }
-
-        foreach (var subtitle in player.Subtitle.Subtitles)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            const string referer = "https://www.bilibili.com";
-            var subtitleUrl = NormalizeSubtitleUrl(subtitle.SubtitleAddress);
-            if (subtitleUrl == null)
-            {
-                continue;
-            }
-
-            var response = BiliApiRequest.RequestText(
-                subtitleUrl,
-                referer,
-                nameof(GetSubtitle),
-                "GetSubtitle()",
-                cancellationToken);
-            if (string.IsNullOrWhiteSpace(response))
-            {
-                continue;
-            }
-
-            try
-            {
-                var subtitleJson = JsonConvert.DeserializeObject<SubtitleJson>(response);
-                if (subtitleJson?.Body == null || subtitleJson.Body.Count == 0)
-                {
-                    continue;
-                }
-
-                var srt = subtitleJson.ToSubRip();
-                if (string.IsNullOrWhiteSpace(srt))
-                {
-                    continue;
-                }
-
-                subRipTexts.Add(new SubRipText
-                {
-                    Lan = subtitle.Lan,
-                    LanDoc = subtitle.LanDoc,
-                    SrtString = srt
-                });
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (JsonException e)
-            {
-                reportParseFailure?.Invoke(e);
-            }
-        }
-
-        return subRipTexts;
-    }
-
-    private static string? NormalizeSubtitleUrl(string? subtitleUrl)
-    {
-        if (string.IsNullOrWhiteSpace(subtitleUrl))
-        {
-            return null;
-        }
-
-        if (Uri.TryCreate(subtitleUrl, UriKind.Absolute, out var absoluteUri))
-        {
-            return absoluteUri.ToString();
-        }
-
-        return subtitleUrl.StartsWith("//", StringComparison.Ordinal)
-            ? $"https:{subtitleUrl}"
-            : $"https://{subtitleUrl.TrimStart('/')}";
     }
 
     /// <summary>
@@ -194,7 +22,8 @@ public static class VideoStreamApi
     /// <param name="cid"></param>
     /// <param name="quality"></param>
     /// <returns></returns>
-    public static PlayUrl? GetVideoPlayUrl(
+    public static Task<PlayUrl?> GetVideoPlayUrlAsync(
+        this IBilibiliApiClient client,
         WbiKeys keys,
         long unixTimeSeconds,
         long avid,
@@ -223,7 +52,7 @@ public static class VideoStreamApi
         }
         else
         {
-            return null;
+            return Task.FromResult<PlayUrl?>(null);
         }
 
         var query = WbiSign.ParametersToQuery(WbiSign.EncodeWbi(
@@ -233,10 +62,11 @@ public static class VideoStreamApi
             unixTimeSeconds));
         var url = $"https://api.bilibili.com/x/player/wbi/playurl?{query}";
 
-        return GetPlayUrl(
+        return GetPlayUrlAsync(
+            client,
             url,
             PlayUrlPayloadField.Data,
-            nameof(GetVideoPlayUrl),
+            nameof(GetVideoPlayUrlAsync),
             cancellationToken);
     }
 
@@ -247,7 +77,8 @@ public static class VideoStreamApi
     /// <param name="bvid"></param>
     /// <param name="p"></param>
     /// <returns></returns>
-    public static PlayUrl? GetVideoPlayUrlWebPage(
+    public static async Task<PlayUrl?> GetVideoPlayUrlWebPageAsync(
+        this IBilibiliApiClient client,
         WbiKeys keys,
         long unixTimeSeconds,
         long avid,
@@ -257,16 +88,17 @@ public static class VideoStreamApi
         CancellationToken cancellationToken = default)
     {
         var url = BuildVideoPlayPageUrl(avid, bvid, p);
-        var playUrl = GetPlayUrlWebPage(url, cancellationToken);
+        var playUrl = await GetPlayUrlWebPageAsync(client, url, cancellationToken)
+            .ConfigureAwait(false);
         if (playUrl == null)
         {
-            playUrl = GetVideoPlayUrl(
+            playUrl = await client.GetVideoPlayUrlAsync(
                 keys,
                 unixTimeSeconds,
                 avid,
                 bvid,
                 cid,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 
         return playUrl;
@@ -296,7 +128,13 @@ public static class VideoStreamApi
     // /// <param name="cid"></param>
     // /// <param name="quality"></param>
     // /// <returns></returns>
-    public static PlayUrl? GetBangumiPlayUrl(long avid, string bvid, long cid, int quality = 125, CancellationToken cancellationToken = default)
+    public static async Task<PlayUrl?> GetBangumiPlayUrlAsync(
+        this IBilibiliApiClient client,
+        long avid,
+        string bvid,
+        long cid,
+        int quality = 125,
+        CancellationToken cancellationToken = default)
     {
         var baseUrl = $"https://api.bilibili.com/pgc/player/web/v2/playurl?cid={cid}&qn={quality}&fourk=1&fnver=0&fnval=4048";
         string url;
@@ -314,14 +152,15 @@ public static class VideoStreamApi
         }
 
         const string referer = "https://www.bilibili.com";
-        var response = BiliApiRequest.RequestJson<BangumiPlayUrlV2Origin>(
+        var response = await BiliApiRequest.RequestJsonAsync<BangumiPlayUrlV2Origin>(
+            client,
             url,
             referer,
-            nameof(GetBangumiPlayUrl),
+            nameof(GetBangumiPlayUrlAsync),
             "GetBangumiPlayUrl()",
-            cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        return BangumiPlayUrlV2Contract.SelectPayload(response, nameof(GetBangumiPlayUrl));
+        return BangumiPlayUrlV2Contract.SelectPayload(response, nameof(GetBangumiPlayUrlAsync));
     }
 
     /// <summary>
@@ -332,7 +171,14 @@ public static class VideoStreamApi
     /// <param name="cid"></param>
     /// <param name="quality"></param>
     /// <returns></returns>
-    public static PlayUrl? GetCheesePlayUrl(long avid, string bvid, long cid, long episodeId, int quality = 125, CancellationToken cancellationToken = default)
+    public static Task<PlayUrl?> GetCheesePlayUrlAsync(
+        this IBilibiliApiClient client,
+        long avid,
+        string bvid,
+        long cid,
+        long episodeId,
+        int quality = 125,
+        CancellationToken cancellationToken = default)
     {
         var baseUrl = $"https://api.bilibili.com/pugv/player/web/playurl?cid={cid}&qn={quality}&fourk=1&fnver=0&fnval=4048";
         string url;
@@ -346,7 +192,7 @@ public static class VideoStreamApi
         }
         else
         {
-            return null;
+            return Task.FromResult<PlayUrl?>(null);
         }
 
         // 必须有episodeId，否则会返回请求错误
@@ -355,10 +201,11 @@ public static class VideoStreamApi
             url += $"&ep_id={episodeId}";
         }
 
-        return GetPlayUrl(
+        return GetPlayUrlAsync(
+            client,
             url,
             PlayUrlPayloadField.Data,
-            nameof(GetCheesePlayUrl),
+            nameof(GetCheesePlayUrlAsync),
             cancellationToken);
     }
 
@@ -367,19 +214,21 @@ public static class VideoStreamApi
     /// </summary>
     /// <param name="url"></param>
     /// <returns></returns>
-    private static PlayUrl GetPlayUrl(
+    private static async Task<PlayUrl?> GetPlayUrlAsync(
+        IBilibiliApiClient client,
         string url,
         PlayUrlPayloadField payloadField,
         string operationName,
         CancellationToken cancellationToken = default)
     {
         const string referer = "https://www.bilibili.com";
-        var response = BiliApiRequest.RequestJson<PlayUrlOrigin>(
+        var response = await BiliApiRequest.RequestJsonAsync<PlayUrlOrigin>(
+            client,
             url,
             referer,
             operationName,
             "GetPlayUrl()",
-            cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return SelectPlayUrlPayload(response, payloadField, operationName);
     }
@@ -427,15 +276,19 @@ public static class VideoStreamApi
     /// </summary>
     /// <param name="url"></param>
     /// <returns></returns>
-    private static PlayUrl? GetPlayUrlWebPage(string url, CancellationToken cancellationToken = default)
+    private static async Task<PlayUrl?> GetPlayUrlWebPageAsync(
+        IBilibiliApiClient client,
+        string url,
+        CancellationToken cancellationToken = default)
     {
         const string referer = "https://www.bilibili.com";
-        var response = BiliApiRequest.RequestText(
+        var response = await BiliApiRequest.RequestTextAsync(
+            client,
             url,
             referer,
-            nameof(GetPlayUrlWebPage),
+            nameof(GetPlayUrlWebPageAsync),
             "GetPlayUrlPc()",
-            cancellationToken);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(response))
         {
             return null;
@@ -459,7 +312,7 @@ public static class VideoStreamApi
             return SelectPlayUrlPayload(
                 playUrl,
                 PlayUrlPayloadField.Data,
-                nameof(GetPlayUrlWebPage));
+                nameof(GetPlayUrlWebPageAsync));
         }
         catch (OperationCanceledException)
         {

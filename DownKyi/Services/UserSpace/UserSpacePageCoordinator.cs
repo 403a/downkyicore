@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
+using DownKyi.Application.Bilibili;
 using DownKyi.Application.Desktop;
 using DownKyi.Core.BiliApi.Sign;
 using DownKyi.Core.BiliApi.Users;
@@ -80,17 +81,20 @@ internal sealed class UserSpacePageCoordinator : IUserSpacePageCoordinator
     private readonly IWbiKeyProvider _wbiKeyProvider;
     private readonly ILogger<UserSpacePageCoordinator> _logger;
     private readonly IAppNavigationService _navigationService;
+    private readonly IBilibiliApiClient _client;
 
     public UserSpacePageCoordinator(
         ISettingsStore settingsStore,
         IWbiKeyProvider wbiKeyProvider,
         IAppNavigationService navigationService,
-        ILogger<UserSpacePageCoordinator> logger)
+        ILogger<UserSpacePageCoordinator> logger,
+        IBilibiliApiClient client)
     {
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
         _wbiKeyProvider = wbiKeyProvider ?? throw new ArgumentNullException(nameof(wbiKeyProvider));
         _navigationService = navigationService ?? throw new ArgumentNullException(nameof(navigationService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _client = client ?? throw new ArgumentNullException(nameof(client));
     }
 
     public async Task<PublicationPageSnapshot> LoadPublicationPageAsync(
@@ -103,7 +107,7 @@ internal sealed class UserSpacePageCoordinator : IUserSpacePageCoordinator
     {
         var publication = await WbiRequestExecutor.ExecuteAsync(
             _wbiKeyProvider,
-            (keys, unixTimeSeconds) => BiliUserSpace.GetPublicationPage(
+            (keys, unixTimeSeconds) => _client.GetPublicationPageAsync(
                 keys,
                 unixTimeSeconds,
                 mid,
@@ -163,116 +167,116 @@ internal sealed class UserSpacePageCoordinator : IUserSpacePageCoordinator
         return new PublicationPageSnapshot(result, publication.Page.Count);
     }
 
-    public Task<MySpaceProfileSnapshot?> LoadMyProfileAsync(long mid, CancellationToken cancellationToken)
+    public async Task<MySpaceProfileSnapshot?> LoadMyProfileAsync(
+        long mid,
+        CancellationToken cancellationToken)
     {
-        return Task.Run(() =>
+        var settings = await _client.GetSpaceSettingsAsync(mid, cancellationToken)
+            .ConfigureAwait(false);
+        var info = await _client.GetMyInfoAsync(cancellationToken).ConfigureAwait(false);
+        if (info == null)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var settings = BiliUserSpace.GetSpaceSettings(mid, cancellationToken);
-            var info = UserInfo.GetMyInfo(cancellationToken);
-            if (info == null)
+            return null;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var nextExperience = info.LevelExp.NextExp;
+        return new MySpaceProfileSnapshot(
+            settings?.Toutu?.Limg is { Length: > 0 } background
+                ? $"https://i0.hdslb.com/{background}"
+                : "avares://DownKyi/Resources/backgound/9-绿荫秘境.png",
+            info.Face,
+            info.Name,
+            info.Sex switch
             {
-                return null;
-            }
-
-            cancellationToken.ThrowIfCancellationRequested();
-            var nextExperience = info.LevelExp.NextExp;
-            return new MySpaceProfileSnapshot(
-                settings?.Toutu?.Limg is { Length: > 0 } background
-                    ? $"https://i0.hdslb.com/{background}"
-                    : "avares://DownKyi/Resources/backgound/9-绿荫秘境.png",
-                info.Face,
-                info.Name,
-                info.Sex switch
-                {
-                    "男" => "avares://DownKyi/Resources/sex/male.png",
-                    "女" => "avares://DownKyi/Resources/sex/female.png",
-                    _ => null
-                },
-                $"avares://DownKyi/Resources/level/lv{info.Level}.png",
-                !string.IsNullOrEmpty(info.Vip.Label?.Text),
-                info.Vip.Label?.Text ?? string.Empty,
-                info.Sign,
-                info.EmailStatus != 0,
-                info.TelStatus != 0,
-                $"{DictionaryResource.GetString("Level")}{info.LevelExp.CurrentLevel}",
-                nextExperience == -1
-                    ? $"{info.LevelExp.CurrentExp}/--"
-                    : $"{info.LevelExp.CurrentExp}/{nextExperience}",
-                nextExperience,
-                info.LevelExp.CurrentExp,
-                info.Moral.ToString(CultureInfo.CurrentCulture),
-                DictionaryResource.GetString(info.Silence == 1 ? "Ban" : "Normal"));
-        }, cancellationToken);
+                "男" => "avares://DownKyi/Resources/sex/male.png",
+                "女" => "avares://DownKyi/Resources/sex/female.png",
+                _ => null
+            },
+            $"avares://DownKyi/Resources/level/lv{info.Level}.png",
+            !string.IsNullOrEmpty(info.Vip.Label?.Text),
+            info.Vip.Label?.Text ?? string.Empty,
+            info.Sign,
+            info.EmailStatus != 0,
+            info.TelStatus != 0,
+            $"{DictionaryResource.GetString("Level")}{info.LevelExp.CurrentLevel}",
+            nextExperience == -1
+                ? $"{info.LevelExp.CurrentExp}/--"
+                : $"{info.LevelExp.CurrentExp}/{nextExperience}",
+            nextExperience,
+            info.LevelExp.CurrentExp,
+            info.Moral.ToString(CultureInfo.CurrentCulture),
+            DictionaryResource.GetString(info.Silence == 1 ? "Ban" : "Normal"));
     }
 
-    public Task<MySpaceStatsSnapshot> LoadMyStatsAsync(long mid, CancellationToken cancellationToken)
+    public async Task<MySpaceStatsSnapshot> LoadMyStatsAsync(
+        long mid,
+        CancellationToken cancellationToken)
     {
-        return Task.Run(() =>
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var navigation = UserInfo.GetUserInfoForNavigation(cancellationToken);
-            var showBalances = navigation is { IsLogin: true };
-            var coin = showBalances && navigation != null
-                ? navigation.Money.ToString("F1", CultureInfo.CurrentCulture)
-                : "0.0";
-            var money = showBalances && navigation != null
-                ? navigation.Wallet.BcoinBalance.ToString("F1", CultureInfo.CurrentCulture)
-                : "0.0";
+        var navigation = await _client.GetUserInfoForNavigationAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var showBalances = navigation is { IsLogin: true };
+        var coin = showBalances && navigation != null
+            ? navigation.Money.ToString("F1", CultureInfo.CurrentCulture)
+            : "0.0";
+        var money = showBalances && navigation != null
+            ? navigation.Wallet.BcoinBalance.ToString("F1", CultureInfo.CurrentCulture)
+            : "0.0";
 
-            var relation = UserStatus.GetUserRelationStat(mid, cancellationToken);
-            return new MySpaceStatsSnapshot(
-                showBalances,
-                coin,
-                money,
-                relation?.Following.ToString(CultureInfo.CurrentCulture),
-                relation?.Whisper.ToString(CultureInfo.CurrentCulture),
-                relation?.Follower.ToString(CultureInfo.CurrentCulture),
-                relation?.Black.ToString(CultureInfo.CurrentCulture));
-        }, cancellationToken);
+        var relation = await _client.GetUserRelationStatAsync(mid, cancellationToken)
+            .ConfigureAwait(false);
+        return new MySpaceStatsSnapshot(
+            showBalances,
+            coin,
+            money,
+            relation?.Following.ToString(CultureInfo.CurrentCulture),
+            relation?.Whisper.ToString(CultureInfo.CurrentCulture),
+            relation?.Follower.ToString(CultureInfo.CurrentCulture),
+            relation?.Black.ToString(CultureInfo.CurrentCulture));
     }
 
-    public Task<BangumiFollowPageSnapshot> LoadBangumiFollowPageAsync(
+    public async Task<BangumiFollowPageSnapshot> LoadBangumiFollowPageAsync(
         long mid,
         BangumiType type,
         int page,
         int pageSize,
         CancellationToken cancellationToken)
     {
-        return Task.Run(() =>
+        var response = await _client.GetBangumiFollowAsync(
+            mid,
+            type,
+            page,
+            pageSize,
+            cancellationToken).ConfigureAwait(false);
+        if (response?.List == null || response.List.Count == 0)
+        {
+            return new BangumiFollowPageSnapshot(Array.Empty<BangumiFollowMedia>(), 1);
+        }
+
+        var medias = new List<BangumiFollowMedia>(response.List.Count);
+        foreach (var item in response.List)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var response = BiliUserSpace.GetBangumiFollow(mid, type, page, pageSize, cancellationToken);
-            if (response?.List == null || response.List.Count == 0)
+            medias.Add(new BangumiFollowMedia(_navigationService, AppRoute.MyBangumiFollow)
             {
-                return new BangumiFollowPageSnapshot(Array.Empty<BangumiFollowMedia>(), 1);
-            }
+                MediaId = item.MediaId,
+                SeasonId = item.SeasonId,
+                Title = item.Title,
+                SeasonTypeName = item.SeasonTypeName,
+                Area = item.Areas?.Count > 0 ? item.Areas[0].Name : string.Empty,
+                Badge = item.Badge,
+                Cover = NormalizeImageAddress(item.Cover),
+                Evaluate = item.Evaluate,
+                IndexShow = item.NewEp?.IndexShow ?? string.Empty,
+                Progress = string.IsNullOrEmpty(item.Progress)
+                    ? DictionaryResource.GetString("BangumiNotWatched")
+                    : item.Progress
+            });
+        }
 
-            var medias = new List<BangumiFollowMedia>(response.List.Count);
-            foreach (var item in response.List)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                medias.Add(new BangumiFollowMedia(_navigationService, AppRoute.MyBangumiFollow)
-                {
-                    MediaId = item.MediaId,
-                    SeasonId = item.SeasonId,
-                    Title = item.Title,
-                    SeasonTypeName = item.SeasonTypeName,
-                    Area = item.Areas?.Count > 0 ? item.Areas[0].Name : string.Empty,
-                    Badge = item.Badge,
-                    Cover = NormalizeImageAddress(item.Cover),
-                    Evaluate = item.Evaluate,
-                    IndexShow = item.NewEp?.IndexShow ?? string.Empty,
-                    Progress = string.IsNullOrEmpty(item.Progress)
-                        ? DictionaryResource.GetString("BangumiNotWatched")
-                        : item.Progress
-                });
-            }
-
-            return new BangumiFollowPageSnapshot(
-                medias,
-                Math.Max(1, (int)Math.Ceiling((double)response.Total / pageSize)));
-        }, cancellationToken);
+        return new BangumiFollowPageSnapshot(
+            medias,
+            Math.Max(1, (int)Math.Ceiling((double)response.Total / pageSize)));
     }
 
     private static string NormalizeImageAddress(string? address)

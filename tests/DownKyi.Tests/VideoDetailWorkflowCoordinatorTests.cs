@@ -11,10 +11,12 @@ public sealed class VideoDetailWorkflowCoordinatorTests
     public void StartingNewOperationCancelsPreviousGeneration()
     {
         using var settings = new TestSettingsStore();
+        var client = new TestBilibiliApiClient();
         using var coordinator = new VideoDetailWorkflowCoordinator(
             settings.Store,
-            new VideoTagProvider(),
-            new TestWbiKeyProvider());
+            new VideoTagProvider(client),
+            new TestWbiKeyProvider(),
+            client);
 
         var first = coordinator.StartOperation();
         var second = coordinator.StartOperation();

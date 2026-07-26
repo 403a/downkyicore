@@ -1,13 +1,11 @@
-using System.Net;
+using DownKyi.Application.Bilibili;
 using DownKyi.Core.BiliApi;
 using Newtonsoft.Json.Linq;
-using BiliWebClient = DownKyi.Core.BiliApi.WebClient;
 
 namespace DownKyi.Core.Tests;
 
-public sealed class BiliApiContractSampleTests : IDisposable
+public sealed class BiliApiContractSampleTests
 {
-    private readonly WebClientTestContext _context = new();
     private static readonly string SampleDirectory = Path.Combine(
         FindRepositoryRoot(),
         "tests",
@@ -16,33 +14,28 @@ public sealed class BiliApiContractSampleTests : IDisposable
         "JsonSamples");
 
     [Fact]
-    public void SuccessSampleDeserializes()
+    public async Task SuccessSampleDeserializes()
     {
-        ConfigureResponse("success.json");
-
-        var result = RequestSample();
+        var result = await RequestSampleAsync("success.json");
 
         Assert.Equal(0, result.Value<int>("code"));
         Assert.Equal(1, result["data"]?.Value<int>("id"));
     }
 
     [Fact]
-    public void MissingDataSampleIsVisibleWithoutNullReference()
+    public async Task MissingDataSampleIsVisibleWithoutNullReference()
     {
-        ConfigureResponse("missing-data.json");
-
-        var result = RequestSample();
+        var result = await RequestSampleAsync("missing-data.json");
 
         Assert.Equal(0, result.Value<int>("code"));
         Assert.Null(result["data"]);
     }
 
     [Fact]
-    public void RejectedCodeThrowsTypedApiFailure()
+    public async Task RejectedCodeThrowsTypedApiFailure()
     {
-        ConfigureResponse("rejected.json");
-
-        var exception = Assert.Throws<BilibiliApiResponseException>(RequestSample);
+        var exception = await Assert.ThrowsAsync<BilibiliApiResponseException>(
+            () => RequestSampleAsync("rejected.json"));
 
         Assert.Equal("sample", exception.Operation);
         Assert.Contains("code=-101", exception.Message, StringComparison.Ordinal);
@@ -51,36 +44,31 @@ public sealed class BiliApiContractSampleTests : IDisposable
     [Theory]
     [InlineData("error.html")]
     [InlineData("malformed.json")]
-    public void NonJsonSamplesThrowTypedApiFailure(string sampleName)
+    public async Task NonJsonSamplesThrowTypedApiFailure(string sampleName)
     {
-        ConfigureResponse(sampleName);
-
-        Assert.Throws<BilibiliApiResponseException>(RequestSample);
+        await Assert.ThrowsAsync<BilibiliApiResponseException>(
+            () => RequestSampleAsync(sampleName));
     }
 
-    public void Dispose()
+    private static Task<JObject> RequestSampleAsync(string sampleName)
     {
-        _context.Dispose();
-        GC.SuppressFinalize(this);
-    }
-
-    private static JObject RequestSample()
-    {
-        return BiliApiRequest.RequestJson<JObject>(
+        var bodyTask = File.ReadAllTextAsync(
+            Path.Combine(SampleDirectory, sampleName),
+            TestContext.Current.CancellationToken);
+        IBilibiliApiClient client = new StubBilibiliApiClient(
+            async (_, cancellationToken) =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return await bodyTask.ConfigureAwait(false);
+            });
+        return BiliApiRequest.RequestJsonAsync<JObject>(
+            client,
             "https://example.com/getLogin",
             referer: null,
             operationName: "sample",
             logTag: nameof(BiliApiContractSampleTests),
+            includeCredentials: false,
             cancellationToken: TestContext.Current.CancellationToken);
-    }
-
-    private static void ConfigureResponse(string sampleName)
-    {
-        var body = File.ReadAllText(Path.Combine(SampleDirectory, sampleName));
-        BiliWebClient.SendOverrideForTests = (_, _) => new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(body)
-        };
     }
 
     private static string FindRepositoryRoot()

@@ -4,7 +4,6 @@ using System.Text.Json.Serialization;
 namespace DownKyi.Core.BiliApi;
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.Unspecified)]
-[JsonSerializable(typeof(WebClient.SpiOrigin))]
 [JsonSerializable(typeof(BilibiliResponseMetadata))]
 internal sealed partial class BilibiliWebJsonContext : JsonSerializerContext;
 
