@@ -17,3 +17,7 @@ script/macos/*.dmg
 script/macos/*.app
 
 *.sln.DotSettings.user
+
+.env
+.env.*
+!.env.example

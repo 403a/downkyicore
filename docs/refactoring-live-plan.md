@@ -2,8 +2,8 @@
 
 Status: active
 Last updated: 2026-07-26
-Current group: Gate 4 Domain download authority
-Current branch: `refactor/domain-download-authority`
+Current group: Gate 5 Event-driven download queue
+Current branch: `refactor/event-driven-download-queue`
 
 This file contains only unfinished or not-yet-integrated work. Completed PR 02-32 items are not restored. Design rationale belongs in `design-docs`; product acceptance belongs in `product-specs`.
 
@@ -15,55 +15,26 @@ The previous `Status: complete` was incorrect.
 - PR #78 was merged into the stacked base `refactor/pr-25-29-remove-legacy`, not into `main`.
 - PR #75 and PR #77 are closed after their replacement was validated in PR #82.
 - PR #79 and PR #80 were superseded by green PR #83, closed, and their typed replacement was merged into the stacked release-hardening base.
+- Gate 4 passed Windows/Linux/macOS quality CI and CodeQL, then PR #87 was merged into `refactor/pr-30-32-release-hardening` as merge commit `d8342abc`.
+- The explicit authenticated read-only Bilibili audit passed its `/nav` login gate and all 14 contract probes. Only the allowlisted diagnostics artifact is retained; strict build, architecture tests, format verification and a zero-finding candidate secret scan are green, but the audit changes are not integrated yet.
 - `version.txt` remains `1.0.32`; v1.1.0 has not passed its release gate.
 
 No release tag may be created while any release blocker below remains.
 
 ## Execution Order
 
-### Gate 4: Make Domain DownloadTask The Runtime Authority
-
-Owner branch: `refactor/domain-download-authority`.
-
-Progress (2026-07-26):
-
-- Added `IDownloadTaskApplicationService` and `DownloadTaskApplicationService` as the authoritative typed command/query owner; commands load the aggregate, apply one legal transition, persist with optimistic versioning, then publish the committed snapshot.
-- Worker and pipeline entry points now use `DownloadTaskId`; transfer requests carry Domain progress/GID callbacks and no longer carry `DownloadingItem` as task authority.
-- Replaced normal UI-to-Domain reconstruction with one-way Domain-to-UI projection. `DownloadTask.Restore` is limited to the SQLite materializer and explicit NRBF migration mapper.
-- Preserved unfinished task IDs, GID, transfer file map, completed keys, progress, output size and versions across reopen and shutdown recovery.
-- Pause now remains `Pausing` until the transfer worker has actually stopped; built-in and aria2 pause outcomes preserve partial files before the worker confirms `Paused`.
-- Active deletion is durable and retryable: a failed physical cleanup leaves `Canceled` state, while a later delete skips duplicate cancellation and can finish file/store removal.
-- Projection changes notify all affected bindings. UI-thread dispatch of projection events remains explicit Gate 8 work; the current 500 ms UI-list queue scan remains explicit Gate 5 work.
-- Local strict Release build is green with zero warnings, all 552 solution tests pass, format changed 0/750 files, `git diff --check` passes, the module-boundary audit completes, and vulnerable/deprecated package audits are empty.
-- The .NET 10 dependency-audit command is verified with the required `dotnet package list --project <solution>` syntax; stale positional examples were removed from the Agent and rollback guides.
-- Commit/PR publication and remote matrix validation remain. Gate 4 stays in this live plan until its integration evidence is available.
-
-Scope:
-
-- Commands address tasks by `DownloadTaskId`.
-- Load aggregate, invoke legal transition, persist, then publish projection changes.
-- Remove UI model -> Domain reconstruction as the normal write path.
-- Preserve legacy SQLite/JSON readers only at migration adapters.
-- Preserve unfinished tasks, GID, partial file map, completed segment keys and optimistic version.
-
-Verification:
-
-- state transition tests cover start, pause, resume, fail, complete, cancel and shutdown recovery.
-- legacy database fixtures migrate and reopen without data loss.
-- architecture tests reject `DomainDownloadTask.Restore` outside migration/store adapters.
-
-Completion:
-
-- worker/pipeline APIs no longer accept `DownloadingItem` as task authority.
-- `CreateUnfinishedTask`, `ToLegacyStatus` and reverse Domain mapping are removed from runtime flow.
-
-Rollback:
-
-- Keep a feature-compatible adapter commit boundary so runtime authority can be reverted without reverting schema compatibility.
-
 ### Gate 5: Replace UI Polling With Event-Driven Enqueue
 
 Owner branch: `refactor/event-driven-download-queue` after Gate 4.
+
+Progress (2026-07-26):
+
+- New, resumed, and persisted startup tasks directly enqueue `DownloadTaskId`; the bounded channel and fixed workers no longer receive or scan `DownloadingItem`.
+- The one startup query returns Domain snapshots and UI projections together. Interrupted `Downloading`/`Pausing` snapshots recover to `Queued` before admission.
+- Every executing task owns a linked cancellation source; deleting one active task does not stop its worker or unrelated tasks.
+- Pre-start admissions are deduplicated in `DownloadTaskQueueGateway` and flushed when the runtime attaches. A closing runtime returns admissions to that pending owner instead of dropping committed work.
+- `DispatchAsync`, the 500 ms delay, `_queuedDownloads`, and UI collection membership checks are removed.
+- Strict Release build is at zero warnings; all 565 solution tests, format verification, `git diff --check`, module-boundary audit, vulnerable/deprecated package audits, and the candidate secret scan are green. Commit/PR publication and remote matrix validation remain.
 
 Scope:
 

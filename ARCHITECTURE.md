@@ -87,16 +87,19 @@ Main region 的返回操作必須先縮減 `AvaloniaNavigationService` 的既有
 
 ```mermaid
 flowchart LR
-    Add["AddToDownloadService"] --> NewProjection["new DownloadingItem input"]
-    NewProjection --> Projection["DownloadTaskProjectionStore"]
+    Add["AddToDownloadService"] --> Admission["DownloadTaskAdmissionService"]
+    Admission --> Projection["DownloadTaskProjectionStore"]
+    Admission --> UiList["DownloadingItem collection"]
+    Admission --> QueueGateway["DownloadTaskQueueGateway"]
     Projection --> Commands["IDownloadTaskApplicationService"]
     Commands --> Domain["Domain DownloadTask transitions"]
     Commands --> Store["IDownloadTaskStore / SQLite"]
     Commands -->|"committed TaskChanged"| Projection
-    Projection --> UiList["DownloadingItem collection"]
-    UiList --> Poll["500 ms polling dispatcher"]
-    Poll --> Channel["bounded Channel<DownloadingItem>"]
-    Channel --> Worker["worker extracts DownloadTaskId"]
+    Projection --> UiList
+    Bootstrap["persisted Domain startup snapshots"] --> QueueGateway
+    Resume["resume command committed"] --> QueueGateway
+    QueueGateway --> Channel["bounded Channel<DownloadTaskId>"]
+    Channel --> Worker["fixed worker + per-task cancellation owner"]
     Worker --> Commands
     Worker --> Pipeline["DownloadPipeline(DownloadTaskId)"]
     Pipeline --> Backend["Builtin or aria2 backend"]
@@ -106,7 +109,7 @@ flowchart LR
 
 目前所有 durable command 都先載入 Domain aggregate、執行合法 transition、以 optimistic version 寫入 SQLite，再發布 committed snapshot。一般 runtime 不再從 mutable UI model 反向重建 Domain；`DownloadTask.Restore` 只允許出現在 SQLite materializer 與 legacy migration adapter。
 
-這條流程仍不是最終架構。`DownloadOrchestrator` 會每 500 ms 掃描 UI collection，channel 元素仍是 `DownloadingItem`，而 pipeline 內部 media stage 仍以 projection 作為播放流和畫面上下文。Gate 5 會把 queue 改成事件驅動 `DownloadTaskId`；Gate 6/8 分別拆 stage 與建立 UI dispatcher/projector owner。
+佇列已不再掃描 UI collection；新增、續傳與一次性啟動恢復都直接傳遞 `DownloadTaskId`。啟動查詢在同一份結果中提供 Domain snapshots 與 UI projections，runtime 只使用前者。這條流程仍不是最終架構，因為 pipeline 內部 media stage 仍以 projection 作為播放流和畫面上下文；Gate 6/8 分別拆 stage 與建立 UI dispatcher/projector owner。
 
 ## 目標拓樸
 
@@ -219,7 +222,7 @@ FinalizeStage
 - 既有 JSON property 名稱與 migration 必須保持可讀。
 - SQLite 下載紀錄、未完成任務、partial files、aria2 GID 與續傳資料不可遺失。
 - 外部 Bilibili envelope、WBI、DURL 與 protobuf contract 必須由 fixture 測試保護。
-- 固定 Bilibili 端點必須登錄於 `docs/operations/bilibili-api-audit.md`；匿名 live probe 只提供時點證據，不可取代 deterministic contract tests。
+- 固定 Bilibili 端點必須登錄於 `docs/operations/bilibili-api-audit.md`；匿名或明確授權的登入態 live probe 只提供清理後時點證據，不可取代 deterministic contract tests，也不可保存 credential、raw response 或帳號值。
 - XAML resource URI、compiled binding 和 typed route 改名必須有 UI smoke coverage。
 - 任何跨層搬移都先建立 adapter 或 migration，再移除舊 owner。
 
@@ -231,6 +234,8 @@ FinalizeStage
 - `tests/DownKyi.Architecture.Tests/BilibiliApiInventoryArchitectureTests.cs`
 - `script/audit-module-boundaries.ps1`
 - `script/audit-bilibili-api.ps1`
+- `script/audit-bilibili-authenticated-api.ps1`
+- `script/scan-secrets.ps1`
 - `tests/DownKyi.Desktop.Tests/UiSmokeTests.cs`
 
 基線測試採 ratchet 模式：現有違規可以減少或移除，新增違規或擴大巨檔會失敗。基線不是豁免，也不能成為長期目標。

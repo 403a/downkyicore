@@ -113,7 +113,9 @@ ViewModel 應只保留 binding state、command wiring、導航與 UI 投影。�
 ```text
 DownloadBootstrapHostedService
   -> IDownloadRuntimeFactory / DownloadRuntimeFactory
-  -> DownloadOrchestrator                 bounded channel + workers + shutdown
+  -> persisted Domain startup snapshots
+  -> DownloadTaskQueueGateway             pre-start admission + active runtime
+  -> DownloadOrchestrator                 bounded Channel<DownloadTaskId> + workers
   -> DownloadPipeline                     task workflow and media stages
      -> ITransferBackend                  Builtin or Aria2
      -> DownloadArtifactWriter            cover, subtitle, danmaku, NFO
@@ -125,7 +127,7 @@ DownloadBootstrapHostedService
 
 Durable 下載狀態只能由 `IDownloadTaskApplicationService` 依 `DownloadTaskId` 載入 aggregate、執行 transition、persist，成功後才發布 projection event。`DownloadTaskProjectionStore` 不得從既有 UI 狀態反向重建 runtime Domain；`DownloadTask.Restore` 只允許 SQLite materializer 與明確 legacy migration adapter。
 
-此鏈仍有已追蹤的過渡債：orchestrator 每 500 ms 掃描 UI download collection，channel 元素仍是 `DownloadingItem`，pipeline 內部 media stage 仍讀取 projection。這些不是穩定契約，Gate 5/6 必須改成 `DownloadTaskId` event-driven queue 與 typed stages。
+新增、續傳與啟動恢復會在 Domain 狀態成功提交後直接 enqueue `DownloadTaskId`；runtime 不得掃描 UI collection 取得工作。啟動前極早建立的任務由 gateway 暫存，runtime 掛載後沖入 bounded channel。仍待 Gate 6 處理的過渡債是 pipeline 內部 media stage 會讀取 projection 作為播放資訊與 UI context。
 
 穩定契約：
 
@@ -144,6 +146,7 @@ Durable 下載狀態只能由 `IDownloadTaskApplicationService` 依 `DownloadTas
 - 路徑由 `StorageManager` 解析；測試必須用隔離目錄，禁止讀取真實 cookie、設定、下載 DB 或 aria2 session。
 - SQLite schema 變更必須有版本 migration、備份、rollback 與 reopen 測試。
 - 日誌使用注入的 `ILogger` 與 `ApplicationLogProvider`。不得記錄 cookie、token、完整敏感 URL、email、帳號 ID 或完整個人路徑。
+- 登入態 live audit 只能使用 `script/audit-bilibili-authenticated-api.ps1 -ConfirmAuthenticatedLive` 從 `~/.codex/.env` 讀取憑證；不得把值放入命令列、source、fixture、artifact、commit 或 PR。完成後必須執行 `script/scan-secrets.ps1`。
 - 低階 API 不得直接輸出到 terminal，也不得同時在多層重複記錄同一失敗。
 
 ## MVVM 與非同步

@@ -1,0 +1,23 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Public WBI fixture keys used by deterministic signing tests."
+targetRules = ["generic-api-key"]
+regexTarget = "secret"
+regexes = [
+  '''7cd084941338484aae1ad9425b84077c''',
+  '''4932caff0ff746eab6f01bf08b70ac45'''
+]
+
+[[allowlists]]
+description = "Avalonia brush resource declarations mistaken for generic API key assignments."
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "line"
+paths = [
+  '''(^|/)DownKyi/Themes/ColorBrush\.axaml$'''
+]
+regexes = [
+  '''^\s*<SolidColorBrush x:Key="Brush[A-Za-z0-9]+" Color="\{DynamicResource Color[A-Za-z0-9]+\}" />\s*$'''
+]

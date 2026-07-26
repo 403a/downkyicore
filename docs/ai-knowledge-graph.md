@@ -2,7 +2,7 @@
 
 Status: maintained architecture index
 Schema version: 1.0
-Last reviewed: 2026-07-22
+Last reviewed: 2026-07-26
 
 This document is the first file an AI agent should read before changing DownKyi. Its goal is to preserve stable knowledge about project structure, ownership boundaries, and call relationships so agents do not rediscover the same code paths from scratch.
 
@@ -20,8 +20,8 @@ The target projects exist, but the target ownership model is not complete. Read 
 - `src/DownKyi.Desktop` currently owns only Host creation. Views, ViewModels, navigation/dialog adapters, UI projections, and lifecycle remain in the `DownKyi` executable assembly.
 - `src/DownKyi.Infrastructure` currently owns SQLite task persistence, write-behind, and clock. Bilibili HTTP, aria2, FFmpeg, filesystem paths, and logging implementation remain mainly in `DownKyi.Core` or `DownKyi`.
 - `DownKyi.Domain.DownloadTask` is the durable runtime state authority. `DownloadTaskApplicationService` loads by `DownloadTaskId`, invokes legal transitions, persists optimistic versions, and only then publishes committed snapshots. Normal runtime no longer reconstructs Domain state from mutable UI projections.
-- `DownloadOrchestrator` still scans the UI downloading collection every 500 ms before writing `DownloadingItem` values to its channel.
-- Workers and pipeline entry points use `DownloadTaskId`, but the channel and several media stages still carry/read `DownloadingItem` as transient playback/UI context. `DownloadPipeline` remains a mixed workflow/presentation owner and the HTTP compatibility layer still uses a static facade plus synchronous send/read/backoff.
+- New tasks, resumed tasks, and persisted startup tasks directly enqueue `DownloadTaskId` through `DownloadTaskQueueGateway`; `DownloadOrchestrator` no longer scans a UI collection and each active task has its own linked cancellation owner.
+- Workers and pipeline entry points use `DownloadTaskId`, but several media stages still read `DownloadingItem` as transient playback/UI context. `DownloadPipeline` remains a mixed workflow/presentation owner and the HTTP compatibility layer still uses a static facade plus synchronous send/read/backoff.
 - These facts are tracked debt, not stable contracts. The ordered migration and release blockers live in `docs/refactoring-live-plan.md`.
 - `ModuleBoundaryBaselineTests` allows every listed debt item to disappear, but rejects new owners, consumers, duplicate names, UI dependencies, synchronous HTTP debt, or oversized-file growth.
 
@@ -1447,18 +1447,25 @@ id: ops.bilibili-api-audit
 type: operations
 paths:
   - docs/operations/bilibili-api-audit.md
+  - docs/operations/bilibili-authenticated-api-audit.json
   - script/audit-bilibili-api.ps1
-responsibility: Records every fixed Bilibili Core endpoint and provides an explicit anonymous live probe that emits only sanitized contract diagnostics.
+  - script/audit-bilibili-authenticated-api.ps1
+  - script/scan-secrets.ps1
+  - .gitleaks.toml
+responsibility: Records every fixed Bilibili Core endpoint and provides explicit anonymous/authenticated live probes that emit only allowlisted contract diagnostics, followed by candidate-commit secret scanning.
 inbound:
   - core.bili-api
 outbound: []
 contracts:
-  - The probe never loads local settings, cookies, browser profiles, download data, or account identifiers.
-  - Authenticated endpoints remain auth-deferred unless a redacted deterministic fixture proves their payload contract.
+  - The anonymous probe never loads local settings, cookies, browser profiles, download data, or account identifiers.
+  - The authenticated probe runs only with explicit operator confirmation, reads `BILIBILI_TEST_COOKIE` from `~/.codex/.env` inside its process, and blocks all dependent probes unless navigation returns code 0 with `isLogin=true`.
+  - Authenticated output contains only endpoint path, status/code, login requirement, structure/field/drift state, outcome, and a sanitized error type. Raw responses, headers, query identifiers and account values cannot enter the artifact.
+  - Gitleaks scans the exact tracked plus non-ignored untracked candidate set. Allowlisting is limited to public WBI fixture keys and exact Avalonia brush declarations.
   - Conflicting external evidence is recorded as risk; it does not justify speculative endpoint replacement.
 hazards:
   - Live responses are time-dependent evidence and never run as unit tests or PR CI prerequisites.
   - HTTP 200 alone does not prove success; API code, envelope presence and usable payload remain separate checks.
+  - Passing a credential on the command line, persisting raw JSON, or broad secret-scan exclusions would expose user data.
 tests:
   - test.bilibili-api-contract-audit
 ```
@@ -1677,6 +1684,7 @@ type: hosted-service
 paths:
   - DownKyi/Services/Download/DownloadBootstrapHostedService.cs
   - DownKyi/Services/Download/DownloadRuntimeFactory.cs
+  - DownKyi/Services/Download/DownloadTaskQueueGateway.cs
   - DownKyi/Platform/IUiDispatcher.cs
   - DownKyi/Platform/AvaloniaUiDispatcher.cs
 responsibility: Restores persisted download projections, pages history, selects the configured backend, and owns download runtime start/stop inside the Host lifecycle.
@@ -1690,6 +1698,8 @@ outbound:
 contracts:
   - Shell construction completes before Host startup performs database reads or starts a downloader backend.
   - Startup restores every unfinished task and the newest 100 history items before loading remaining history in the background.
+  - One unfinished-task query yields both immutable Domain snapshots and UI projections; only Domain snapshots drive startup admission and interrupted-state recovery.
+  - Admissions made before runtime attachment are deduplicated and flushed when the started runtime is attached.
   - Observable collection mutation crosses the explicit `IUiDispatcher` boundary; the hosted service cannot reference Avalonia Dispatcher directly.
   - Runtime creation is isolated behind `IDownloadRuntimeFactory`, and Host stop awaits runtime recovery plus any outstanding history load together.
   - Download completion projects observable collection mutations through injected `IUiDispatcher`; runtime code cannot call App dispatcher helpers.
@@ -1712,6 +1722,9 @@ type: service
 paths:
   - DownKyi/Services/Download/DownloadRuntimeFactory.cs
   - DownKyi/Services/Download/DownloadOrchestrator.cs
+  - DownKyi/Services/Download/DownloadTaskAdmissionService.cs
+  - DownKyi/Services/Download/DownloadTaskQueueGateway.cs
+  - DownKyi/Services/Download/IDownloadTaskExecutor.cs
   - DownKyi/Services/Download/DownloadPipeline.cs
   - DownKyi/Services/Download/BuiltinTransferBackend.cs
   - DownKyi/Services/Download/Aria2TransferBackend.cs
@@ -1725,7 +1738,7 @@ paths:
   - DownKyi/Services/Download/DownloadFileIntegrity.cs
   - DownKyi/Services/Download/DownloadDiagnosticLogger.cs
   - DownKyi/Services/Download/DownloadShutdownCoordinator.cs
-responsibility: Selects one transfer backend, dispatches bounded workers, executes media stages, writes auxiliary artifacts and task state through dedicated owners, verifies integrity, and finalizes media.
+responsibility: Admits committed task IDs directly, selects one transfer backend, dispatches bounded workers, executes media stages, writes auxiliary artifacts and task state through dedicated owners, verifies integrity, and finalizes media.
 inbound:
   - service.download-bootstrap
   - service.download-add
@@ -1739,6 +1752,7 @@ outbound:
   - core.settings
 contracts:
   - A bounded Channel and fixed workers own queue consumption; global shutdown and per-task cancellation cannot create unbounded transfer tasks.
+  - New, resumed, and persisted startup tasks enqueue `DownloadTaskId` directly; no runtime owner scans an observable UI collection for work.
   - Built-in and aria2 backends share key generation, resume path selection, integrity checks, and awaited persistence; custom aria settings select the same aria backend with external process ownership.
   - Incomplete, empty, HTML/JSON error, and sidecar files are not valid completed media.
   - Pause and app shutdown preserve resumable partial files; explicit deletion removes media plus `.aria2` and `.download` sidecars.
@@ -1755,15 +1769,14 @@ contracts:
   - Runtime factory creates a typed backend logger, and every download/file-lifecycle/maintenance owner uses the shared provider; this directory cannot call static `LogManager`.
   - Download diagnostic throttling belongs to the injected runtime logger instance; scopes contain only a SHA-256-derived short task ID and cannot retain raw task IDs in process-wide static state.
   - `DownloadTaskFileService` is an injected instance so cancellation, sidecar cleanup, retry, and permission failures use the same logger without a static owner.
-  - Shutdown cancellation while dispatch waits for capacity cannot skip fixed-worker drain or resumable-state recovery; active `Downloading` or `Pausing` Domain rows return to `Queued` and are persisted before exit completes.
+  - Shutdown cancellation while enqueue or workers wait cannot skip fixed-worker drain or resumable-state recovery; active `Downloading` or `Pausing` Domain rows return to `Queued` and are persisted before exit completes.
   - Recovery persistence after cancellation explicitly ignores the canceled operation token; ordinary transfer and progress writes continue to propagate their caller token.
   - `DownloadArtifactWriter` owns cover, subtitle, danmaku, and NFO generation; `DownloadTaskStateWriter` is a typed Application-command adapter and never accepts a UI task model.
   - `DownloadPipeline` cannot regain subtitle API, danmaku converter, NFO XML, direct projection-update, or SQLite exception implementation details.
   - Diagnostic logs should include downloader, split/parallel count, speed, and limit values without full local paths or sensitive URLs.
 hazards:
   - Blocking waits in download lifecycle can freeze UI or prevent process exit.
-  - The bounded channel is fed by a 500 ms scan of `DownloadListState.Downloading`, so the UI projection remains a runtime input and scheduling has polling latency.
-  - The channel still carries `DownloadingItem`, and media stages resolve that projection for playback metadata even though all durable transitions are Domain-authoritative.
+  - Media stages still resolve a `DownloadingItem` projection for playback metadata even though queue identity and all durable transitions are Domain-authoritative.
   - Pipeline retry and backend URL fallback can multiply attempts because one typed retry budget does not yet own both decisions.
   - `DownloadPipeline` still owns UI-facing state and remains over the current 500-line architecture budget.
   - Letting an expected shutdown `OperationCanceledException` escape before state recovery leaves rows stored as active and prevents clean resume after restart.
@@ -1771,6 +1784,8 @@ hazards:
   - aria2 process cleanup is platform-sensitive.
   - Reusing Id+codec or runtime GetHashCode values across DURL segments overwrites temporary files and can produce non-seekable MP4 output.
 tests:
+  - test.download-orchestrator
+  - test.download-queue-gateway
   - test.download-file-integrity
   - test.fake-http-download
   - test.download-lifecycle
@@ -2272,9 +2287,11 @@ Rule: cancel means no task, no background add, no storage write.
 
 ```mermaid
 flowchart TD
-    Queue["DownloadingList item"] --> Poll["500 ms compatibility scan"]
-    Poll --> Channel["DownloadOrchestrator bounded Channel<DownloadingItem>"]
-    Channel --> Runtime["Worker extracts DownloadTaskId"]
+    Add["new task committed"] --> Gateway["DownloadTaskQueueGateway"]
+    Resume["resume committed"] --> Gateway
+    Startup["persisted Domain startup snapshots"] --> Gateway
+    Gateway --> Channel["DownloadOrchestrator bounded Channel<DownloadTaskId>"]
+    Channel --> Runtime["fixed worker + per-task CTS"]
     Runtime --> Commands["DownloadTaskApplicationService"]
     Runtime --> Pipeline["DownloadPipeline(DownloadTaskId)"]
     Pipeline --> Choice{"Downloader setting"}
@@ -2543,7 +2560,8 @@ test.bilibili-api-contract-audit:
     - bangumi v2 requires a non-empty `result.video_info` payload
     - optional `data` and `result` envelopes cannot invent payloads with default initializers
     - every hard-coded Core endpoint is listed in the maintained API audit
-    - the live probe requires explicit consent and cannot load local login state
+    - anonymous and authenticated probes have separate explicit-consent paths
+    - authenticated evidence has an allowlisted schema and no credential or account values
 
 test.legacy-settings-migration:
   paths:
@@ -2901,7 +2919,7 @@ test.module-boundary-ratchets:
     - service contracts cannot add another dependency on ViewModel types
     - duplicate simple-name sets, generic buckets, and file/type mismatch sets cannot grow
     - existing files over 500 physical lines cannot grow and new oversized files are rejected
-    - Domain-to-legacy reconstruction, UI collection polling, and static/synchronous HTTP debt cannot spread to another owner
+    - Domain-to-legacy reconstruction and static/synchronous HTTP debt cannot spread to another owner; download work polling from UI collections is rejected entirely
     - the custom mutable observable collection cannot gain consumers or unsupported interface members
     - repository knowledge, testing, operations, and release entry points remain discoverable by an Agent
     - inventory output records the exact commit SHA and current measurable state

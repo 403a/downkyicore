@@ -1,14 +1,15 @@
 # Bilibili API Contract Audit
 
-Audit date: 2026-07-22  
-Code baseline: `3fbd31be95bf6e62287bb393b139b853260d36cf` plus Gate 3 changes  
-Scope: every fixed Bilibili HTTP endpoint under `DownKyi.Core/BiliApi`
+Audit date: 2026-07-26
+Code baseline: `a7ee37455fff2cd67c545035c3daeda1408073f7` plus the Gate 5 working tree
+Scope: every fixed Bilibili HTTP endpoint under `DownKyi.Core/BiliApi`, plus the authenticated read-only subset used by account workflows
 
-This is a runtime contract inventory, not an assertion that undocumented Bilibili APIs are stable. It records the best evidence available without copying or using a maintainer's personal login state.
+This is a runtime contract inventory, not an assertion that undocumented Bilibili APIs are stable. Live authentication is optional, explicit, read-only, and operator supplied. No credential, request header, raw response, query identifier, or account value is persisted.
 
 ## Evidence And Status
 
 - **LIVE**: anonymous controlled request on 2026-07-22. Only HTTP status, API code/message, top-level keys, content type and byte count were inspected.
+- **AUTH-LIVE**: authenticated read-only request on 2026-07-26. The hard gate required `/nav` code 0 and `data.isLogin=true`; only the allowlisted sanitized contract fields in [`bilibili-authenticated-api-audit.json`](bilibili-authenticated-api-audit.json) were persisted.
 - **YT**: current [yt-dlp Bilibili extractor](https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/extractor/bilibili.py).
 - **NEMO**: maintained bilibili-api endpoint maps for [users](https://github.com/Nemo2011/bilibili-api/blob/main/bilibili_api/data/api/user.json), [favorites](https://github.com/Nemo2011/bilibili-api/blob/main/bilibili_api/data/api/favorite-list.json), [videos](https://github.com/Nemo2011/bilibili-api/blob/main/bilibili_api/data/api/video.json), [bangumi](https://github.com/Nemo2011/bilibili-api/blob/main/bilibili_api/data/api/bangumi.json), and [login](https://github.com/Nemo2011/bilibili-api/blob/main/bilibili_api/data/api/login.json).
 - **DOC**: maintained community protocol documentation, including [protobuf danmaku](https://github.com/SocialSisterYi/bilibili-API-collect/blob/master/docs/danmaku/danmaku_proto.md) and [history/watch-later](https://github.com/SocialSisterYi/bilibili-API-collect/tree/master/docs/historytoview).
@@ -30,8 +31,8 @@ Status values:
 | Endpoint | Owner and purpose | Contract/auth | Status and evidence | Decision and regression coverage |
 |---|---|---|---|---|
 | `api.bilibili.com/x/frontend/finger/spi` | `WebClient.GetBuvid`; obtain public buvid values before API requests | GET, `data.b_3/b_4`, anonymous | `current`; LIVE returned HTTP 200/code 0 | Keep. Missing `data` is a typed failure; HTTP retry tests cover the request path. |
-| `api.bilibili.com/x/web-interface/nav` | `UserInfo.GetUserInfoForNavigation`; login snapshot and WBI image keys | GET, `data`; anonymous response is code `-101` but still carries public `data.wbi_img` | `fixed`; LIVE reproduced `-101` with valid 32-character WBI keys; YT also obtains WBI keys here | Only this endpoint may deserialize code `-101`. `UserNavigationContractTests` proves keys survive and all other endpoints still reject `-101`. |
-| `api.bilibili.com/x/space/myinfo` | `UserInfo.GetMyInfo`; current account details | GET, `data`, Cookie required | `auth-deferred`; NEMO marks authenticated | Keep. Generic nonzero-code rejection and required-payload behavior apply. |
+| `api.bilibili.com/x/web-interface/nav` | `UserInfo.GetUserInfoForNavigation`; login snapshot and WBI image keys | GET, `data`; anonymous response is code `-101` but still carries public `data.wbi_img` | `fixed/current`; LIVE reproduced anonymous `-101`; AUTH-LIVE returned HTTP 200/code 0 with `isLogin=true`; YT also obtains WBI keys here | Only this endpoint may deserialize code `-101`. `UserNavigationContractTests` proves keys survive and all other endpoints still reject `-101`. |
+| `api.bilibili.com/x/space/myinfo` | `UserInfo.GetMyInfo`; current account details | GET, `data`, Cookie required | `current`; AUTH-LIVE returned HTTP 200/code 0 and the required account envelope without persisting any values; NEMO marks authenticated | Keep. Generic nonzero-code rejection and required-payload behavior apply. |
 | `passport.bilibili.com/x/passport-login/web/qrcode/generate` | `LoginQR.GetLoginUrl`; create login QR session | GET, `data.url/qrcode_key`, anonymous | `current`; LIVE code 0; NEMO login map agrees | Keep. Probe never emits the generated key or URL. Existing login coordinator tests use stubs. |
 | `passport.bilibili.com/x/passport-login/web/qrcode/poll` | `LoginQR.GetLoginStatus`; poll QR state | GET, `data`, generated key required | `current`; NEMO login map agrees; full live poll intentionally not persisted | Keep. The generated key is treated as sensitive transient state. |
 
@@ -67,12 +68,12 @@ Dynamic media dependencies are not fixed API endpoints: subtitle JSON addresses 
 | Endpoint | Owner and purpose | Contract/auth | Status and evidence | Decision and regression coverage |
 |---|---|---|---|---|
 | `api.bilibili.com/x/v3/fav/folder/info` | `FavoritesInfo.GetFavoritesInfo`; folder metadata | GET, `data` | `current`; NEMO and YT agree | Keep. Required payload. |
-| `api.bilibili.com/x/v3/fav/folder/created/list` | `FavoritesInfo.GetCreatedFavorites`; paged folders | GET, `data.list` | `current`; LIVE code 0 | Keep paged API. NEMO favors `created/list-all`, but anonymous `list-all` returned null for public probes, so replacement evidence is insufficient. |
-| `api.bilibili.com/x/v3/fav/folder/collected/list` | `FavoritesInfo.GetCollectedFavorites`; subscribed folders | GET, `data.list`, Cookie/visibility dependent | `auth-deferred`; NEMO agrees | Keep. No personal Cookie used for audit. |
-| `api.bilibili.com/x/v3/fav/resource/list` | `FavoritesResource.GetFavoritesMediaResource`; folder content and keyword search | GET, `data.medias/has_more` | `current`; NEMO/YT agree; search fixtures cover `has_more` | Keep. Search pagination does not trust the unfiltered folder total. |
-| `api.bilibili.com/x/v3/fav/resource/ids` | `FavoritesResource.GetFavoritesMediaId`; resource identities | GET, `data[]` | `current`; NEMO/YT agree | Keep. Required payload semantics apply. |
-| `api.bilibili.com/x/web-interface/history/cursor` | `HistoryApi.GetHistory`; watch history | GET, `data.cursor/list`, Cookie required | `auth-deferred`; anonymous LIVE returned `-101`; NEMO and DOC agree | Keep. Cancellation and typed API errors are preserved. |
-| `api.bilibili.com/x/v2/history/toview` | `ToView.GetToView`; watch later | GET, `data.list`, Cookie required | `auth-deferred`; anonymous LIVE returned `-101`; DOC and maintained UI implementations still use it | Keep. YT uses `/web`; both variants returned `-101` anonymously, so switching without an authenticated fixture would be speculative. |
+| `api.bilibili.com/x/v3/fav/folder/created/list` | `FavoritesInfo.GetCreatedFavorites`; paged folders | GET, `data.list` | `current`; LIVE and AUTH-LIVE returned HTTP 200/code 0 with the expected list envelope | Keep paged API. NEMO favors `created/list-all`, but anonymous `list-all` returned null for public probes, so replacement evidence is insufficient. |
+| `api.bilibili.com/x/v3/fav/folder/collected/list` | `FavoritesInfo.GetCollectedFavorites`; subscribed folders | GET, `data.list`, Cookie/visibility dependent | `current`; AUTH-LIVE returned HTTP 200/code 0 with the expected list envelope; NEMO agrees | Keep. |
+| `api.bilibili.com/x/v3/fav/resource/list` | `FavoritesResource.GetFavoritesMediaResource`; folder content and keyword search | GET, `data.medias/has_more` | `current`; AUTH-LIVE, NEMO and YT agree; search fixtures cover `has_more` | Keep. Search pagination does not trust the unfiltered folder total. |
+| `api.bilibili.com/x/v3/fav/resource/ids` | `FavoritesResource.GetFavoritesMediaId`; resource identities | GET, `data[]` | `current`; AUTH-LIVE, NEMO and YT agree | Keep. Required payload semantics apply. |
+| `api.bilibili.com/x/web-interface/history/cursor` | `HistoryApi.GetHistory`; watch history | GET, `data.cursor/list`, Cookie required | `current`; AUTH-LIVE returned HTTP 200/code 0 with both required fields; anonymous LIVE returned `-101`; NEMO and DOC agree | Keep. Cancellation and typed API errors are preserved. |
+| `api.bilibili.com/x/v2/history/toview` | `ToView.GetToView`; watch later | GET, `data.count/list`, Cookie required | `current`; AUTH-LIVE returned HTTP 200/code 0 with both required fields; DOC and maintained UI implementations still use it | Keep `/x/v2/history/toview`. The `/web` alternative has no demonstrated contract advantage. |
 
 ## User Space, Collections And Relations
 
@@ -89,12 +90,12 @@ Dynamic media dependencies are not fixed API endpoints: subtitle JSON addresses 
 | `api.bilibili.com/x/space/channel/video` | compatibility `UserSpace.GetChannelVideoList` | GET, former `data.list` | `retired-unused`; endpoint family is retired; no production caller | Same decision as channel list. Use polymer/series APIs in active flows. |
 | `api.bilibili.com/x/relation/stat` | `UserStatus.GetUserRelationStat`; following/follower counts | GET `vmid`, `data` | `current`; LIVE code 0; NEMO agrees | Keep active numeric-ID contract. The unused `Nickname.CheckNickname` query against this route returned `-400` and is classified `invalid-unused`; no anonymous name lookup replacement was proven. |
 | `api.bilibili.com/x/space/upstat` | `UserStatus.GetUpStat`; view/like totals | GET, `data` | `current`; LIVE code 0; NEMO agrees | Keep. Cancellation ownership remains Gate 7 HTTP work. |
-| `api.bilibili.com/x/relation/followers` | `UserRelation.GetFollowers`; followers | GET, `data`, visibility/login limits | `auth-deferred`; NEMO agrees | Keep compatibility and coordinator path. API-imposed page limits remain visible. |
-| `api.bilibili.com/x/relation/followings` | `UserRelation.GetFollowings`; following list | GET, `data`, visibility/login limits | `auth-deferred`; NEMO agrees | Keep. |
-| `api.bilibili.com/x/relation/whispers` | `UserRelation.GetWhispers`; private follows | GET, `data`, Cookie required | `auth-deferred`; NEMO agrees | Keep. No personal session probe. |
-| `api.bilibili.com/x/relation/blacks` | `UserRelation.GetBlacks`; block list | GET, `data`, Cookie required | `auth-deferred`; NEMO agrees | Keep. No personal session probe. |
-| `api.bilibili.com/x/relation/tags` | `UserRelation.GetFollowingGroup`; own groups | GET, `data`, Cookie required | `auth-deferred`; NEMO agrees | Keep. |
-| `api.bilibili.com/x/relation/tag` | `UserRelation.GetFollowingGroupContent`; group members | GET, `data`, Cookie required | `auth-deferred`; NEMO agrees | Keep. |
+| `api.bilibili.com/x/relation/followers` | `UserRelation.GetFollowers`; followers | GET, `data.list/total`, visibility/login limits | `current`; AUTH-LIVE returned HTTP 200/code 0 with the expected envelope; NEMO agrees | Keep compatibility and coordinator path. API-imposed page limits remain visible. |
+| `api.bilibili.com/x/relation/followings` | `UserRelation.GetFollowings`; following list | GET, `data.list/total`, visibility/login limits | `current`; AUTH-LIVE returned HTTP 200/code 0 with the expected envelope; NEMO agrees | Keep. |
+| `api.bilibili.com/x/relation/whispers` | `UserRelation.GetWhispers`; private follows | GET, `data.list`, Cookie required | `current`; AUTH-LIVE returned HTTP 200/code 0 with the expected envelope; NEMO agrees | Keep. |
+| `api.bilibili.com/x/relation/blacks` | `UserRelation.GetBlacks`; block list | GET, `data`, Cookie required | `current`; AUTH-LIVE returned HTTP 200/code 0 with the expected envelope; NEMO agrees | Keep. |
+| `api.bilibili.com/x/relation/tags` | `UserRelation.GetFollowingGroup`; own groups | GET, `data`, Cookie required | `current`; AUTH-LIVE returned HTTP 200/code 0 with the expected envelope; NEMO agrees | Keep. |
+| `api.bilibili.com/x/relation/tag` | `UserRelation.GetFollowingGroupContent`; group members | GET, `data`, Cookie required | `current`; AUTH-LIVE returned HTTP 200/code 0 with the expected envelope; NEMO agrees | Keep. |
 
 ## Compatibility Discovery APIs
 
@@ -103,6 +104,18 @@ Dynamic media dependencies are not fixed API endpoints: subtitle JSON addresses 
 | `api.bilibili.com/x/web-interface/ranking/region` | `Ranking.RegionRankingList`; regional ranking | GET, `data[]` | `legacy-working`; LIVE code 0; no production caller | Retain compatibility only. Current product has no ranking workflow, so replacing it would add untested behavior. |
 | `api.bilibili.com/x/web-interface/dynamic/region` | `DynamicApi.RegionDynamicList`; regional dynamic list | GET, `data` | `legacy-working/risk`; LIVE returned API `-404` for an empty sample; no production caller | Retain compatibility and typed failure. Do not interpret an empty region as endpoint retirement. |
 
+## Authenticated Read-Only Snapshot
+
+The 2026-07-26 operator run reloaded `BILIBILI_TEST_COOKIE` from `~/.codex/.env` inside an isolated PowerShell process. The value was never printed, persisted, hashed, copied into a fixture, or passed through command-line arguments.
+
+- Navigation hard gate: HTTP 200, Bilibili code 0, `data.isLogin=true`.
+- Contract probes: 14 passed, 0 failed, 0 blocked, 0 indeterminate.
+- Covered workflows: current-account envelope, history, watch later, created and collected favorites, favorite resources and IDs, followers, followings, private follows, block list, following groups and group content.
+- Persisted evidence: only API name/path, HTTP status, Bilibili code, login requirement, structure/field/drift booleans, outcome and sanitized error type.
+- Raw response bodies, request headers, query values and account values were discarded in-process.
+
+The machine-readable artifact is [`bilibili-authenticated-api-audit.json`](bilibili-authenticated-api-audit.json). It is a sanitized evidence snapshot, not a test fixture and not an authorization token.
+
 ## Confirmed Changes
 
 1. Anonymous navigation now accepts only API code `-101` at the `/nav` contract, then requires `data`. This repairs WBI bootstrap for public videos without weakening global API error handling.
@@ -110,6 +123,7 @@ Dynamic media dependencies are not fixed API endpoints: subtitle JSON addresses 
 3. The audit records the retired channel family, invalid nickname query, legacy danmaku path, and watch-later ambiguity without speculative remapping.
 4. `BilibiliApiInventoryArchitectureTests` fails when a fixed Core endpoint is not present in this document or when the `/nav` nonzero-code exception spreads to another source file.
 5. `script/audit-bilibili-api.ps1 -ConfirmLive` reproduces the anonymous subset and outputs only sanitized diagnostics. It is an operator tool, not a CI test.
+6. `script/audit-bilibili-authenticated-api.ps1 -ConfirmAuthenticatedLive` gates authenticated probes on `/nav`, emits an allowlisted schema, and never persists raw account responses.
 
 ## Deterministic Tests
 
@@ -123,14 +137,16 @@ Dynamic media dependencies are not fixed API endpoints: subtitle JSON addresses 
 - `BilibiliApiInventoryArchitectureTests.AnonymousNonSuccessCodeExceptionIsScopedToNavigation`
 - `BilibiliApiInventoryArchitectureTests.OptionalJsonEnvelopeFieldsCannotInventPayloads`
 - `BilibiliApiInventoryArchitectureTests.LiveProbeIsExplicitAndDoesNotLoadCookies`
+- `BilibiliApiInventoryArchitectureTests.AuthenticatedLiveProbeArtifactIsExplicitAndSanitized`
 
 ## Maintenance Procedure
 
 1. Update the endpoint row and deterministic fixture in the same PR as any endpoint or envelope change.
-2. Run `pwsh ./script/audit-bilibili-api.ps1 -ConfirmLive` only when a live audit is intended. Do not load a browser profile, login file, or Cookie into the script.
-3. Treat HTTP success and JSON parse success as insufficient: check API code, required envelope and usable payload.
-4. For authenticated contracts, use synthetic/recorded redacted fixtures. A maintainer's live session is never a release prerequisite.
-5. If sources conflict, keep the working contract and record the alternative until equivalent payload behavior is proven.
+2. Run `pwsh ./script/audit-bilibili-api.ps1 -ConfirmLive` only when an anonymous live audit is intended. It must never load a browser profile, login file, or Cookie.
+3. Run `pwsh ./script/audit-bilibili-authenticated-api.ps1 -ConfirmAuthenticatedLive -OutputPath ./docs/operations/bilibili-authenticated-api-audit.json` only with explicit operator approval. The script reads `BILIBILI_TEST_COOKIE` from `~/.codex/.env`; never pass the value on the command line.
+4. Treat HTTP success and JSON parse success as insufficient: check API code, required envelope and usable payload.
+5. Authenticated live evidence remains optional and must never run in CI or become a release prerequisite. Deterministic tests use synthetic/redacted fixtures.
+6. If sources conflict, keep the working contract and record the alternative until equivalent payload behavior is proven.
 
 ## Gate 3 Local Verification
 
