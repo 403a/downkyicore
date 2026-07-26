@@ -102,14 +102,17 @@ flowchart LR
     Channel --> Worker["fixed worker + per-task cancellation owner"]
     Worker --> Commands
     Worker --> Pipeline["DownloadPipeline(DownloadTaskId)"]
-    Pipeline --> Backend["Builtin or aria2 backend"]
-    Pipeline --> Ffmpeg["FFmpeg / validation"]
-    Pipeline --> Commands
+    Pipeline --> Stages["typed ordered stages"]
+    Stages --> Backend["Builtin or aria2 backend"]
+    Stages --> Ffmpeg["FFmpeg / validation"]
+    Stages --> Commands
+    Stages --> CompletionProjector["DownloadCompletionProjector"]
+    CompletionProjector --> UiList
 ```
 
 目前所有 durable command 都先載入 Domain aggregate、執行合法 transition、以 optimistic version 寫入 SQLite，再發布 committed snapshot。一般 runtime 不再從 mutable UI model 反向重建 Domain；`DownloadTask.Restore` 只允許出現在 SQLite materializer 與 legacy migration adapter。
 
-佇列已不再掃描 UI collection；新增、續傳與一次性啟動恢復都直接傳遞 `DownloadTaskId`。啟動查詢在同一份結果中提供 Domain snapshots 與 UI projections，runtime 只使用前者。這條流程仍不是最終架構，因為 pipeline 內部 media stage 仍以 projection 作為播放流和畫面上下文；Gate 6/8 分別拆 stage 與建立 UI dispatcher/projector owner。
+佇列已不再掃描 UI collection；新增、續傳與一次性啟動恢復都直接傳遞 `DownloadTaskId`。啟動查詢在同一份結果中提供 Domain snapshots 與 UI projections，runtime 只使用前者。`DownloadPipeline` 只建立單次 execution context 並依序執行 typed stages；階段失敗會立即停止並經 typed state writer 標記失敗。這條流程仍不是最終架構，因為 execution context 仍以 projection 作為播放流和畫面上下文，且 presenter/projector 尚未搬入 `DownKyi.Desktop`；Gate 8 擁有這兩項遷移。
 
 ## 目標拓樸
 

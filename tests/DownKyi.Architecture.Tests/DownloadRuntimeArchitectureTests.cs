@@ -115,11 +115,14 @@ public sealed class DownloadRuntimeArchitectureTests
         var pipelineSource = File.ReadAllText(Path.Combine(directory, "DownloadPipeline.cs"))
             .Replace("\r\n", "\n", StringComparison.Ordinal);
         var artifactSource = File.ReadAllText(Path.Combine(directory, "DownloadArtifactWriter.cs"));
+        var artifactStageSource = File.ReadAllText(Path.Combine(
+            directory,
+            "DownloadArtifactsStage.cs"));
         var stateSource = File.ReadAllText(Path.Combine(directory, "DownloadTaskStateWriter.cs"));
         var factorySource = File.ReadAllText(Path.Combine(directory, "DownloadRuntimeFactory.cs"));
 
-        Assert.Contains("DownloadArtifactWriter ArtifactWriter", pipelineSource, StringComparison.Ordinal);
-        Assert.Contains("DownloadTaskStateWriter StateWriter", pipelineSource, StringComparison.Ordinal);
+        Assert.Contains("IReadOnlyList<IDownloadPipelineStage>", pipelineSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("DownloadArtifactWriter", pipelineSource, StringComparison.Ordinal);
         Assert.DoesNotContain("VideoStreamApi.GetSubtitle", pipelineSource, StringComparison.Ordinal);
         Assert.DoesNotContain("BilibiliDanmakuConverter", pipelineSource, StringComparison.Ordinal);
         Assert.DoesNotContain("XmlWriter.Create", pipelineSource, StringComparison.Ordinal);
@@ -129,10 +132,11 @@ public sealed class DownloadRuntimeArchitectureTests
         Assert.Contains("VideoStreamApi.GetSubtitle", artifactSource, StringComparison.Ordinal);
         Assert.Contains("new BilibiliDanmakuConverter()", artifactSource, StringComparison.Ordinal);
         Assert.Contains("XmlWriter.Create", artifactSource, StringComparison.Ordinal);
+        Assert.Contains("DownloadArtifactWriter _artifactWriter", artifactStageSource, StringComparison.Ordinal);
         Assert.Contains("IDownloadTaskApplicationService _tasks", stateSource, StringComparison.Ordinal);
         Assert.DoesNotContain("DownloadingItem", stateSource, StringComparison.Ordinal);
         Assert.Contains("new DownloadArtifactWriter(", factorySource, StringComparison.Ordinal);
-        Assert.Contains("DownloadTaskStateWriter stateWriter", factorySource, StringComparison.Ordinal);
+        Assert.Contains("new DownloadArtifactsStage(artifactWriter)", factorySource, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -356,10 +360,10 @@ public sealed class DownloadRuntimeArchitectureTests
             "DownKyi",
             "Services",
             "Download",
-            "DownloadPipeline.cs"));
+            "DownloadCompletionProjector.cs"));
 
         Assert.Contains("IUiDispatcher", source, StringComparison.Ordinal);
-        Assert.Contains("await UiDispatcher.InvokeAsync", source, StringComparison.Ordinal);
+        Assert.Contains("return _uiDispatcher.InvokeAsync", source, StringComparison.Ordinal);
         Assert.DoesNotContain("App.PropertyChange", source, StringComparison.Ordinal);
         Assert.DoesNotContain("Dispatcher.UIThread", source, StringComparison.Ordinal);
     }
@@ -373,7 +377,7 @@ public sealed class DownloadRuntimeArchitectureTests
         var transferSource = File.ReadAllText(Path.Combine(directory, "ITransferBackend.cs"));
 
         Assert.Contains("public async Task ExecuteAsync(\n        DownloadTaskId taskId", pipelineSource, StringComparison.Ordinal);
-        Assert.Contains("public async Task MarkFailedAsync(", pipelineSource, StringComparison.Ordinal);
+        Assert.Contains("public Task MarkFailedAsync(", pipelineSource, StringComparison.Ordinal);
         Assert.DoesNotContain("internal async Task ExecuteAsync(\n        DownloadingItem", pipelineSource, StringComparison.Ordinal);
         Assert.DoesNotContain("CancellationToken? CancellationToken", pipelineSource, StringComparison.Ordinal);
         Assert.DoesNotContain("CancellationToken.GetValueOrDefault", pipelineSource, StringComparison.Ordinal);
@@ -389,14 +393,14 @@ public sealed class DownloadRuntimeArchitectureTests
         var directory = Path.Combine(RepositoryRoot, "DownKyi", "Services", "Download");
         var stateSource = File.ReadAllText(Path.Combine(directory, "DownloadTaskStateWriter.cs"));
         var orchestratorSource = File.ReadAllText(Path.Combine(directory, "DownloadOrchestrator.cs"));
-        var pipelineSource = File.ReadAllText(Path.Combine(directory, "DownloadPipeline.cs"));
+        var mediaStageSource = File.ReadAllText(Path.Combine(directory, "DownloadMediaStage.cs"));
         var builtinSource = File.ReadAllText(Path.Combine(directory, "BuiltinTransferBackend.cs"));
         var ariaSource = File.ReadAllText(Path.Combine(directory, "Aria2TransferBackend.cs"));
 
         Assert.DoesNotContain("paused.Phase == DownloadPhase.Pausing", stateSource, StringComparison.Ordinal);
         Assert.Contains("ConfirmPauseAfterWorkerStopsAsync", orchestratorSource, StringComparison.Ordinal);
         Assert.Contains("_stateWriter.ConfirmPausedAsync", orchestratorSource, StringComparison.Ordinal);
-        Assert.Contains("outcome == DownloadTransferOutcome.Paused", pipelineSource, StringComparison.Ordinal);
+        Assert.Contains("outcome == DownloadTransferOutcome.Paused", mediaStageSource, StringComparison.Ordinal);
         Assert.Contains("return DownloadTransferOutcome.Paused", builtinSource, StringComparison.Ordinal);
         Assert.Contains("return DownloadTransferOutcome.Paused", ariaSource, StringComparison.Ordinal);
         Assert.True(
@@ -404,7 +408,67 @@ public sealed class DownloadRuntimeArchitectureTests
             builtinSource.IndexOf("request.EnsureActive();", StringComparison.Ordinal));
         Assert.True(
             ariaSource.IndexOf("if (request.IsPauseRequested())", StringComparison.Ordinal) <
-            ariaSource.IndexOf("request.EnsureActive();", StringComparison.Ordinal));
+                   ariaSource.IndexOf("request.EnsureActive();", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void DownloadPipelineOnlyOrdersTypedStages()
+    {
+        var directory = Path.Combine(RepositoryRoot, "DownKyi", "Services", "Download");
+        var pipelineSource = File.ReadAllText(Path.Combine(directory, "DownloadPipeline.cs"));
+        var factorySource = File.ReadAllText(Path.Combine(directory, "DownloadRuntimeFactory.cs"));
+        var mediaSource = File.ReadAllText(Path.Combine(directory, "DownloadMediaStage.cs"));
+        var transferKeySource = File.ReadAllText(Path.Combine(directory, "DownloadTransferKey.cs"));
+        string[] stageNames =
+        [
+            "ResolvePlaybackStage",
+            "DownloadMediaStage",
+            "DownloadArtifactsStage",
+            "MuxStage",
+            "ValidateStage",
+            "FinalizeStage"
+        ];
+
+        Assert.Contains("foreach (var stage in stages)", pipelineSource, StringComparison.Ordinal);
+        Assert.Contains("if (!result.IsSuccess)", pipelineSource, StringComparison.Ordinal);
+        Assert.Contains(
+            "return new DownloadStageRunResult(result, stage.Name);",
+            pipelineSource,
+            StringComparison.Ordinal);
+        Assert.Contains("OperationResult<DownloadStageResult>", File.ReadAllText(Path.Combine(
+            directory,
+            "IDownloadPipelineStage.cs")), StringComparison.Ordinal);
+        Assert.DoesNotContain("DownloadingItem", pipelineSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("DictionaryResource", pipelineSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("FfmpegProcessor", pipelineSource, StringComparison.Ordinal);
+        Assert.True(File.ReadAllLines(Path.Combine(directory, "DownloadPipeline.cs")).Length < 150);
+        Assert.False(File.Exists(Path.Combine(
+            RepositoryRoot,
+            "DownKyi",
+            "Models",
+            "VideoPlayUrlBasic.cs")));
+        Assert.Contains("DownloadTransferKey.Create", mediaSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetHashCode", mediaSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetHashCode", transferKeySource, StringComparison.Ordinal);
+
+        var previousIndex = -1;
+        foreach (var stageName in stageNames)
+        {
+            var stagePath = Path.Combine(directory, $"{stageName}.cs");
+            Assert.True(File.Exists(stagePath), $"Missing pipeline stage: {stageName}");
+            var stageSource = File.ReadAllText(stagePath);
+            Assert.DoesNotContain("DictionaryResource", stageSource, StringComparison.Ordinal);
+            Assert.DoesNotContain("DownloadListState", stageSource, StringComparison.Ordinal);
+            Assert.DoesNotContain("ImmutableObservableCollection", stageSource, StringComparison.Ordinal);
+            Assert.DoesNotContain("DownKyi.ViewModels", stageSource, StringComparison.Ordinal);
+            Assert.DoesNotContain("Microsoft.Data.Sqlite", stageSource, StringComparison.Ordinal);
+
+            var currentIndex = factorySource.IndexOf(
+                $"new {stageName}",
+                StringComparison.Ordinal);
+            Assert.True(currentIndex > previousIndex, $"{stageName} is out of order.");
+            previousIndex = currentIndex;
+        }
     }
 
     private static string FindRepositoryRoot()

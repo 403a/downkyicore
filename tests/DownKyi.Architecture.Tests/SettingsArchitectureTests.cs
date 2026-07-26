@@ -173,7 +173,11 @@ public sealed class SettingsArchitectureTests
     {
         var utilitySource = ReadSource("DownKyi", "Services", "Utils.cs");
         var addSource = ReadSource("DownKyi", "Services", "Download", "AddToDownloadService.cs");
-        var pipelineSource = ReadSource("DownKyi", "Services", "Download", "DownloadPipeline.cs");
+        var contextFactorySource = ReadSource(
+            "DownKyi",
+            "Services",
+            "Download",
+            "DownloadExecutionContextFactory.cs");
         var artifactSource = ReadSource("DownKyi", "Services", "Download", "DownloadArtifactWriter.cs");
         var diagnosticSource = ReadSource("DownKyi", "Services", "Download", "DownloadDiagnosticLogger.cs");
         var ffmpegSource = ReadSource("DownKyi.Core", "FFMpeg", "FfmpegProcessor.cs");
@@ -182,7 +186,7 @@ public sealed class SettingsArchitectureTests
         Assert.DoesNotContain("ISettingsStore", utilitySource, StringComparison.Ordinal);
         Assert.DoesNotContain("settingsStore.Current", utilitySource, StringComparison.Ordinal);
         Assert.DoesNotContain("VideoPageInfo(playUrl, page, _settingsStore)", addSource, StringComparison.Ordinal);
-        Assert.Equal(1, CountOccurrences(pipelineSource, "SettingsStore.Current"));
+        Assert.Equal(1, CountOccurrences(contextFactorySource, "_settingsStore.Current"));
         Assert.DoesNotContain("ISettingsStore", artifactSource, StringComparison.Ordinal);
         Assert.DoesNotContain("ISettingsStore", diagnosticSource, StringComparison.Ordinal);
         Assert.Equal(2, CountOccurrences(ffmpegSource, "_settingsStore.Current.Video.FfmpegMaxParallelJobs"));

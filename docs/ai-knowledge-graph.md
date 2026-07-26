@@ -21,7 +21,7 @@ The target projects exist, but the target ownership model is not complete. Read 
 - `src/DownKyi.Infrastructure` currently owns SQLite task persistence, write-behind, and clock. Bilibili HTTP, aria2, FFmpeg, filesystem paths, and logging implementation remain mainly in `DownKyi.Core` or `DownKyi`.
 - `DownKyi.Domain.DownloadTask` is the durable runtime state authority. `DownloadTaskApplicationService` loads by `DownloadTaskId`, invokes legal transitions, persists optimistic versions, and only then publishes committed snapshots. Normal runtime no longer reconstructs Domain state from mutable UI projections.
 - New tasks, resumed tasks, and persisted startup tasks directly enqueue `DownloadTaskId` through `DownloadTaskQueueGateway`; `DownloadOrchestrator` no longer scans a UI collection and each active task has its own linked cancellation owner.
-- Workers and pipeline entry points use `DownloadTaskId`, but several media stages still read `DownloadingItem` as transient playback/UI context. `DownloadPipeline` remains a mixed workflow/presentation owner and the HTTP compatibility layer still uses a static facade plus synchronous send/read/backoff.
+- Workers and pipeline entry points use `DownloadTaskId`. `DownloadPipeline` is a typed stage sequencer; localized activity rendering and completion-list mutation have separate presenter/projector owners. `DownloadExecutionContext` still exposes a transient `DownloadingItem` projection for playback/UI context, and the HTTP compatibility layer still uses a static facade plus synchronous send/read/backoff.
 - These facts are tracked debt, not stable contracts. The ordered migration and release blockers live in `docs/refactoring-live-plan.md`.
 - `ModuleBoundaryBaselineTests` allows every listed debt item to disappear, but rejects new owners, consumers, duplicate names, UI dependencies, synchronous HTTP debt, or oversized-file growth.
 
@@ -1726,6 +1726,18 @@ paths:
   - DownKyi/Services/Download/DownloadTaskQueueGateway.cs
   - DownKyi/Services/Download/IDownloadTaskExecutor.cs
   - DownKyi/Services/Download/DownloadPipeline.cs
+  - DownKyi/Services/Download/IDownloadPipelineStage.cs
+  - DownKyi/Services/Download/DownloadExecutionContext.cs
+  - DownKyi/Services/Download/DownloadExecutionContextFactory.cs
+  - DownKyi/Services/Download/DownloadTransferKey.cs
+  - DownKyi/Services/Download/ResolvePlaybackStage.cs
+  - DownKyi/Services/Download/DownloadMediaStage.cs
+  - DownKyi/Services/Download/DownloadArtifactsStage.cs
+  - DownKyi/Services/Download/MuxStage.cs
+  - DownKyi/Services/Download/ValidateStage.cs
+  - DownKyi/Services/Download/FinalizeStage.cs
+  - DownKyi/Services/Download/DownloadActivityPresenter.cs
+  - DownKyi/Services/Download/DownloadCompletionProjector.cs
   - DownKyi/Services/Download/BuiltinTransferBackend.cs
   - DownKyi/Services/Download/Aria2TransferBackend.cs
   - DownKyi/Services/Download/AriaRuntimeClientRegistry.cs
@@ -1738,7 +1750,7 @@ paths:
   - DownKyi/Services/Download/DownloadFileIntegrity.cs
   - DownKyi/Services/Download/DownloadDiagnosticLogger.cs
   - DownKyi/Services/Download/DownloadShutdownCoordinator.cs
-responsibility: Admits committed task IDs directly, selects one transfer backend, dispatches bounded workers, executes media stages, writes auxiliary artifacts and task state through dedicated owners, verifies integrity, and finalizes media.
+responsibility: Admits committed task IDs directly, selects one transfer backend, dispatches bounded workers, orders typed download stages, writes auxiliary artifacts and task state through dedicated owners, verifies integrity, and projects completed tasks.
 inbound:
   - service.download-bootstrap
   - service.download-add
@@ -1757,6 +1769,7 @@ contracts:
   - Incomplete, empty, HTML/JSON error, and sidecar files are not valid completed media.
   - Pause and app shutdown preserve resumable partial files; explicit deletion removes media plus `.aria2` and `.download` sidecars.
   - Each multi-segment DURL key includes stable `DURL.Order`; BVID, codec, and runtime hash codes are not segment identities.
+  - An empty default `Dash` DTO does not mask a populated DURL response; media kind is selected from actual stream content, and the selected DASH object retains its expected byte length.
   - DURL merge input is sorted by Order and success requires ffprobe stream, duration, and middle/tail seek-decode validation.
   - Multi-segment DURL output is re-encoded to rebuild timestamps, keyframes, and MP4 indexes; hardware failure falls back to `libx264 + aac`.
   - State transitions go through typed Application commands and await persistence; high-rate live progress is a projection signal while accepted durable samples preserve Domain resume state.
@@ -1772,13 +1785,16 @@ contracts:
   - Shutdown cancellation while enqueue or workers wait cannot skip fixed-worker drain or resumable-state recovery; active `Downloading` or `Pausing` Domain rows return to `Queued` and are persisted before exit completes.
   - Recovery persistence after cancellation explicitly ignores the canceled operation token; ordinary transfer and progress writes continue to propagate their caller token.
   - `DownloadArtifactWriter` owns cover, subtitle, danmaku, and NFO generation; `DownloadTaskStateWriter` is a typed Application-command adapter and never accepts a UI task model.
-  - `DownloadPipeline` cannot regain subtitle API, danmaku converter, NFO XML, direct projection-update, or SQLite exception implementation details.
+  - `DownloadPipeline` creates one context and orders `ResolvePlaybackStage`, `DownloadMediaStage`, `DownloadArtifactsStage`, `MuxStage`, `ValidateStage`, and `FinalizeStage`; the first typed failure stops later stages.
+  - `DownloadExecutionContext` captures one immutable settings snapshot and accepts the current operation token at each active check; it cannot retain a short-lived command token.
+  - `DownloadActivityPresenter` is the only stage-adjacent localized resource owner. `DownloadCompletionProjector` owns UI-thread completion-list mutation until both move to Desktop in Gate 8.
+  - `DownloadPipeline` cannot regain subtitle API, danmaku converter, NFO XML, direct projection-update, localized resource, FFmpeg, or SQLite implementation details.
   - Diagnostic logs should include downloader, split/parallel count, speed, and limit values without full local paths or sensitive URLs.
 hazards:
   - Blocking waits in download lifecycle can freeze UI or prevent process exit.
   - Media stages still resolve a `DownloadingItem` projection for playback metadata even though queue identity and all durable transitions are Domain-authoritative.
   - Pipeline retry and backend URL fallback can multiply attempts because one typed retry budget does not yet own both decisions.
-  - `DownloadPipeline` still owns UI-facing state and remains over the current 500-line architecture budget.
+  - The stage presenter/projector are transitional executable-assembly owners until Gate 8 moves them and removes `DownloadingItem` from the execution context.
   - Letting an expected shutdown `OperationCanceledException` escape before state recovery leaves rows stored as active and prevents clean resume after restart.
   - Resume behavior depends on preserving partial files while delete behavior must remove them.
   - aria2 process cleanup is platform-sensitive.
@@ -1786,6 +1802,7 @@ hazards:
 tests:
   - test.download-orchestrator
   - test.download-queue-gateway
+  - test.download-pipeline-stages
   - test.download-file-integrity
   - test.fake-http-download
   - test.download-lifecycle
@@ -2294,10 +2311,17 @@ flowchart TD
     Channel --> Runtime["fixed worker + per-task CTS"]
     Runtime --> Commands["DownloadTaskApplicationService"]
     Runtime --> Pipeline["DownloadPipeline(DownloadTaskId)"]
-    Pipeline --> Choice{"Downloader setting"}
+    Pipeline --> Resolve["ResolvePlaybackStage"]
+    Resolve --> Media["DownloadMediaStage"]
+    Media --> Artifacts["DownloadArtifactsStage"]
+    Artifacts --> Mux["MuxStage"]
+    Mux --> Validate["ValidateStage"]
+    Validate --> Finalize["FinalizeStage"]
+    Media --> Choice{"Downloader setting"}
     Choice --> Builtin["BuiltinTransferBackend"]
     Choice --> Aria["Aria2TransferBackend"]
-    Pipeline --> Artifacts["DownloadArtifactWriter"]
+    Artifacts --> ArtifactWriter["DownloadArtifactWriter"]
+    Finalize --> CompletionProjector["DownloadCompletionProjector"]
     Pipeline --> State["DownloadTaskStateWriter typed adapter"]
     Builtin --> Integrity["DownloadFileIntegrity"]
     Aria --> Integrity
@@ -2314,6 +2338,20 @@ flowchart TD
 ```
 
 Rule: a file is not complete just because the network library reported completion.
+
+```yaml
+test.download-pipeline-stages:
+  paths:
+    - tests/DownKyi.Tests/DownloadPipelineStageTests.cs
+    - tests/DownKyi.Tests/DurlDownloadIdentityTests.cs
+    - tests/DownKyi.Architecture.Tests/DownloadRuntimeArchitectureTests.cs
+  guards:
+    - stages execute in the registered order and stop at the first typed failure
+    - the current operation cancellation token reaches every stage
+    - requested missing media and artifacts cannot be finalized as success
+    - DURL order remains a stable segment identity and concat input order
+    - pipeline cannot regain localized resources, UI collections, FFmpeg, SQLite, or artifact implementation details
+```
 
 ## Test Anchors
 

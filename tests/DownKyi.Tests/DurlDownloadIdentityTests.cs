@@ -10,7 +10,7 @@ public sealed class DurlDownloadIdentityTests
     [Fact]
     public void DescriptorUsesDurlOrderAsStableDownloadKey()
     {
-        var descriptor = DownloadPipeline.CreateDurlDownloadDescriptor(new List<PlayUrlDurl>
+        var descriptor = DownloadMediaStage.CreateDurlDownloadDescriptor(new List<PlayUrlDurl>
         {
             new()
             {
@@ -24,15 +24,15 @@ public sealed class DurlDownloadIdentityTests
         Assert.NotNull(descriptor);
         Assert.Equal(7, descriptor.Id);
         Assert.Equal("durl", descriptor.Codecs);
-        Assert.Equal("7_durl", descriptor.DownloadKey);
-        Assert.Equal("https://example.invalid/segment-7", descriptor.BaseUrl);
+        Assert.Equal("7_durl", DownloadTransferKey.Create(descriptor.Id, descriptor.Codecs));
+        Assert.Equal("https://example.invalid/segment-7", descriptor.BaseAddress);
         Assert.Equal(4096, descriptor.ExpectedSize);
     }
 
     [Fact]
     public void DescriptorSelectsLowestDurlOrder()
     {
-        var descriptor = DownloadPipeline.CreateDurlDownloadDescriptor(new List<PlayUrlDurl>
+        var descriptor = DownloadMediaStage.CreateDurlDownloadDescriptor(new List<PlayUrlDurl>
         {
             new() { Order = 9, SourceAddress = "https://example.invalid/segment-9" },
             new() { Order = 2, SourceAddress = "https://example.invalid/segment-2" },
@@ -41,8 +41,8 @@ public sealed class DurlDownloadIdentityTests
 
         Assert.NotNull(descriptor);
         Assert.Equal(2, descriptor.Id);
-        Assert.Equal("2_durl", descriptor.DownloadKey);
-        Assert.Equal("https://example.invalid/segment-2", descriptor.BaseUrl);
+        Assert.Equal("2_durl", DownloadTransferKey.Create(descriptor.Id, descriptor.Codecs));
+        Assert.Equal("https://example.invalid/segment-2", descriptor.BaseAddress);
     }
 
     [Theory]
@@ -51,7 +51,7 @@ public sealed class DurlDownloadIdentityTests
     [InlineData("images/cover.png#thumbnail", "png")]
     public void CoverExtensionIgnoresUriQueryAndFragment(string source, string expected)
     {
-        Assert.Equal(expected, DownloadPipeline.GetImageExtension(source));
+        Assert.Equal(expected, DownloadArtifactsStage.GetImageExtension(source));
     }
 
     [Fact]
@@ -61,6 +61,6 @@ public sealed class DurlDownloadIdentityTests
 
         Assert.Equal(
             Path.Combine("downloads", "nested"),
-            DownloadPipeline.GetDownloadDirectoryPath(filePath));
+            ResolvePlaybackStage.GetDownloadDirectoryPath(filePath));
     }
 }
