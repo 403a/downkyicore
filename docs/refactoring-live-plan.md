@@ -2,8 +2,8 @@
 
 Status: active
 Last updated: 2026-07-28
-Current group: Gate 9 large-owner convergence
-Current branch: `refactor/my-space-viewmodel-owner`
+Current group: authenticated API contract refresh before resuming Gate 9
+Current branch: `audit/authenticated-api-refresh-20260728`
 
 This file contains only unfinished or not-yet-integrated work. Completed PR 02-32 items are not restored. Design rationale belongs in `design-docs`; product acceptance belongs in `product-specs`.
 
@@ -29,6 +29,8 @@ The previous `Status: complete` was incorrect.
 - Gate 9 Settings network/aria ownership passed Windows/Linux/macOS quality run `30351528461` and CodeQL run `30351528583`; all seven check-runs had zero annotations. PR #98 was merged into `refactor/pr-30-32-release-hardening` as merge commit `ffa5674`. The 671-line mixed partial became 319-line general network and 355-line aria runtime owners with all 44 public compatibility methods unchanged.
 - Gate 9 network-settings ViewModel ownership passed Windows/Linux/macOS quality run `30352739481` and Analyze/CodeQL run `30352739315`; all seven check-runs had zero annotations. PR #99 was merged into `refactor/pr-30-32-release-hardening` as merge commit `660d223`. The 649-line mixed owner became 384-line navigation/general-command, 275-line aria-command, and 292-line binding-state owners with XAML binding names unchanged.
 - Gate 9 video-settings ViewModel ownership passed Windows/Linux/macOS quality run `30354918725` and CodeQL run `30354918709`; all seven check-runs had zero annotations. PR #100 was merged into `refactor/pr-30-32-release-hardening` as merge commit `e663281`. The 1,020-line mixed owner became 451-line navigation/playback/transcoding, 353-line content/naming-command, and 248-line binding-state owners. The first Windows run exposed a declaration-regex timeout; line-scoped non-backtracking matching and an adversarial regression test fixed it before merge.
+- Gate 9 my-space ViewModel ownership passed Windows/Linux/macOS quality run `30356078414` and CodeQL run `30356078409`; all seven check-runs had zero annotations. PR #101 was merged into `refactor/pr-30-32-release-hardening` as merge commit `11ee968`. The 669-line owner became a 408-line navigation/profile workflow owner and a 265-line service-free binding-state owner without changing typed navigation, cancellation or XAML binding contracts.
+- The authenticated read-only API audit was repeated against `11ee968`; the isolated process reloaded the credential from `~/.codex/.env`, the `/nav` hard gate passed, and all 14 allowlisted probes passed with zero contract drift. Only the sanitized machine-readable artifact and aggregate documentation were updated; Gitleaks inspected 939 candidate files and reported zero findings.
 - `version.txt` remains `1.0.32`; v1.1.0 has not passed its release gate.
 
 No release tag may be created while any release blocker below remains.
@@ -42,7 +44,7 @@ Owner branches: separate responsibility-based large-owner PRs.
 Scope:
 
 - Split hand-written oversized owners by responsibility; do not split generated/protocol files only to satisfy LOC.
-- Current owner: separate the 669-line my-space ViewModel into navigation/profile workflow and service-free binding-state partial owners without changing command/property names, typed back navigation, cancellation, profile/stat projection, settings, or XAML bindings.
+- Next owner after the authenticated audit: separate the oversized add-to-download session coordinator from duplicate policy, draft construction and optional movie-metadata ownership without changing queue admission, settings snapshots, cancellation, completed-record policy, persisted task shape or resume behavior.
 
 Current owner progress, pending PR integration:
 
