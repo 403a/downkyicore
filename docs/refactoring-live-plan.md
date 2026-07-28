@@ -3,7 +3,7 @@
 Status: active
 Last updated: 2026-07-28
 Current group: Gate 9 large-owner convergence
-Current branch: `refactor/bangumi-follow-viewmodel-owner`
+Current branch: `refactor/parse-entrance-owner`
 
 This file contains only unfinished or not-yet-integrated work. Completed PR 02-32 items are not restored. Design rationale belongs in `design-docs`; product acceptance belongs in `product-specs`.
 
@@ -33,6 +33,7 @@ The previous `Status: complete` was incorrect.
 - The authenticated read-only API audit was repeated against `11ee968`; the isolated process reloaded the credential from `~/.codex/.env`, the `/nav` hard gate passed, and all 14 allowlisted probes passed with zero contract drift. Gitleaks inspected 939 candidate files and reported zero findings. Strict PR CI run `30357290660` and CodeQL run `30357290313` completed seven successful checks with zero annotations; PR #102 was merged into `refactor/pr-30-32-release-hardening` as merge commit `cc8a9ca`.
 - Gate 9 add-to-download ownership passed Windows/Linux/macOS quality run `30359317685` and CodeQL run `30359317951`; all seven check-runs had zero annotations. PR #103 was merged into `refactor/pr-30-32-release-hardening` as merge commit `a00812e`. The 663-line mixed owner became a 275-line session coordinator plus dedicated duplicate, stateless draft and optional metadata owners without changing settings snapshots, task shape, cancellation or admission.
 - Gate 9 user-space ViewModel ownership passed Windows/Linux/macOS quality run `30360515743` and CodeQL run `30360513188`; all seven check-runs had zero annotations. PR #104 was merged into `refactor/pr-30-32-release-hardening` as merge commit `a946242`. The 569-line mixed owner became a 412-line typed-navigation/load/projection workflow owner, a 161-line service-free binding-state owner and the unchanged 27-line favorite-folder owner.
+- Gate 9 bangumi-follow ViewModel ownership passed Windows/Linux/macOS quality run `30364267364` and CodeQL run `30364266723`; all seven check-runs had zero annotations and every platform retained seven assembly-named TRX artifacts. PR #105 was merged into `refactor/pr-30-32-release-hardening` as merge commit `1e265d1`. The 531-line mixed owner became a 435-line pager/navigation/load/download workflow owner and a 103-line service-free binding-state owner. CI also exposed and fixed NLog target-batch rotation overshoot plus solution-level xUnit host/TRX contention before merge.
 - `version.txt` remains `1.0.32`; v1.1.0 has not passed its release gate.
 
 No release tag may be created while any release blocker below remains.
@@ -46,14 +47,14 @@ Owner branches: separate responsibility-based large-owner PRs.
 Scope:
 
 - Split hand-written oversized owners by responsibility; do not split generated/protocol files only to satisfy LOC.
-- Current owner: separate the oversized bangumi-follow ViewModel into pager/navigation/load/download workflow and service-free binding-state owners without changing pager event ownership, cancellation, selection, typed back navigation, batch projection or XAML binding names.
+- Current owner: separate the oversized `ParseEntrance` input parser by stable video, bangumi, cheese, favorites, user-space and shared-URI contracts without changing its public methods, URL constants, accepted canonical forms or failure sentinels.
+- Newly discovered follow-up: `ViewIndexViewModel` constructs `SearchService` directly even though Host composition registers the service. Converge both search callers on constructor injection in an isolated change and add an architecture regression before Gate 10.
 
 Current owner progress, pending PR integration:
 
-- The original 531-line owner is now a 435-line pager/navigation/load/download workflow owner plus a 103-line service-free binding-state owner.
-- The state-owner architecture test fixes all 12 XAML-facing properties, keeps pager events, both coordinators, cancellation, navigation and logging in the workflow owner, and rejects those runtime responsibilities from the state partial.
-- The oversized inventory fell from 6 to 5. Strict `AnalysisMode=All` Release build has zero warnings/errors; all 633 tests pass, including 188 architecture tests and 13 Desktop/Host smoke tests. Format, vulnerable/deprecated package audits, boundary audit, `git diff --check`, and 946-candidate Gitleaks checks pass. Remote gates remain before integration.
-- The first Windows CI attempt exposed two pre-existing load-sensitive gate defects: NLog could overshoot file rotation inside a multi-event async batch, and solution-level parallel xUnit hosts overwrote one TRX while three assembly-info processes timed out. The rotation test now enqueues one deterministic batch, the sink checks rolling per record, and PR/release workflows use the shared sequential `script/test-solution.ps1` with one assembly-named TRX per project. A new complete remote round is required.
+- The original 586-line mixed owner is now eight responsibility partials for constants, shared URI normalization, video, bangumi, cheese, favorites, user-space and user-video-list parsing; every owner is below 120 lines.
+- A deterministic Core matrix fixes canonical IDs, desktop/mobile/share/short URL forms, `BV1U7V66FEiK`, failure sentinels and null behavior. Exact-host regressions reject spoofed or mixed user-space URLs.
+- Architecture tests fix public-method ownership, keep shared URI helpers private, require exact user-space host parsing and remove `ParseEntrance.cs` from the oversized allowlist. Strict `AnalysisMode=All` Release build has zero warnings/errors; all 693 tests pass. Format, vulnerable/deprecated package audits, boundary audit, `git diff --check`, and 955-candidate Gitleaks checks pass. Remote gates remain before integration.
 
 Verification:
 
