@@ -9,7 +9,7 @@ Verification branch: `refactor/desktop-boundary`
 
 附件報告指出的七類問題大多成立，但原始證據已被後續重構取代。以目前工作樹重新量測後，Desktop 已成為實際 UI owner、Core 已 headless、下載佇列與 HTTP 邊界也已收斂；剩餘主要缺口是 media execution context 仍讀取一個 UI projection，以及 aria2、FFmpeg、filesystem、logging 的最終 Infrastructure ownership。
 
-目前仍不得宣告整體重構完成或發布 v1.1.0：Gate 8 尚待遠端整合，Gate 9 的 logging/naming/large-owner 工作尚未完成，最終 stacked branch 也尚未進入 `main`。版本唯一來源仍是 `1.0.32`。
+目前仍不得宣告整體重構完成或發布 v1.1.0：Gate 9 的 logging/naming/large-owner 工作尚未完成，最終 stacked branch 也尚未進入 `main`。版本唯一來源仍是 `1.0.32`。
 
 ## 可重現基線
 

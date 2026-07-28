@@ -1,9 +1,9 @@
 # DownKyi Core Live Refactoring Plan
 
 Status: active
-Last updated: 2026-07-26
-Current group: Gate 8 Desktop boundary and UI projection ownership
-Current branch: `refactor/desktop-boundary`
+Last updated: 2026-07-28
+Current group: Gate 9 logging, naming and large-owner convergence
+Current branch: `refactor/logging-boundary`
 
 This file contains only unfinished or not-yet-integrated work. Completed PR 02-32 items are not restored. Design rationale belongs in `design-docs`; product acceptance belongs in `product-specs`.
 
@@ -21,34 +21,12 @@ The previous `Status: complete` was incorrect.
 - Gate 6 stage extraction passed two complete Windows/Linux/macOS quality and CodeQL rounds, then PR #89 was merged into `refactor/pr-30-32-release-hardening` as merge commit `e288913f`.
 - Gate 6 retry policy passed three complete remote rounds. Final Windows/Linux/macOS quality run `30187455431` and CodeQL run `30187455441` had zero check annotations, then PR #90 was merged into `refactor/pr-30-32-release-hardening` as merge commit `ba0a928e`.
 - Gate 7 async Bilibili Infrastructure ownership passed Windows/Linux/macOS quality run `30189537538`, protobuf run `30189537553`, and CodeQL run `30189537541`, then PR #91 was merged into `refactor/pr-30-32-release-hardening` as merge commit `55070903`.
-- Gate 8 local implementation and final gates are complete in three verified slices: Desktop now owns App/UI/runtime, Core is headless, UI lists expose owner-controlled read-only projections, strict build is warning-free, 610 tests pass, package audits are empty, and the 916-file Gitleaks scan is clean. It is not integrated until its PR passes the remote matrix and CodeQL.
+- Gate 8 passed Windows/Linux/macOS quality run `30191251004`, protobuf run `30191250997`, and CodeQL run `30191250992`; PR #92 was merged into `refactor/pr-30-32-release-hardening` as `f8e78c9a`. CodeQL reported no alert, but GitHub emitted one platform annotation because the single required ownership PR changed 396 files and its diff API is capped at 300 files.
 - `version.txt` remains `1.0.32`; v1.1.0 has not passed its release gate.
 
 No release tag may be created while any release blocker below remains.
 
 ## Execution Order
-
-### Gate 8: Complete Desktop Boundary And UI Projection Ownership
-
-Owner branch: `refactor/desktop-boundary`.
-
-Remaining work:
-
-- Push one Gate 8 branch and open one PR against `refactor/pr-30-32-release-hardening`.
-- Require Windows/Linux/macOS quality CI, protobuf validation, and CodeQL before merge.
-
-Verification:
-
-- Confirm the remote checks use the same strict analyzer settings as local verification.
-
-Completion:
-
-- `DownKyi.Desktop` is the actual Desktop owner described in `ARCHITECTURE.md`.
-- executable contains no runtime service, ViewModel or platform adapter implementation.
-
-Rollback:
-
-- Move by responsibility slice with rename maps; revert a slice as one commit if XAML/resource/DI smoke fails.
 
 ### Gate 9: Logging, Naming And Large-Owner Convergence
 
