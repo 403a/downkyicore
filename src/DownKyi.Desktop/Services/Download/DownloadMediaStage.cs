@@ -347,7 +347,7 @@ internal sealed class DownloadMediaStage : IDownloadPipelineStage
         var downloading = context.Downloading;
         var video = playUrl?.Dash?.Video?.FirstOrDefault(item =>
         {
-            var codec = Constant.GetCodecIds().FirstOrDefault(candidate =>
+            var codec = PlaybackQualityCatalog.GetCodecIds().FirstOrDefault(candidate =>
                 candidate.Id == item.CodecId);
             return item.Id == downloading.Resolution.Id &&
                    codec?.Name == downloading.VideoCodecName;

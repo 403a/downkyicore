@@ -3,14 +3,14 @@ namespace DownKyi.Core.Storage;
 /// <summary>
 /// 存储到本地时使用的一些常量
 /// </summary>
-internal static class Constant
+internal static class ApplicationDataPaths
 {
     private const string AppDirectoryName = "DownKyi";
     private static readonly string LegacyRoot = Path.GetFullPath(AppContext.BaseDirectory);
     public static bool IsPortableMode { get; } = ResolvePortableMode();
     public static string Root { get; } = ResolveRoot();
 
-    static Constant()
+    static ApplicationDataPaths()
     {
         if (!IsPortableMode && !PathsEqual(LegacyRoot, Root))
         {

@@ -147,7 +147,7 @@ public sealed class SettingsStore : ISettingsStore
     {
         ArgumentNullException.ThrowIfNull(loggerFactory);
         return new SettingsManager(
-            StorageManager.GetSettings(),
+            ApplicationStorage.GetSettings(),
             loggerFactory.CreateLogger<SettingsManager>());
     }
 }

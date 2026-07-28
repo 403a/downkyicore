@@ -4,9 +4,9 @@ using Avalonia.Markup.Xaml;
 
 namespace DownKyi.Views.UserSpace;
 
-internal partial class ViewSeasonsSeries : UserControl
+internal partial class ViewUserSpaceSeasonsSeries : UserControl
 {
-    public ViewSeasonsSeries()
+    public ViewUserSpaceSeasonsSeries()
     {
         InitializeComponent();
     }

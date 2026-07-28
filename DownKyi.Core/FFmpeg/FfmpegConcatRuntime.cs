@@ -1,7 +1,7 @@
 using DownKyi.Application.Diagnostics;
 using Microsoft.Extensions.Logging;
 
-namespace DownKyi.Core.FFMpeg;
+namespace DownKyi.Core.FFmpeg;
 
 public sealed record FfmpegConcatSegment(int Order, string FilePath, TimeSpan ExpectedDuration);
 

@@ -56,7 +56,7 @@ internal partial class App : Avalonia.Application, IDisposable
         CreateHost();
         AttachUnhandledExceptionLogging();
         _logger?.LogInformationMessage(
-            $"Application initialized. Version={new AppInfo().VersionName}; Portable={StorageManager.IsPortableMode()}");
+            $"Application initialized. Version={new AppInfo().VersionName}; Portable={ApplicationStorage.IsPortableMode()}");
     }
 
     public override void OnFrameworkInitializationCompleted()
@@ -127,7 +127,7 @@ internal partial class App : Avalonia.Application, IDisposable
 
     private void CreateHost()
     {
-        _logProvider = new ApplicationLogProvider(new ApplicationLogOptions(StorageManager.GetLogsDir()));
+        _logProvider = new ApplicationLogProvider(new ApplicationLogOptions(ApplicationStorage.GetLogsDir()));
         _loggerFactory = LoggerFactory.Create(builder =>
         {
 #if DEBUG

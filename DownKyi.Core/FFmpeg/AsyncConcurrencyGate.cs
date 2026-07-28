@@ -1,4 +1,4 @@
-namespace DownKyi.Core.FFMpeg;
+namespace DownKyi.Core.FFmpeg;
 
 internal sealed class AsyncConcurrencyGate
 {

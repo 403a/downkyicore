@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace DownKyi.Core.FFMpeg;
+namespace DownKyi.Core.FFmpeg;
 
 internal static class FfmpegCommandFactory
 {

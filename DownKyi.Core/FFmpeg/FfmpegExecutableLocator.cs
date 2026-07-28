@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace DownKyi.Core.FFMpeg;
+namespace DownKyi.Core.FFmpeg;
 
 internal static class FfmpegExecutableLocator
 {

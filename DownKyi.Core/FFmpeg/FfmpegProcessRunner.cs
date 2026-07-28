@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 
-namespace DownKyi.Core.FFMpeg;
+namespace DownKyi.Core.FFmpeg;
 
 internal sealed class FfmpegProcessRunner : IFfmpegProcessRunner
 {

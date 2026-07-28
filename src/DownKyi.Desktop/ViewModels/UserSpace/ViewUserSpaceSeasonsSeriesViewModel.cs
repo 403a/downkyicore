@@ -16,7 +16,7 @@ namespace DownKyi.ViewModels.UserSpace;
 /// <summary>
 /// 合集和列表
 /// </summary>
-internal class ViewSeasonsSeriesViewModel : ViewModelBase
+internal class ViewUserSpaceSeasonsSeriesViewModel : ViewModelBase
 {
     public const string Tag = "PageUserSpaceSeasonsSeries";
 
@@ -42,7 +42,7 @@ internal class ViewSeasonsSeriesViewModel : ViewModelBase
 
     #endregion
 
-    public ViewSeasonsSeriesViewModel(IDesktopInteractionContext desktopInteractions)
+    public ViewUserSpaceSeasonsSeriesViewModel(IDesktopInteractionContext desktopInteractions)
         : base(desktopInteractions)
     {
         #region 属性初始化

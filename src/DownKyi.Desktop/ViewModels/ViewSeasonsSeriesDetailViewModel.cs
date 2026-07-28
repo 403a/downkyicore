@@ -25,14 +25,14 @@ using Microsoft.Extensions.Logging;
 
 namespace DownKyi.ViewModels;
 
-internal class ViewSeasonsSeriesViewModel : ViewModelBase
+internal class ViewSeasonsSeriesDetailViewModel : ViewModelBase
 {
     public const string Tag = "PageSeasonsSeries";
     private const int VideoNumberInPage = 30;
     private const string PlaceholderCover = "avares://DownKyi.Desktop/Resources/video-placeholder.png";
 
     private readonly ISeasonsSeriesCoordinator _coordinator;
-    private readonly ILogger<ViewSeasonsSeriesViewModel> _logger;
+    private readonly ILogger<ViewSeasonsSeriesDetailViewModel> _logger;
     private CancellationTokenSource? _loadCancellation;
     private CancellationTokenSource? _downloadCancellation;
     private long _mid = -1;
@@ -127,10 +127,10 @@ internal class ViewSeasonsSeriesViewModel : ViewModelBase
         set => SetProperty(ref _isSelectAll, value);
     }
 
-    public ViewSeasonsSeriesViewModel(
+    public ViewSeasonsSeriesDetailViewModel(
         IDesktopInteractionContext desktopInteractions,
         ISeasonsSeriesCoordinator coordinator,
-        ILogger<ViewSeasonsSeriesViewModel> logger) : base(desktopInteractions)
+        ILogger<ViewSeasonsSeriesDetailViewModel> logger) : base(desktopInteractions)
     {
         _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));

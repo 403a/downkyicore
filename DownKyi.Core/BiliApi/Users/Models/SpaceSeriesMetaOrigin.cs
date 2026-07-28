@@ -14,9 +14,3 @@ public class SpaceSeriesMetaOrigin : BaseModel
     //public int Ttl { get; set; }
     [JsonProperty("data")] public SpaceSeriesMetaData? Data { get; set; }
 }
-
-public class SpaceSeriesMetaData : BaseModel
-{
-    [JsonProperty("meta")] public SpaceSeriesMeta Meta { get; set; } = new();
-    [JsonProperty("recent_aids")] public IReadOnlyList<long> RecentAids { get; set; } = Array.Empty<long>();
-}

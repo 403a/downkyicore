@@ -2,7 +2,7 @@ using System.Collections.Immutable;
 
 namespace DownKyi.Core.BiliApi.BiliUtils;
 
-public static class Constant
+public static class PlaybackQualityCatalog
 {
     private static readonly ImmutableArray<QualityOption> Resolutions =
     [

@@ -8,16 +8,16 @@ using DownKyi.Core.Settings;
 using DownKyi.Core.Utils;
 using DownKyi.Presentation;
 
-namespace DownKyi.Services;
+namespace DownKyi.Services.Video;
 
-internal static class Utils
+internal static class VideoPagePlaybackMapper
 {
     /// <summary>
     /// 从视频流更新VideoPage
     /// </summary>
     /// <param name="playUrl"></param>
     /// <param name="page"></param>
-    internal static void VideoPageInfo(PlayUrl? playUrl, VideoPage page, ApplicationSettings settings)
+    internal static void ApplyPlayUrl(PlayUrl? playUrl, VideoPage page, ApplicationSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
         if (playUrl == null)
@@ -88,8 +88,8 @@ internal static class Utils
 
         if (playUrl.Durl?.Count > 0)
         {
-            var codeIds = Constant.GetCodecIds();
-            var qns = Constant.GetResolutions();
+            var codeIds = PlaybackQualityCatalog.GetCodecIds();
+            var qns = PlaybackQualityCatalog.GetResolutions();
             var quality = new VideoQuality
             {
                 Quality = playUrl.Quality,
@@ -117,7 +117,7 @@ internal static class Utils
     {
         var audioQualityFormatList = new List<string>();
         var sortList = new List<string>();
-        var audioQualities = Constant.GetAudioQualities();
+        var audioQualities = PlaybackQualityCatalog.GetAudioQualities();
 
         if (playUrl.Dash.Audio != null && playUrl.Dash.Audio.Count > 0)
         {
@@ -177,7 +177,7 @@ internal static class Utils
     private static List<VideoQuality> GetVideoQualityList(PlayUrl playUrl, UserApplicationSettings userInfo, int defaultQuality, int videoCodecs)
     {
         var videoQualityList = new List<VideoQuality>();
-        var codeIds = Constant.GetCodecIds();
+        var codeIds = PlaybackQualityCatalog.GetCodecIds();
 
         if (playUrl.Dash.Video == null)
         {
