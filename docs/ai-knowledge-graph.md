@@ -102,6 +102,7 @@ flowchart TD
     PersonalMedia["service.personal-media\nPersonalMediaCoordinator.cs"]
     UserSpacePageVms["viewmodel.user-space-pages\nPublication/My-space ViewModels"]
     UserSpacePages["service.user-space-pages\nUserSpacePageCoordinator.cs"]
+    Pager["ui.custom-pager\nCustomPager + focused state/command/layout owners"]
     UserSpaceVm["viewmodel.user-space\nUserSpace + public favorites"]
     VideoVm["viewmodel.video-detail\nsrc/DownKyi.Desktop/ViewModels/ViewVideoDetailViewModel.cs"]
     SettingsVms["viewmodel.settings-pages\nSettings ViewModels"]
@@ -183,16 +184,20 @@ flowchart TD
     LoginVm -->|renders absolute login URI| LoginQrRenderer
     AccountSession -->|calls| BiliApi
     FriendVms -->|loads pages| FriendRelations
+    FriendVms -->|binds paging state| Pager
     FriendRelations -->|calls| BiliApi
     SeasonsSeriesVm -->|loads and queues| SeasonsSeries
+    SeasonsSeriesVm -->|binds paging state| Pager
     SeasonsSeries -->|calls| BiliApi
     FavoritesVms -->|loads snapshots| Favorites
+    FavoritesVms -->|binds paging state| Pager
     Favorites -->|calls| BiliApi
     FavoritesVms -->|queues selected media| DownloadAdd
     PersonalMediaVms -->|loads snapshots| PersonalMedia
     PersonalMedia -->|calls| BiliApi
     PersonalMediaVms -->|queues selected media| DownloadAdd
     UserSpacePageVms -->|loads snapshots| UserSpacePages
+    UserSpacePageVms -->|binds paging state| Pager
     UserSpacePages -->|calls| BiliApi
     UserSpacePageVms -->|queues publications| DownloadAdd
     UserSpaceVm -->|loads profile and public folders| BiliApi
@@ -354,6 +359,39 @@ tests:
   - test.ui-theme
   - test.ui-smoke
   - test.release-packaging
+```
+
+### ui.custom-pager
+
+```yaml
+id: ui.custom-pager
+type: ui
+paths:
+  - src/DownKyi.Desktop/CustomControl/CustomPager.axaml
+  - src/DownKyi.Desktop/CustomControl/CustomPagerViewModel.cs
+  - src/DownKyi.Desktop/CustomControl/CustomPagerViewModel.State.cs
+  - src/DownKyi.Desktop/CustomControl/CustomPagerViewModel.Commands.cs
+  - src/DownKyi.Desktop/CustomControl/PagerLayout.cs
+responsibility: Presents bounded page navigation while separating change-veto workflow, XAML state, parameterless commands, and pure layout calculation.
+inbound:
+  - viewmodel.friend-relations
+  - viewmodel.seasons-series
+  - viewmodel.favorites
+  - viewmodel.user-space-pages
+outbound: []
+contracts:
+  - Constructor state honors the requested current page and clamps it into the available range without raising navigation events.
+  - A later page request publishes `ProposedCurrent` through `CurrentChanging`; a subscriber may veto before current state changes.
+  - Previous, next, first, last, and adjacent-page XAML buttons use parameterless commands because those buttons do not provide command parameters.
+  - Jump input remains parameterized, rejects invalid/zero pages, and clamps values above the final page.
+  - Layout calculation is a framework-free value operation; XAML state and commands remain separate owners below 150 lines.
+hazards:
+  - Using `RequiredParameterCommand` for a button without `CommandParameter` silently drops every click.
+  - Requiring a listener before accepting state changes makes constructor and isolated pager use ignore the requested page.
+tests:
+  - test.custom-pager
+  - test.ui-smoke
+  - test.architecture-boundaries
 ```
 
 ### service.application-lifecycle
@@ -3086,6 +3124,17 @@ test.input-parsing:
     - null input has one explicit exception contract
     - spoofed user-space hosts and malformed paths are rejected
     - parser families remain in focused partial owners below the owner budget
+
+test.custom-pager:
+  paths:
+    - tests/DownKyi.Tests/CustomPagerViewModelTests.cs
+    - tests/DownKyi.Tests/VideoSelectionStateTests.cs
+    - tests/DownKyi.Architecture.Tests/PagerArchitectureTests.cs
+  guards:
+    - constructor and listener-free page changes retain valid state
+    - parameterless XAML buttons execute and vetoed changes do not mutate current page
+    - jump and count boundaries cannot publish an invalid page
+    - state, command, and pure layout owners remain focused and below budget
 
 test.video-selection-state:
   paths:
