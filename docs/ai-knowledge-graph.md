@@ -117,7 +117,7 @@ flowchart TD
     BiliHttp["infra.bilibili-http\nApplication ports + Infrastructure transport"]
     Settings["core.settings\nISettingsStore + SettingsStore"]
     LegacySettings["core.legacy-settings-migration\nLegacySettingsDecryptor.cs"]
-    DownloadAdd["service.download-add\nAddToDownloadService + DownloadAddCoordinator"]
+    DownloadAdd["service.download-add\nsession + duplicate/draft/metadata owners"]
     DownloadBootstrap["service.download-bootstrap\nDownloadBootstrapHostedService"]
     DownloadService["service.download-runtime\nFactory + Orchestrator + Pipeline"]
     DownloadDomain["core.download-domain\nimmutable task aggregate"]
@@ -1611,11 +1611,15 @@ type: service
 paths:
   - src/DownKyi.Desktop/Services/Download/AddToDownloadService.cs
   - src/DownKyi.Desktop/Services/Download/AddToDownloadServiceFactory.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadContentSelection.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadDuplicatePolicy.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadTaskDraftFactory.cs
+  - src/DownKyi.Desktop/Services/Download/DownloadMovieMetadataBuilder.cs
   - src/DownKyi.Desktop/Services/Download/IAddToDownloadSession.cs
   - src/DownKyi.Application/Downloads/DownloadAddCoordinator.cs
   - src/DownKyi.Desktop/Services/Video/VideoDetailDownloadCoordinator.cs
   - src/DownKyi.Desktop/Services/Media/ContentDownloadCoordinator.cs
-responsibility: Converts immutable selected-media snapshots into download tasks, centralizes directory selection and cancellable per-item parsing, handles duplicate decisions, and writes queue state.
+responsibility: Coordinates one selected-media add session while dedicated owners decide duplicates, construct the legacy-compatible task draft, build optional movie metadata, and admit the task through the Domain-backed queue boundary.
 inbound:
   - viewmodel.video-detail
   - viewmodel.seasons-series
@@ -1633,19 +1637,24 @@ contracts:
   - `ContentDownloadCoordinator` owns the session factory, checks selection/cancellation before opening a dialog, selects one directory, and checks cancellation between queued items.
   - Video and bangumi info-service construction is selected by an injected factory and receives the operation cancellation token; ViewModels cannot construct sessions, select directories, or duplicate parse/add loops.
   - Directory selection returning null means user canceled; no task should be queued.
+  - `AddToDownloadService` owns only session state, parsing, directory/content selection and admission. It cannot scan download projections, construct legacy task models, build file names or load optional tags.
+  - `DownloadDuplicatePolicy` alone inspects active/completed projections. The accepted Ask path commits the persisted delete transition before removing the completed UI projection; rejection and JumpOver preserve both.
+  - `DownloadTaskDraftFactory` is stateless and receives one immutable `ApplicationSettings` snapshot plus immutable content selection. It owns zone, filename/collision, stream-type and legacy-compatible task construction without reading a settings singleton or service.
+  - `DownloadMovieMetadataBuilder` alone loads optional tags. Current-operation cancellation propagates; classified optional API/transport failures log one warning and continue with empty tags.
   - Existing downloaded/downloading records must be checked before inserting duplicates.
   - Video-detail receives `IVideoDetailDownloadCoordinator`; favorites, history, watch-later, publication, bangumi-follow, and season/series pages receive only their shared coordinator.
   - `IAddToDownloadSession` isolates the legacy mutable add implementation so queue orchestration is tested without network, SQLite, dialogs, or user paths.
   - Duplicate-task feedback goes through the injected `IUserNotificationService`; add sessions and coordinators cannot accept or publish global event-bus messages.
   - Directory selection, duplicate confirmation, parsing, and persistence propagate the operation cancellation token through the typed dialog boundary.
-  - The add service receives list/storage owners explicitly and cannot resolve them through App.
-  - Add factory, content coordinator, and info-service construction share the injected settings owner; file naming, quality selection, and duplicate policy cannot read a global singleton.
-  - Movie metadata is built asynchronously. Optional tags receive the current add token; expected cancellation aborts the add, while classified tag API/transport failures log one warning and continue with empty tags.
+  - The duplicate policy receives list/storage owners explicitly and cannot resolve them through App.
+  - Add factory, content coordinator, and info-service construction share the injected settings owner; file naming and quality selection receive a captured snapshot, while duplicate policy receives only the selected repeat strategy.
 hazards:
   - Running add logic on stale VideoInfoView snapshots can enqueue wrong media.
   - Duplicate dialog paths can accidentally remove completed records.
+  - Adding settings, dialog, projection or notification dependencies to the stateless draft factory would recreate the mixed owner.
 tests:
   - test.download-add
+  - test.download-add-owner
   - test.video-detail-download
   - test.video-tag-loading
 ```

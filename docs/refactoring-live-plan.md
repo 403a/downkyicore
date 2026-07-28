@@ -2,8 +2,8 @@
 
 Status: active
 Last updated: 2026-07-28
-Current group: authenticated API contract refresh before resuming Gate 9
-Current branch: `audit/authenticated-api-refresh-20260728`
+Current group: Gate 9 large-owner convergence
+Current branch: `refactor/add-to-download-service-owner`
 
 This file contains only unfinished or not-yet-integrated work. Completed PR 02-32 items are not restored. Design rationale belongs in `design-docs`; product acceptance belongs in `product-specs`.
 
@@ -30,7 +30,7 @@ The previous `Status: complete` was incorrect.
 - Gate 9 network-settings ViewModel ownership passed Windows/Linux/macOS quality run `30352739481` and Analyze/CodeQL run `30352739315`; all seven check-runs had zero annotations. PR #99 was merged into `refactor/pr-30-32-release-hardening` as merge commit `660d223`. The 649-line mixed owner became 384-line navigation/general-command, 275-line aria-command, and 292-line binding-state owners with XAML binding names unchanged.
 - Gate 9 video-settings ViewModel ownership passed Windows/Linux/macOS quality run `30354918725` and CodeQL run `30354918709`; all seven check-runs had zero annotations. PR #100 was merged into `refactor/pr-30-32-release-hardening` as merge commit `e663281`. The 1,020-line mixed owner became 451-line navigation/playback/transcoding, 353-line content/naming-command, and 248-line binding-state owners. The first Windows run exposed a declaration-regex timeout; line-scoped non-backtracking matching and an adversarial regression test fixed it before merge.
 - Gate 9 my-space ViewModel ownership passed Windows/Linux/macOS quality run `30356078414` and CodeQL run `30356078409`; all seven check-runs had zero annotations. PR #101 was merged into `refactor/pr-30-32-release-hardening` as merge commit `11ee968`. The 669-line owner became a 408-line navigation/profile workflow owner and a 265-line service-free binding-state owner without changing typed navigation, cancellation or XAML binding contracts.
-- The authenticated read-only API audit was repeated against `11ee968`; the isolated process reloaded the credential from `~/.codex/.env`, the `/nav` hard gate passed, and all 14 allowlisted probes passed with zero contract drift. Only the sanitized machine-readable artifact and aggregate documentation were updated; Gitleaks inspected 939 candidate files and reported zero findings.
+- The authenticated read-only API audit was repeated against `11ee968`; the isolated process reloaded the credential from `~/.codex/.env`, the `/nav` hard gate passed, and all 14 allowlisted probes passed with zero contract drift. Gitleaks inspected 939 candidate files and reported zero findings. Strict PR CI run `30357290660` and CodeQL run `30357290313` completed seven successful checks with zero annotations; PR #102 was merged into `refactor/pr-30-32-release-hardening` as merge commit `cc8a9ca`.
 - `version.txt` remains `1.0.32`; v1.1.0 has not passed its release gate.
 
 No release tag may be created while any release blocker below remains.
@@ -44,13 +44,14 @@ Owner branches: separate responsibility-based large-owner PRs.
 Scope:
 
 - Split hand-written oversized owners by responsibility; do not split generated/protocol files only to satisfy LOC.
-- Next owner after the authenticated audit: separate the oversized add-to-download session coordinator from duplicate policy, draft construction and optional movie-metadata ownership without changing queue admission, settings snapshots, cancellation, completed-record policy, persisted task shape or resume behavior.
+- Current owner: separate the oversized add-to-download session coordinator from duplicate policy, draft construction and optional movie-metadata ownership without changing queue admission, settings snapshots, cancellation, completed-record policy, persisted task shape or resume behavior.
 
 Current owner progress, pending PR integration:
 
-- Method/member inventory confirms all 12 methods, 36 public members, and 41 private fields are present with no additions or removals.
-- The two partial owners are 408 and 265 lines. The oversized inventory fell from 9 to 8, and architecture tests prevent binding state from regaining coordinator, settings, or cancellation ownership.
-- Local gates: strict `AnalysisMode=All` Release build has zero warnings/errors; all 622 tests pass, including 185 architecture tests and 13 Desktop/Host smoke tests; format reports 0/813 changed files; vulnerable/deprecated package audits, `git diff --check`, and 939-candidate Gitleaks checks pass. The reproducible boundary audit reports 8 oversized production files.
+- The 663-line mixed owner is now a 275-line session coordinator plus 114-line duplicate policy, 206-line stateless draft factory, 85-line optional metadata builder and immutable content-selection value.
+- Existing tag/cancellation/admission tests and new duplicate/draft owner tests pass 16/16. The completed-record Ask path proves persistence transitions to `Deleted` before the UI history projection is removed.
+- Architecture tests prevent the session from regaining list/projection/notification, filename/zone, legacy model construction or tag-loading ownership. Helper owners cannot obtain `ISettingsStore`; one immutable `ApplicationSettings` snapshot enters draft construction.
+- The oversized inventory fell from 8 to 7. Strict `AnalysisMode=All` Release build has zero warnings/errors; all 631 tests pass, including 186 architecture tests and 13 Desktop/Host smoke tests; format reports 0/818 changed files; vulnerable/deprecated package audits, `git diff --check`, and 944-candidate Gitleaks checks pass. Remote gates remain before integration.
 
 Verification:
 
