@@ -1463,8 +1463,9 @@ outbound:
 contracts:
   - Recognized media, user, favorite, and publication-list input produces `AppNavigationRequest`; no Prism event or string ViewName is used.
   - Unrecognized input returns false without navigation.
+  - Host composition owns one `SearchService`; MainWindow and Index ViewModels receive it through constructor injection and never instantiate it.
 hazards:
-  - `ViewIndexViewModel` still constructs this service directly instead of using the Host-owned singleton; converge that ownership before release.
+  - Adding per-ViewModel instances would split navigation/settings ownership and bypass composition tests.
 tests:
   - test.input-parsing
   - test.typed-navigation

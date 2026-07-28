@@ -3,7 +3,7 @@
 Status: active
 Last updated: 2026-07-28
 Current group: Gate 9 large-owner convergence
-Current branch: `refactor/parse-entrance-owner`
+Current branch: `refactor/search-service-composition`
 
 This file contains only unfinished or not-yet-integrated work. Completed PR 02-32 items are not restored. Design rationale belongs in `design-docs`; product acceptance belongs in `product-specs`.
 
@@ -34,6 +34,7 @@ The previous `Status: complete` was incorrect.
 - Gate 9 add-to-download ownership passed Windows/Linux/macOS quality run `30359317685` and CodeQL run `30359317951`; all seven check-runs had zero annotations. PR #103 was merged into `refactor/pr-30-32-release-hardening` as merge commit `a00812e`. The 663-line mixed owner became a 275-line session coordinator plus dedicated duplicate, stateless draft and optional metadata owners without changing settings snapshots, task shape, cancellation or admission.
 - Gate 9 user-space ViewModel ownership passed Windows/Linux/macOS quality run `30360515743` and CodeQL run `30360513188`; all seven check-runs had zero annotations. PR #104 was merged into `refactor/pr-30-32-release-hardening` as merge commit `a946242`. The 569-line mixed owner became a 412-line typed-navigation/load/projection workflow owner, a 161-line service-free binding-state owner and the unchanged 27-line favorite-folder owner.
 - Gate 9 bangumi-follow ViewModel ownership passed Windows/Linux/macOS quality run `30364267364` and CodeQL run `30364266723`; all seven check-runs had zero annotations and every platform retained seven assembly-named TRX artifacts. PR #105 was merged into `refactor/pr-30-32-release-hardening` as merge commit `1e265d1`. The 531-line mixed owner became a 435-line pager/navigation/load/download workflow owner and a 103-line service-free binding-state owner. CI also exposed and fixed NLog target-batch rotation overshoot plus solution-level xUnit host/TRX contention before merge.
+- Gate 9 input-parser ownership passed Windows/Linux/macOS quality run `30366101959` and CodeQL run `30366101939`; all seven check-runs had zero annotations and every platform retained seven assembly-named TRX artifacts. PR #106 was merged into `refactor/pr-30-32-release-hardening` as merge commit `152e4a4`. The 586-line mixed parser became eight responsibility partials below 120 lines, with deterministic canonical, sentinel, null and exact-host contracts.
 - `version.txt` remains `1.0.32`; v1.1.0 has not passed its release gate.
 
 No release tag may be created while any release blocker below remains.
@@ -47,14 +48,12 @@ Owner branches: separate responsibility-based large-owner PRs.
 Scope:
 
 - Split hand-written oversized owners by responsibility; do not split generated/protocol files only to satisfy LOC.
-- Current owner: separate the oversized `ParseEntrance` input parser by stable video, bangumi, cheese, favorites, user-space and shared-URI contracts without changing its public methods, URL constants, accepted canonical forms or failure sentinels.
-- Newly discovered follow-up: `ViewIndexViewModel` constructs `SearchService` directly even though Host composition registers the service. Converge both search callers on constructor injection in an isolated change and add an architecture regression before Gate 10.
+- Current owner: converge both search callers on the Host-owned `SearchService` instead of constructing a second service inside `ViewIndexViewModel`.
 
 Current owner progress, pending PR integration:
 
-- The original 586-line mixed owner is now eight responsibility partials for constants, shared URI normalization, video, bangumi, cheese, favorites, user-space and user-video-list parsing; every owner is below 120 lines.
-- A deterministic Core matrix fixes canonical IDs, desktop/mobile/share/short URL forms, `BV1U7V66FEiK`, failure sentinels and null behavior. Exact-host regressions reject spoofed or mixed user-space URLs.
-- Architecture tests fix public-method ownership, keep shared URI helpers private, require exact user-space host parsing and remove `ParseEntrance.cs` from the oversized allowlist. Strict `AnalysisMode=All` Release build has zero warnings/errors; all 693 tests pass. Format, vulnerable/deprecated package audits, boundary audit, `git diff --check`, and 955-candidate Gitleaks checks pass. Remote gates remain before integration.
+- Host composition registers one singleton and both MainWindow and Index now receive it through constructor injection. The architecture ratchet rejects `new SearchService` inside the Index ViewModel.
+- Strict `AnalysisMode=All` Release build has zero warnings/errors; all 693 tests pass, including Host/XAML smoke. Format, vulnerable/deprecated package audits, boundary audit, `git diff --check`, and 955-candidate Gitleaks checks pass. Remote gates remain before integration.
 
 Verification:
 
