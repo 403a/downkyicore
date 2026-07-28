@@ -4,6 +4,7 @@ using Avalonia.Headless;
 using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Media;
 using Avalonia.Styling;
+using Avalonia.Themes.Fluent;
 using Avalonia.Xaml.Interactivity;
 using DownKyi.Application.Desktop;
 using DownKyi.Application.Diagnostics;
@@ -314,7 +315,8 @@ public sealed class UiSmokeTests
                 Assert.Same(mainViewModel, window.DataContext);
                 Assert.IsType<DiskCachedWebImageLoader>(imageLoader);
                 Assert.NotNull(host.Services.GetRequiredService<ViewIndexViewModel>());
-                Assert.NotNull(host.Services.GetRequiredService<ViewVideoDetailViewModel>());
+                var videoDetailViewModel = host.Services.GetRequiredService<ViewVideoDetailViewModel>();
+                Assert.NotNull(videoDetailViewModel);
                 Assert.NotNull(host.Services.GetRequiredService<ViewDownloadManagerViewModel>());
                 var networkViewModel = host.Services.GetRequiredService<ViewNetworkViewModel>();
                 Assert.NotNull(networkViewModel);
@@ -330,6 +332,29 @@ public sealed class UiSmokeTests
                     child => Assert.IsType<AriaDownloaderSettingsView>(child),
                     child => Assert.IsType<CustomAriaSettingsView>(child),
                     child => Assert.IsType<StackPanel>(child));
+
+                var videoDetailView = new ViewVideoDetail { DataContext = videoDetailViewModel };
+                var videoDetailRoot = Assert.IsType<Grid>(videoDetailView.Content);
+                Assert.Collection(
+                    videoDetailRoot.Children,
+                    child => Assert.IsType<VideoDetailToolbarView>(child),
+                    child => Assert.IsType<TextBlock>(child),
+                    child =>
+                    {
+                        var content = Assert.IsType<Grid>(child);
+                        Assert.Collection(
+                            content.Children,
+                            summary => Assert.IsType<VideoDetailSummaryView>(summary),
+                            selectionArea =>
+                            {
+                                var selectionGrid = Assert.IsType<Grid>(selectionArea);
+                                Assert.Collection(
+                                    selectionGrid.Children,
+                                    selection => Assert.IsType<VideoDetailSelectionView>(selection),
+                                    actions => Assert.IsType<VideoDetailActionsView>(actions));
+                            });
+                    },
+                    child => Assert.IsType<Image>(child));
 
                 host.Services
                     .GetRequiredService<IAppNavigationService>()
@@ -476,6 +501,22 @@ public sealed class UiSmokeTests
     {
         var application = Avalonia.Application.Current
             ?? throw new InvalidOperationException("Avalonia application is not initialized.");
+        if (!application.Styles.OfType<FluentTheme>().Any())
+        {
+            application.Styles.Add(new FluentTheme());
+        }
+
+        var dataGridStyles = new Uri("avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml");
+        if (!application.Styles
+            .OfType<StyleInclude>()
+            .Any(style => style.Source == dataGridStyles))
+        {
+            application.Styles.Add(new StyleInclude(new Uri("avares://DownKyi.Desktop.Tests/"))
+            {
+                Source = dataGridStyles
+            });
+        }
+
         if (application.TryGetResource("ImageBtnStyle", ThemeVariant.Default, out _))
         {
             return application;

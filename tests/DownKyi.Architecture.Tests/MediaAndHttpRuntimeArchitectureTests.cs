@@ -5,6 +5,12 @@ namespace DownKyi.Architecture.Tests;
 public sealed class MediaAndHttpRuntimeArchitectureTests
 {
     private static readonly string RepositoryRoot = FindRepositoryRoot();
+    private static readonly string[] VideoDetailBindingViewNames =
+    [
+        "VideoDetailSummaryView.axaml",
+        "VideoDetailSelectionView.axaml",
+        "VideoDetailActionsView.axaml"
+    ];
 
     [Fact]
     public void VideoMetadataDoesNotCaptureAnOperationTokenInLazyState()
@@ -304,7 +310,7 @@ public sealed class MediaAndHttpRuntimeArchitectureTests
             RepositoryRoot,
             "src", "DownKyi.Desktop",
             "Views",
-            "ViewVideoDetail.axaml"));
+            "VideoDetailSelectionView.axaml"));
 
         Assert.DoesNotContain("Avalonia.Controls", viewModelSource, StringComparison.Ordinal);
         Assert.DoesNotContain("DataGrid", viewModelSource, StringComparison.Ordinal);
@@ -334,11 +340,13 @@ public sealed class MediaAndHttpRuntimeArchitectureTests
             "Services",
             "Video",
             "VideoDetailDownloadCoordinator.cs"));
-        var viewSource = File.ReadAllText(Path.Combine(
-            RepositoryRoot,
-            "src", "DownKyi.Desktop",
-            "Views",
-            "ViewVideoDetail.axaml"));
+        var viewSource = string.Join(
+            Environment.NewLine,
+            VideoDetailBindingViewNames.Select(name => File.ReadAllText(Path.Combine(
+                RepositoryRoot,
+                "src", "DownKyi.Desktop",
+                "Views",
+                name))));
 
         Assert.True(File.ReadLines(viewModelPath).Count() <= 425, "Video-detail ViewModel exceeded its size budget.");
         Assert.Contains("IVideoDetailWorkflowCoordinator", viewModelSource, StringComparison.Ordinal);
