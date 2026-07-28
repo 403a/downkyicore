@@ -56,7 +56,7 @@ public static class UserInfo
             { "mid", mid }
         };
 
-        if (!File.Exists(StorageManager.GetLogin()))
+        if (!File.Exists(ApplicationStorage.GetLogin()))
         {
             parameters.Add("dm_img_str", "V2ViR0wgMS");
             parameters.Add("dm_img_list", "[]");

@@ -38,7 +38,7 @@ public sealed class MediaAndHttpRuntimeArchitectureTests
     [Fact]
     public void FfmpegRuntimeDoesNotRestoreSynchronousProcessWaits()
     {
-        var runtimeDirectory = Path.Combine(RepositoryRoot, "DownKyi.Core", "FFMpeg");
+        var runtimeDirectory = Path.Combine(RepositoryRoot, "DownKyi.Core", "FFmpeg");
         var forbidden = new[]
         {
             "WaitForExit(",
@@ -59,7 +59,7 @@ public sealed class MediaAndHttpRuntimeArchitectureTests
     [Fact]
     public void FfmpegRuntimeUsesInjectedTypedLogging()
     {
-        var runtimeDirectory = Path.Combine(RepositoryRoot, "DownKyi.Core", "FFMpeg");
+        var runtimeDirectory = Path.Combine(RepositoryRoot, "DownKyi.Core", "FFmpeg");
         var runtimeFiles = Directory
             .EnumerateFiles(runtimeDirectory, "*.cs", SearchOption.TopDirectoryOnly)
             .ToArray();
@@ -423,7 +423,7 @@ public sealed class MediaAndHttpRuntimeArchitectureTests
             RepositoryRoot,
             "src", "DownKyi.Desktop",
             "ViewModels",
-            "ViewSeasonsSeriesViewModel.cs"));
+            "ViewSeasonsSeriesDetailViewModel.cs"));
         var coordinatorSource = File.ReadAllText(Path.Combine(
             RepositoryRoot,
             "src", "DownKyi.Desktop",
@@ -661,7 +661,7 @@ public sealed class MediaAndHttpRuntimeArchitectureTests
         Assert.DoesNotContain("Task.Run", viewModelSource, StringComparison.Ordinal);
         Assert.DoesNotContain("NrbfDecoder", viewModelSource, StringComparison.Ordinal);
         Assert.DoesNotContain("SqliteDatabase", viewModelSource, StringComparison.Ordinal);
-        Assert.DoesNotContain("StorageManager", viewModelSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("ApplicationStorage", viewModelSource, StringComparison.Ordinal);
         Assert.DoesNotContain("Dispatcher.UIThread", viewModelSource, StringComparison.Ordinal);
 
         Assert.Contains("Task.Run", coordinatorSource, StringComparison.Ordinal);

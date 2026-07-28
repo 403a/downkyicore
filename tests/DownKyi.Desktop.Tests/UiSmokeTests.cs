@@ -480,10 +480,10 @@ public sealed class UiSmokeTests
     {
         return
         [
-            StorageManager.GetDbPath(),
-            StorageManager.GetSettings(),
-            StorageManager.GetLogin(),
-            StorageManager.GetAriaDir()
+            ApplicationStorage.GetDbPath(),
+            ApplicationStorage.GetSettings(),
+            ApplicationStorage.GetLogin(),
+            ApplicationStorage.GetAriaDir()
         ];
     }
 

@@ -2,7 +2,7 @@ using DownKyi.Application.Diagnostics;
 using DownKyi.Core.Settings;
 using Microsoft.Extensions.Logging;
 
-namespace DownKyi.Core.FFMpeg;
+namespace DownKyi.Core.FFmpeg;
 
 public sealed class FfmpegProcessor
 {

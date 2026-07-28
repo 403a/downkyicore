@@ -45,7 +45,7 @@ internal sealed class StorageMaintenanceHostedService : IHostedService
     {
         try
         {
-            await StorageManager.RunMaintenanceAsync(cancellationToken).ConfigureAwait(false);
+            await ApplicationStorage.RunMaintenanceAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

@@ -3,16 +3,11 @@ using DownKyi.Core.BiliApi.VideoStream;
 
 namespace DownKyi.Services.Video;
 
-internal static class VideoInputResolver
+internal static class PlayStreamTypeResolver
 {
-    public static VideoInputKind Resolve(string? input)
-    {
-        return DownKyi.Application.Media.VideoInputResolver.Resolve(input);
-    }
-
     public static PlayStreamType? ResolvePlayStreamType(string? input)
     {
-        return Resolve(input) switch
+        return VideoInputResolver.Resolve(input) switch
         {
             VideoInputKind.Video => PlayStreamType.Video,
             VideoInputKind.Bangumi => PlayStreamType.Bangumi,

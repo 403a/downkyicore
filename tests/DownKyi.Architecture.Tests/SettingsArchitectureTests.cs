@@ -38,7 +38,7 @@ public sealed class SettingsArchitectureTests
     [InlineData("src", "DownKyi.Desktop", "Presentation", "ToViewMedia.cs")]
     [InlineData("src", "DownKyi.Desktop", "ViewModels", "ViewPublicFavoritesViewModel.cs")]
     [InlineData("src", "DownKyi.Desktop", "ViewModels", "ViewMySpaceViewModel.cs")]
-    [InlineData("DownKyi.Core", "FFMpeg", "FfmpegProcessor.cs")]
+    [InlineData("DownKyi.Core", "FFmpeg", "FfmpegProcessor.cs")]
     [InlineData("DownKyi.Core", "BiliApi", "Login", "LoginHelper.cs")]
     [InlineData("src", "DownKyi.Desktop", "Services", "UserSpace", "UserSpacePageCoordinator.cs")]
     [InlineData("src", "DownKyi.Desktop", "ViewModels", "ViewUserSpaceViewModel.cs")]
@@ -110,7 +110,7 @@ public sealed class SettingsArchitectureTests
     [Fact]
     public void FfmpegProcessorIsOneInjectedCompositionOwner()
     {
-        var processorSource = ReadSource("DownKyi.Core", "FFMpeg", "FfmpegProcessor.cs");
+        var processorSource = ReadSource("DownKyi.Core", "FFmpeg", "FfmpegProcessor.cs");
         var compositionSource = ReadSource("src", "DownKyi.Desktop", "Composition", "DesktopComposition.cs");
 
         Assert.DoesNotContain("FfmpegProcessor.Instance", processorSource, StringComparison.Ordinal);
@@ -169,7 +169,10 @@ public sealed class SettingsArchitectureTests
     [Fact]
     public void LongRunningOperationsUseExplicitImmutableSettingsSnapshots()
     {
-        var utilitySource = ReadSource("src", "DownKyi.Desktop", "Services", "Utils.cs");
+        var utilitySource = ReadSource(
+            "src", "DownKyi.Desktop",
+            "Services", "Video",
+            "VideoPagePlaybackMapper.cs");
         var addSource = ReadSource("src", "DownKyi.Desktop", "Services", "Download", "AddToDownloadService.cs");
         var contextFactorySource = ReadSource(
             "src", "DownKyi.Desktop",
@@ -178,7 +181,7 @@ public sealed class SettingsArchitectureTests
             "DownloadExecutionContextFactory.cs");
         var artifactSource = ReadSource("src", "DownKyi.Desktop", "Services", "Download", "DownloadArtifactWriter.cs");
         var diagnosticSource = ReadSource("src", "DownKyi.Desktop", "Services", "Download", "DownloadDiagnosticLogger.cs");
-        var ffmpegSource = ReadSource("DownKyi.Core", "FFMpeg", "FfmpegProcessor.cs");
+        var ffmpegSource = ReadSource("DownKyi.Core", "FFmpeg", "FfmpegProcessor.cs");
 
         Assert.Contains("ApplicationSettings settings", utilitySource, StringComparison.Ordinal);
         Assert.DoesNotContain("ISettingsStore", utilitySource, StringComparison.Ordinal);

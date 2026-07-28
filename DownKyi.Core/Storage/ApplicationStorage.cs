@@ -1,6 +1,6 @@
 namespace DownKyi.Core.Storage;
 
-public static class StorageManager
+public static class ApplicationStorage
 {
     private const long MaxLogBytes = 64L * 1024 * 1024;
     private const long MaxCacheBytes = 512L * 1024 * 1024;
@@ -8,12 +8,12 @@ public static class StorageManager
 
     public static string GetRoot()
     {
-        return CreateDirectory(Constant.Root);
+        return CreateDirectory(ApplicationDataPaths.Root);
     }
 
     public static bool IsPortableMode()
     {
-        return Constant.IsPortableMode;
+        return ApplicationDataPaths.IsPortableMode;
     }
 
     /// <summary>
@@ -22,8 +22,8 @@ public static class StorageManager
     /// <returns></returns>
     public static string GetAriaDir()
     {
-        CreateDirectory(Constant.Aria);
-        return Constant.Aria;
+        CreateDirectory(ApplicationDataPaths.Aria);
+        return ApplicationDataPaths.Aria;
     }
 
     /// <summary>
@@ -32,8 +32,8 @@ public static class StorageManager
     /// <returns></returns>
     public static string GetLogsDir()
     {
-        CreateDirectory(Constant.Logs);
-        return Constant.Logs;
+        CreateDirectory(ApplicationDataPaths.Logs);
+        return ApplicationDataPaths.Logs;
     }
 
     /// <summary>
@@ -42,8 +42,8 @@ public static class StorageManager
     /// <returns></returns>
     public static string GetDownload()
     {
-        CreateDirectory(Constant.Database);
-        return Constant.Download;
+        CreateDirectory(ApplicationDataPaths.Database);
+        return ApplicationDataPaths.Download;
     }
 
     /// <summary>
@@ -52,8 +52,8 @@ public static class StorageManager
     /// <returns></returns>
     public static string GetDbPath()
     {
-        CreateDirectory(Constant.Database);
-        return Constant.DbPath;
+        CreateDirectory(ApplicationDataPaths.Database);
+        return ApplicationDataPaths.DbPath;
     }
 
     /// <summary>
@@ -62,8 +62,8 @@ public static class StorageManager
     /// <returns></returns>
     public static string GetSettings()
     {
-        CreateDirectory(Constant.Config);
-        return Constant.Settings;
+        CreateDirectory(ApplicationDataPaths.Config);
+        return ApplicationDataPaths.Settings;
     }
 
     /// <summary>
@@ -72,8 +72,8 @@ public static class StorageManager
     /// <returns></returns>
     public static string GetLogin()
     {
-        CreateDirectory(Constant.Config);
-        return Constant.Login;
+        CreateDirectory(ApplicationDataPaths.Config);
+        return ApplicationDataPaths.Login;
     }
 
     /// <summary>
@@ -82,17 +82,17 @@ public static class StorageManager
     /// <returns></returns>
     public static string GetDanmaku()
     {
-        return CreateDirectory(Constant.Danmaku);
+        return CreateDirectory(ApplicationDataPaths.Danmaku);
     }
 
     public static string GetMedia()
     {
-        return CreateDirectory(Constant.Media);
+        return CreateDirectory(ApplicationDataPaths.Media);
     }
 
     public static string GetCache()
     {
-        return CreateDirectory(Constant.Cache);
+        return CreateDirectory(ApplicationDataPaths.Cache);
     }
 
     public static Task RunMaintenanceAsync(CancellationToken cancellationToken = default)
@@ -117,11 +117,11 @@ public static class StorageManager
 
     private static void RunMaintenance(CancellationToken cancellationToken)
     {
-        CleanupDirectory(Constant.Logs, TimeSpan.FromDays(30), MaxLogBytes, "*", cancellationToken);
-        CleanupDirectory(Constant.Cache, TimeSpan.FromDays(14), MaxCacheBytes, "*", cancellationToken);
-        CleanupDirectory(Constant.Aria, TimeSpan.FromDays(14), MaxAriaLogBytes, "*.log", cancellationToken);
-        CleanupTemporaryFiles(Constant.Database, TimeSpan.FromDays(3), cancellationToken);
-        DeleteEmptyDirectories(Constant.Cache, cancellationToken);
+        CleanupDirectory(ApplicationDataPaths.Logs, TimeSpan.FromDays(30), MaxLogBytes, "*", cancellationToken);
+        CleanupDirectory(ApplicationDataPaths.Cache, TimeSpan.FromDays(14), MaxCacheBytes, "*", cancellationToken);
+        CleanupDirectory(ApplicationDataPaths.Aria, TimeSpan.FromDays(14), MaxAriaLogBytes, "*.log", cancellationToken);
+        CleanupTemporaryFiles(ApplicationDataPaths.Database, TimeSpan.FromDays(3), cancellationToken);
+        DeleteEmptyDirectories(ApplicationDataPaths.Cache, cancellationToken);
     }
 
     private static void CleanupDirectory(
@@ -245,7 +245,7 @@ public static class StorageManager
 
     private static bool IsUnderRoot(string path)
     {
-        var root = Path.GetFullPath(Constant.Root)
+        var root = Path.GetFullPath(ApplicationDataPaths.Root)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
             + Path.DirectorySeparatorChar;
         var fullPath = Path.GetFullPath(path);

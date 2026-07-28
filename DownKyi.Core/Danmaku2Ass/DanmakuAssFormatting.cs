@@ -3,7 +3,7 @@ using System.Text;
 
 namespace DownKyi.Core.Danmaku2Ass;
 
-internal static class Utils
+internal static class DanmakuAssFormatting
 {
     /// <summary>
     /// 向上取整，返回int类型

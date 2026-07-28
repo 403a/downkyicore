@@ -15,11 +15,6 @@ public sealed class ModuleBoundaryBaselineTests
                 "DownKyi.Core.BiliApi.Bangumi.BangumiType",
                 "DownKyi.Core.BiliApi.Users.Models.BangumiType"
             ],
-            ["Constant"] =
-            [
-                "DownKyi.Core.BiliApi.BiliUtils.Constant",
-                "DownKyi.Core.Storage.Constant"
-            ],
             ["FavoritesMedia"] =
             [
                 "DownKyi.Core.BiliApi.Favorites.Models.FavoritesMedia",
@@ -32,49 +27,16 @@ public sealed class ModuleBoundaryBaselineTests
                 "DownKyi.Core.BiliApi.VideoStream.Models.Subtitle",
                 "DownKyi.Core.Danmaku2Ass.Subtitle"
             ],
-            ["Utils"] =
-            [
-                "DownKyi.Core.Danmaku2Ass.Utils",
-                "DownKyi.Services.Utils"
-            ],
-            ["VideoInputResolver"] =
-            [
-                "DownKyi.Application.Media.VideoInputResolver",
-                "DownKyi.Services.Video.VideoInputResolver"
-            ],
             ["VideoPage"] =
             [
                 "DownKyi.Core.BiliApi.Video.Models.VideoPage",
                 "DownKyi.Presentation.VideoPage"
-            ],
-            ["ViewSeasonsSeries"] =
-            [
-                "DownKyi.Views.UserSpace.ViewSeasonsSeries",
-                "DownKyi.Views.ViewSeasonsSeries"
-            ],
-            ["ViewSeasonsSeriesViewModel"] =
-            [
-                "DownKyi.ViewModels.UserSpace.ViewSeasonsSeriesViewModel",
-                "DownKyi.ViewModels.ViewSeasonsSeriesViewModel"
             ]
         };
 
-    private static readonly HashSet<string> KnownGenericTypeNames = new(StringComparer.Ordinal)
-    {
-        "DownKyi.Core/BiliApi/BiliUtils/Constant.cs -> Constant",
-        "DownKyi.Core/Danmaku2Ass/Utils.cs -> Utils",
-        "DownKyi.Core/Storage/Constant.cs -> Constant",
-        "DownKyi.Core/Storage/StorageManager.cs -> StorageManager",
-        "src/DownKyi.Desktop/Services/Utils.cs -> Utils"
-    };
+    private static readonly HashSet<string> KnownGenericTypeNames = new(StringComparer.Ordinal);
 
-    private static readonly HashSet<string> KnownFileTypeMismatches = new(StringComparer.Ordinal)
-    {
-        "DownKyi.Core/BiliApi/Users/Models/SpaceSeasonsSeries.cs",
-        "DownKyi.Core/BiliApi/Users/Models/SpaceSeriesMeta.cs",
-        "DownKyi.Core/Models/NfoModels.cs",
-        "src/DownKyi.Desktop/Commands/AsyncDelegateCommand.cs"
-    };
+    private static readonly HashSet<string> KnownFileTypeMismatches = new(StringComparer.Ordinal);
 
     private static readonly Dictionary<string, int> KnownOversizedFiles = new(StringComparer.Ordinal)
     {
@@ -122,6 +84,39 @@ public sealed class ModuleBoundaryBaselineTests
             .ToArray();
 
         Assert.Empty(actual);
+    }
+
+    [Fact]
+    public void CanonicalResourceAndMediaRuntimeNamesRemainStable()
+    {
+        var desktopRoot = Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop");
+        var desktopDirectories = Directory
+            .EnumerateDirectories(desktopRoot)
+            .Select(Path.GetFileName)
+            .ToArray();
+        Assert.Contains("Languages", desktopDirectories);
+        Assert.DoesNotContain("Languanges", desktopDirectories);
+
+        var appSource = File.ReadAllText(Path.Combine(desktopRoot, "App.axaml"));
+        Assert.Contains("/Languages/Default.axaml", appSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("/Languanges/", appSource, StringComparison.Ordinal);
+
+        var coreDirectories = Directory
+            .EnumerateDirectories(Path.Combine(RepositoryRoot, "DownKyi.Core"))
+            .Select(Path.GetFileName)
+            .ToArray();
+        Assert.Contains("FFmpeg", coreDirectories);
+        Assert.DoesNotContain("FFMpeg", coreDirectories);
+
+        var ffmpegSources = Directory
+            .EnumerateFiles(
+                Path.Combine(RepositoryRoot, "DownKyi.Core", "FFmpeg"),
+                "*.cs",
+                SearchOption.AllDirectories)
+            .Select(File.ReadAllText)
+            .ToArray();
+        Assert.All(ffmpegSources, source =>
+            Assert.DoesNotContain("DownKyi.Core.FFMpeg", source, StringComparison.Ordinal));
     }
 
     [Fact]

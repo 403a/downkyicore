@@ -1,9 +1,9 @@
 using DownKyi.Core.BiliApi.VideoStream;
-using LegacyVideoInputResolver = DownKyi.Services.Video.VideoInputResolver;
+using DownKyi.Services.Video;
 
 namespace DownKyi.Tests;
 
-public sealed class VideoInputResolverTests
+public sealed class PlayStreamTypeResolverTests
 {
     [Theory]
     [InlineData("BV17x411w7KC", PlayStreamType.Video)]
@@ -11,12 +11,12 @@ public sealed class VideoInputResolverTests
     [InlineData("https://www.bilibili.com/cheese/play/ss205", PlayStreamType.Cheese)]
     public void ResolvePlayStreamTypeReturnsExpectedDownloadStreamType(string input, PlayStreamType expectedStreamType)
     {
-        Assert.Equal(expectedStreamType, LegacyVideoInputResolver.ResolvePlayStreamType(input));
+        Assert.Equal(expectedStreamType, PlayStreamTypeResolver.ResolvePlayStreamType(input));
     }
 
     [Fact]
     public void ResolvePlayStreamTypeReturnsNullForUnsupportedInput()
     {
-        Assert.Null(LegacyVideoInputResolver.ResolvePlayStreamType("ml1329019876"));
+        Assert.Null(PlayStreamTypeResolver.ResolvePlayStreamType("ml1329019876"));
     }
 }

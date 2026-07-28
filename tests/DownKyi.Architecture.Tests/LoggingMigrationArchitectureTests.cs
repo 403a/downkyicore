@@ -114,7 +114,7 @@ public sealed class LoggingMigrationArchitectureTests
             RepositoryRoot,
             "src", "DownKyi.Desktop",
             "Commands",
-            "AsyncDelegateCommand.cs"));
+            "DownKyiAsyncDelegateCommand.cs"));
 
         Assert.Contains("ILogger logger", commandSource, StringComparison.Ordinal);
         Assert.Contains("_logger.LogErrorMessage", commandSource, StringComparison.Ordinal);

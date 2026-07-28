@@ -280,13 +280,13 @@ internal class ViewVideoViewModel : ViewModelBase
         #region 属性初始化
 
         // 优先下载的视频编码
-        VideoCodecs = Constant.GetCodecIds();
+        VideoCodecs = PlaybackQualityCatalog.GetCodecIds();
 
         // 优先下载画质
-        VideoQualityList = Constant.GetResolutions();
+        VideoQualityList = PlaybackQualityCatalog.GetResolutions();
 
         // 优先下载音质
-        AudioQualityList = Constant.GetAudioQualities();
+        AudioQualityList = PlaybackQualityCatalog.GetAudioQualities();
         AudioQualityList[3].Id += 1000;
         AudioQualityList[4].Id += 1000;
 

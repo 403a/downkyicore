@@ -164,7 +164,7 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
                 var playUrl = await videoInfoService
                     .GetVideoStreamAsync(page, cancellationToken)
                     .ConfigureAwait(false);
-                Utils.VideoPageInfo(playUrl, page, settings);
+                VideoPagePlaybackMapper.ApplyPlayUrl(playUrl, page, settings);
             }
         }
     }
@@ -308,7 +308,7 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
                     var playUrl = await _videoInfoService
                         .GetVideoStreamAsync(page, cancellationToken)
                         .ConfigureAwait(false);
-                    Utils.VideoPageInfo(playUrl, page, settings);
+                    VideoPagePlaybackMapper.ApplyPlayUrl(playUrl, page, settings);
                     retry++;
                 }
 
@@ -320,7 +320,7 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
                 var videoQuality = page.VideoQuality;
                 var ownerMid = page.Owner?.Mid ?? -1;
                 var ownerName = page.Owner?.Name ?? string.Empty;
-                var audioCodec = Constant.GetAudioQualities().FirstOrDefault(t => t.Name == page.AudioQualityFormat) ?? new Quality();
+                var audioCodec = PlaybackQualityCatalog.GetAudioQualities().FirstOrDefault(t => t.Name == page.AudioQualityFormat) ?? new Quality();
 
                 // 判断是否同一个视频，需要cid、画质、音质、视频编码都相同
                 // 如果存在正在下载列表，则跳过，并提示

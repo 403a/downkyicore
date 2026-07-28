@@ -139,7 +139,7 @@ Durable 下載狀態只能由 `IDownloadTaskApplicationService` 依 `DownloadTas
 
 - 設定入口是注入的 `ISettingsStore`；讀取 `Current` immutable snapshot，修改使用 typed `Update`，持久化使用 cancellation-aware flush。
 - `SettingsStore` 必須保留既有 JSON property 名稱、schema migration、atomic replace 與 legacy DES 設定遷移。
-- 路徑由 `StorageManager` 解析；測試必須用隔離目錄，禁止讀取真實 cookie、設定、下載 DB 或 aria2 session。
+- 路徑由 `ApplicationStorage` 解析；測試必須用隔離目錄，禁止讀取真實 cookie、設定、下載 DB 或 aria2 session。
 - SQLite schema 變更必須有版本 migration、備份、rollback 與 reopen 測試。
 - 日誌使用注入的 `ILogger` 與 `ApplicationLogProvider`。不得記錄 cookie、token、完整敏感 URL、email、帳號 ID 或完整個人路徑。
 - 登入態 live audit 只能使用 `script/audit-bilibili-authenticated-api.ps1 -ConfirmAuthenticatedLive` 從 `~/.codex/.env` 讀取憑證；不得把值放入命令列、source、fixture、artifact、commit 或 PR。完成後必須執行 `script/scan-secrets.ps1`。

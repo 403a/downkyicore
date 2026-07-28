@@ -1,6 +1,6 @@
 using System.Collections.ObjectModel;
 
-namespace DownKyi.Core.FFMpeg;
+namespace DownKyi.Core.FFmpeg;
 
 internal sealed class FfmpegCommand
 {

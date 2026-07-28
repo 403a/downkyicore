@@ -93,7 +93,7 @@ flowchart TD
     AccountSession["service.account-session\nServices/Account"]
     FriendVms["viewmodel.friend-relations\nFriends ViewModels"]
     FriendRelations["service.friend-relations\nFriendRelationCoordinator.cs"]
-    SeasonsSeriesVm["viewmodel.seasons-series\nViewSeasonsSeriesViewModel.cs"]
+    SeasonsSeriesVm["viewmodel.seasons-series\nDetail + user-space list VMs"]
     SeasonsSeries["service.seasons-series\nSeasonsSeriesCoordinator.cs"]
     FavoritesVms["viewmodel.favorites\nPrivate/Public Favorites ViewModels"]
     Favorites["service.favorites\nFavoritesCoordinator.cs"]
@@ -125,7 +125,7 @@ flowchart TD
     StoreContract["service.application-contracts\nIDownloadTaskStore"]
     SqliteStore["core.sqlite-download-store\nSqliteDownloadTaskStore"]
     Projection["ui.download-projection\nDownloadTaskProjectionStore + mapper"]
-    Storage["core.storage\nStorageManager"]
+    Storage["core.storage\nApplicationStorage"]
     Aria["external.aria2\naria2c process"]
     FFmpeg["external.ffmpeg\nffmpeg process"]
     Logs["infrastructure.logging\nredaction + NLog sink + diagnostic export"]
@@ -725,8 +725,9 @@ tests:
 id: viewmodel.seasons-series
 type: viewmodel
 paths:
-  - src/DownKyi.Desktop/ViewModels/ViewSeasonsSeriesViewModel.cs
-responsibility: Projects one season/series page, selection state, pager state, navigation, and add-to-download results.
+  - src/DownKyi.Desktop/ViewModels/ViewSeasonsSeriesDetailViewModel.cs
+  - src/DownKyi.Desktop/ViewModels/UserSpace/ViewUserSpaceSeasonsSeriesViewModel.cs
+responsibility: Separately projects the selected season/series detail page and the user-space season/series list without colliding owner names.
 inbound:
   - viewmodel.user-space
 outbound:
@@ -999,15 +1000,15 @@ id: service.video-input-resolver
 type: service
 paths:
   - src/DownKyi.Application/Media/VideoInputResolver.cs
-  - src/DownKyi.Desktop/Services/Video/VideoInputResolver.cs
-responsibility: Classifies and normalizes BV/AV, video URL, bangumi, and cheese/course entry inputs.
+  - src/DownKyi.Desktop/Services/Video/PlayStreamTypeResolver.cs
+responsibility: Classifies BV/AV, video URL, bangumi, and cheese/course inputs in Application, then maps that result to the external download stream type at the Desktop boundary.
 inbound:
   - viewmodel.video-detail
 outbound:
   - service.video-parse-coordinator
 contracts:
   - Input classification must match the parse flow and add-to-download flow.
-  - Application owns pure classification; the legacy adapter only maps the result to external `PlayStreamType`.
+  - Application owns pure classification; `PlayStreamTypeResolver` only maps the result to external `PlayStreamType`.
 hazards:
   - Divergence between parse and download input handling causes "can parse but cannot download" bugs.
 tests:
@@ -1892,8 +1893,9 @@ tests:
 id: core.storage
 type: core
 paths:
-  - DownKyi.Core/Storage/StorageManager.cs
-responsibility: Resolves portable and per-user application-data, cache, log, database, media, and external-process state paths.
+  - DownKyi.Core/Storage/ApplicationDataPaths.cs
+  - DownKyi.Core/Storage/ApplicationStorage.cs
+responsibility: Resolves portable and per-user application-data paths, creates their directories, and performs bounded storage maintenance.
 inbound:
   - app.application
   - service.legacy-upgrade
@@ -2052,7 +2054,7 @@ retention_policy:
 id: external.ffmpeg
 type: external
 paths:
-  - DownKyi.Core/FFMpeg
+  - DownKyi.Core/FFmpeg
   - script/ffmpeg.ps1
   - script/ffmpeg.sh
 responsibility: Merges audio/video, runs delogo/extract operations, and optionally uses hardware encoders with CPU fallback.
@@ -2212,7 +2214,7 @@ contracts:
   - DURL descriptors are selected from an `Order`-sorted list and use `Order` plus the literal codec marker `durl` to form stable download keys; BVID and codec hashes are prohibited as segment identity.
   - Role-specific names replace namespace collisions: `HistoryApi`, `DynamicApi`, `FileNameBuilder`, `FfmpegProcessor`, `BilibiliDanmakuConverter`, `FavoritesPageItem`, and `ThemedDialog`. Bilibili protobuf danmaku parsing lives under `DownKyi.Core.BiliApi.DanmakuApi`.
   - Executable-only application/UI types are internal. BenchmarkDotNet cases are the deliberate exception: public, non-sealed types live in `DownKyi.BenchmarkCases`, while the executable runner remains internal and discovers the case assembly explicitly.
-  - NFO XML DTOs remain public in `DownKyi.Core/Models/NfoModels.cs`; `XmlSerializer` requires public root and member types. Their `DownKyi.Models` namespace and XML contract are stable even though assembly ownership moved out of the executable.
+  - NFO XML DTOs remain public in `DownKyi.Core/Models/MovieMetadata.cs`, `Actor.cs`, `Rating.cs`, and `UniqueId.cs`; `XmlSerializer` requires public root and member types. Their `DownKyi.Models` namespace and XML contract are stable even though assembly ownership moved out of the executable.
   - Raw Bilibili and aria2 address fields remain strings with exact `JsonProperty` wire names; CLR members use semantic `...Address` names. Login QR and redirect consumers validate absolute `Uri` values before use. Do not normalize protocol-relative media addresses or aria2 option strings into `System.Uri`. Protocol, path, token, and marker comparisons use explicit ordinal semantics.
 hazards:
   - Reusing one SARIF path across projects loses rule metadata because later projects overwrite earlier output.
@@ -2963,7 +2965,7 @@ test.system-performance:
 test.video-input-resolver:
   paths:
     - tests/DownKyi.Application.Tests/VideoInputResolverTests.cs
-    - tests/DownKyi.Tests/VideoInputResolverTests.cs
+    - tests/DownKyi.Tests/PlayStreamTypeResolverTests.cs
   guards:
     - BV/AV/video/bangumi/cheese inputs classify consistently
 

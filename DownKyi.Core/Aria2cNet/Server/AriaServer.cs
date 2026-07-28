@@ -37,7 +37,7 @@ namespace DownKyi.Core.Aria2cNet.Server
             // aria端口
             ListenPort = config.ListenPort;
             // aria目录
-            var ariaDir = StorageManager.GetAriaDir();
+            var ariaDir = ApplicationStorage.GetAriaDir();
             // 会话文件
 #if DEBUG
             var sessionFile = Path.Combine(ariaDir, "aira.session");

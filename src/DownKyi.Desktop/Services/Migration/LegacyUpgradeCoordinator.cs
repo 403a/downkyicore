@@ -148,7 +148,7 @@ internal sealed class LegacyUpgradeCoordinator : ILegacyUpgradeCoordinator
         IProgress<LegacyUpgradeProgress> progress,
         CancellationToken cancellationToken)
     {
-        var loginPath = StorageManager.GetLogin();
+        var loginPath = ApplicationStorage.GetLogin();
         if (!File.Exists(loginPath))
         {
             return;
@@ -206,7 +206,7 @@ internal sealed class LegacyUpgradeCoordinator : ILegacyUpgradeCoordinator
 
     private static string? FindLegacyDatabase()
     {
-        var downloadPath = StorageManager.GetDownload();
+        var downloadPath = ApplicationStorage.GetDownload();
         var possiblePaths = new[]
         {
             downloadPath,

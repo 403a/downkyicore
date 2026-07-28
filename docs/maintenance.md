@@ -217,6 +217,6 @@ Use this checklist for download, parsing, and exit-related changes:
 - Download subtitles and confirm SRT time codes are correct.
 - Export diagnostic logs and confirm local user paths, cookies, tokens, and sensitive URLs are redacted.
 
-## Historical Naming
+## Canonical Resource Naming
 
-The `Languanges` resource folder keeps its historical spelling for now because Avalonia resources and packaging scripts can depend on current paths. Rename it only in a dedicated UI resource cleanup PR with resource-path validation.
+The default language resource lives at `src/DownKyi.Desktop/Languages/Default.axaml`, and the FFmpeg runtime namespace is `DownKyi.Core.FFmpeg`. Architecture tests reject the historical `Languanges` resource spelling and `FFMpeg` source-directory casing so packaging and case-sensitive platforms cannot drift.

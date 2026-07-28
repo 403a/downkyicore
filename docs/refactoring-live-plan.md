@@ -2,8 +2,8 @@
 
 Status: active
 Last updated: 2026-07-28
-Current group: Gate 9 logging, naming and large-owner convergence
-Current branch: `refactor/logging-boundary`
+Current group: Gate 9 naming and large-owner convergence
+Current branch: `refactor/naming-boundaries`
 
 This file contains only unfinished or not-yet-integrated work. Completed PR 02-32 items are not restored. Design rationale belongs in `design-docs`; product acceptance belongs in `product-specs`.
 
@@ -22,35 +22,32 @@ The previous `Status: complete` was incorrect.
 - Gate 6 retry policy passed three complete remote rounds. Final Windows/Linux/macOS quality run `30187455431` and CodeQL run `30187455441` had zero check annotations, then PR #90 was merged into `refactor/pr-30-32-release-hardening` as merge commit `ba0a928e`.
 - Gate 7 async Bilibili Infrastructure ownership passed Windows/Linux/macOS quality run `30189537538`, protobuf run `30189537553`, and CodeQL run `30189537541`, then PR #91 was merged into `refactor/pr-30-32-release-hardening` as merge commit `55070903`.
 - Gate 8 passed Windows/Linux/macOS quality run `30191251004`, protobuf run `30191250997`, and CodeQL run `30191250992`; PR #92 was merged into `refactor/pr-30-32-release-hardening` as `f8e78c9a`. CodeQL reported no alert, but GitHub emitted one platform annotation because the single required ownership PR changed 396 files and its diff API is capped at 300 files.
+- Gate 9 logging ownership passed Windows/Linux/macOS quality run `30345373830`, protobuf run `30345371405`, and CodeQL run `30345371181`, with zero check annotations. PR #94 was merged into `refactor/pr-30-32-release-hardening` as merge commit `b290b204`.
 - `version.txt` remains `1.0.32`; v1.1.0 has not passed its release gate.
 
 No release tag may be created while any release blocker below remains.
 
 ## Execution Order
 
-### Gate 9: Logging, Naming And Large-Owner Convergence
+### Gate 9: Naming And Large-Owner Convergence
 
-Owner branches: separate ADR/implementation, naming, and large-owner PRs.
+Owner branches: separate naming and large-owner PRs.
 
 Scope:
 
-- Decide logging sink ownership through an ADR and benchmark before adding a dependency.
-- Keep project-specific redaction before every persistence/cache/export path.
-- Separate recent buffer, diagnostic exporter and retention responsibilities.
 - Rename `Languanges`, QR/FFmpeg casing, duplicate SeasonsSeries owners and proven generic buckets in isolated rename PRs.
 - Split hand-written oversized owners by responsibility; do not split generated/protocol files only to satisfy LOC.
 
-Logging implementation progress, pending PR integration:
+Naming implementation progress, pending PR integration:
 
-- ADR selected NLog 6.1.4 core with a private `LogFactory`; global NLog and provider-package usage are rejected by architecture tests.
-- Application owns only diagnostic contracts. Infrastructure owns the provider, redactor, async rolling sink, recent buffer, retention worker/policy and file-backed exporter; Core has zero logging implementation files.
-- Concurrent producer/flush loss and a full-suite-only final-entry disposal race were reproduced and fixed with a bounded deferred-write barrier plus a `FileTarget`-only handle reset; the async wrapper is never reconfigured.
-- Final same-machine post-migration runs wrote 10,000/10,000 events with zero drops at 23,482-29,716 events/s. Increased flush latency and allocation, including one slower producer run, remain documented non-gating evidence.
-- Final local gates: strict `AnalysisMode=All` Release build had zero warnings/errors; all 616 tests passed; format changed 0/800 files; logging tests passed five focused rounds and Infrastructure passed ten complete rounds; module-boundary, vulnerable/deprecated package, `git diff --check`, and 935-candidate Gitleaks checks passed.
+- Canonical resource/runtime casing is `Languages` and `DownKyi.Core.FFmpeg`; architecture tests reject the historical spellings.
+- Seasons/series detail and user-space list owners now have distinct View/ViewModel names. Application owns the sole `VideoInputResolver`; Desktop owns only `PlayStreamTypeResolver`.
+- Generic type names fell from 5 to 0 and file/type mismatches from 4 to 0. JSON/XML DTOs were split into same-name files without changing CLR names or wire contracts.
+- Duplicate simple-name groups fell from 9 to 4. The remaining complete sets are endpoint/role-scoped `BangumiType`, `FavoritesMedia`, `Subtitle`, and `VideoPage` contracts and cannot grow.
+- Local gates: strict `AnalysisMode=All` Release build has zero warnings/errors; all 617 tests pass; format changed 0/805 files; vulnerable/deprecated package audits, `git diff --check`, 180 architecture tests, 13 Desktop smoke tests, and 931-candidate Gitleaks checks pass.
 
 Verification:
 
-- redaction, flush, rotation, retention and shutdown tests remain green.
 - all XAML/resource URI and typed route smoke tests pass after rename.
 - module-boundary ratchet entries decrease and no new entries are added.
 

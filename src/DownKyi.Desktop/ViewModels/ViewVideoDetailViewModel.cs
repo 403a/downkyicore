@@ -287,7 +287,7 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
         cancellationToken.ThrowIfCancellationRequested();
         foreach (var result in results)
         {
-            Services.Utils.VideoPageInfo(result.PlayUrl, result.Page, settings);
+            VideoPagePlaybackMapper.ApplyPlayUrl(result.PlayUrl, result.Page, settings);
         }
     }
 

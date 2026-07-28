@@ -1,8 +1,8 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             x:Class="DownKyi.Views.UserSpace.ViewSeasonsSeries"
+             x:Class="DownKyi.Views.UserSpace.ViewUserSpaceSeasonsSeries"
              xmlns:vmu="clr-namespace:DownKyi.ViewModels.UserSpace"
-             x:DataType="vmu:ViewSeasonsSeriesViewModel"
+             x:DataType="vmu:ViewUserSpaceSeasonsSeriesViewModel"
              xmlns:asyncImageLoader="clr-namespace:DownKyi.CustomControl.AsyncImageLoader">
     <Grid RowDefinitions="*">
         <ListBox

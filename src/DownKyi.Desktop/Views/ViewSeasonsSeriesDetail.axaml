@@ -1,6 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             x:Class="DownKyi.Views.ViewSeasonsSeries"
+             x:Class="DownKyi.Views.ViewSeasonsSeriesDetail"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d"
@@ -10,7 +10,7 @@
              xmlns:vm="clr-namespace:DownKyi.ViewModels"
              xmlns:vmp="clr-namespace:DownKyi.Presentation"
              xmlns:asyncImageLoader="clr-namespace:DownKyi.CustomControl.AsyncImageLoader"
-             x:DataType="vm:ViewSeasonsSeriesViewModel">
+             x:DataType="vm:ViewSeasonsSeriesDetailViewModel">
     <UserControl.Resources>
         <ControlTheme x:Key="MediaListStyle" TargetType="ListBoxItem" x:DataType="vmp:ChannelMedia">
             <Setter Property="IsSelected" Value="{Binding IsSelected}" />
