@@ -3,7 +3,7 @@
 Status: active
 Last updated: 2026-07-28
 Current group: Gate 9 large-owner convergence
-Current branch: `refactor/network-settings-owner`
+Current branch: `refactor/network-settings-viewmodel-owner`
 
 This file contains only unfinished or not-yet-integrated work. Completed PR 02-32 items are not restored. Design rationale belongs in `design-docs`; product acceptance belongs in `product-specs`.
 
@@ -26,6 +26,7 @@ The previous `Status: complete` was incorrect.
 - Gate 9 naming convergence passed Windows/Linux/macOS quality run `30347937643` and CodeQL run `30347937639`; all seven check-runs had zero annotations. PR #95 was merged into `refactor/pr-30-32-release-hardening` as merge commit `e29ecc8`. Generic-name and file/type-mismatch baselines are zero; the four remaining duplicate-name sets are endpoint/role-scoped contracts.
 - Gate 9 SQLite store ownership passed Windows/Linux/macOS quality run `30349573925` and CodeQL run `30349573991`; all seven check-runs had zero annotations. PR #96 was merged into `refactor/pr-30-32-release-hardening` as merge commit `9f570f4`. The Store fell from 928 to 447 lines with byte-content-equivalent SQL literals and unchanged schema/resume contracts.
 - The authenticated read-only API audit was refreshed against `9f570f4`; all 14 probes passed with zero drift, Gitleaks found zero secrets, and all seven remote checks had zero annotations. PR #97 was merged into `refactor/pr-30-32-release-hardening` as merge commit `3394ff5`.
+- Gate 9 Settings network/aria ownership passed Windows/Linux/macOS quality run `30351528461` and CodeQL run `30351528583`; all seven check-runs had zero annotations. PR #98 was merged into `refactor/pr-30-32-release-hardening` as merge commit `ffa5674`. The 671-line mixed partial became 319-line general network and 355-line aria runtime owners with all 44 public compatibility methods unchanged.
 - `version.txt` remains `1.0.32`; v1.1.0 has not passed its release gate.
 
 No release tag may be created while any release blocker below remains.
@@ -39,13 +40,13 @@ Owner branches: separate responsibility-based large-owner PRs.
 Scope:
 
 - Split hand-written oversized owners by responsibility; do not split generated/protocol files only to satisfy LOC.
-- Current owner: separate the 671-line settings network partial into a 319-line general network/downloader/proxy owner and a 355-line aria RPC/runtime owner without changing the public methods, defaults, JSON schema, migration, or persistence behavior.
+- Current owner: separate the 649-line network settings ViewModel into navigation/general-command, aria-command, and binding-state partial owners without changing command property names, XAML bindings, initialization, coordinator calls, or restart prompts.
 
 Current owner progress, pending PR integration:
 
-- Method-level comparison confirms all 44 public compatibility methods are present and byte-equivalent after line-ending normalization; all ten aria defaults/fields remain present in the aria owner.
-- The oversized inventory fell from 12 to 11. Architecture tests remove the old allowlist entry and prevent aria token, RPC, allocation, limit, and proxy ownership from returning to the general network file.
-- Local gates: strict `AnalysisMode=All` Release build has zero warnings/errors; all 619 tests pass, including 15 focused settings tests and 182 architecture tests; format reports 0/809 changed files; vulnerable/deprecated package audits, `git diff --check`, and 935-candidate Gitleaks checks pass.
+- Method-level comparison confirms all 28 methods and 25 command properties are present and content-equivalent after line-ending normalization.
+- The three partial owners are 384, 275, and 292 lines. The oversized inventory fell from 11 to 10, and architecture tests prevent aria command wiring from returning to the general owner.
+- Focused gates: Settings/ModuleBoundary architecture tests pass 58/58 and Desktop/Host smoke passes 13/13. Full Release, solution, format, package, diff, and secret gates remain pending before PR publication.
 
 Verification:
 
