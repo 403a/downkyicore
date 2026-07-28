@@ -41,6 +41,12 @@ Scope:
 - Split hand-written oversized owners by responsibility; do not split generated/protocol files only to satisfy LOC.
 - Current owner: separate the 671-line settings network partial into a 319-line general network/downloader/proxy owner and a 355-line aria RPC/runtime owner without changing the public methods, defaults, JSON schema, migration, or persistence behavior.
 
+Current owner progress, pending PR integration:
+
+- Method-level comparison confirms all 44 public compatibility methods are present and byte-equivalent after line-ending normalization; all ten aria defaults/fields remain present in the aria owner.
+- The oversized inventory fell from 12 to 11. Architecture tests remove the old allowlist entry and prevent aria token, RPC, allocation, limit, and proxy ownership from returning to the general network file.
+- Local gates: strict `AnalysisMode=All` Release build has zero warnings/errors; all 619 tests pass, including 15 focused settings tests and 182 architecture tests; format reports 0/809 changed files; vulnerable/deprecated package audits, `git diff --check`, and 935-candidate Gitleaks checks pass.
+
 Verification:
 
 - owner-specific contract and behavior tests pass before the full solution gate.
