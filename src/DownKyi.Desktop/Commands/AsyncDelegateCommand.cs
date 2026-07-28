@@ -3,7 +3,7 @@ using System.IO;
 using System.Net.Http;
 using System.Threading.Tasks;
 using System.Windows.Input;
-using DownKyi.Core.Logging;
+using DownKyi.Application.Diagnostics;
 using Microsoft.Extensions.Logging;
 
 namespace DownKyi.Commands;

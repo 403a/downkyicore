@@ -40,6 +40,14 @@ Scope:
 - Rename `Languanges`, QR/FFmpeg casing, duplicate SeasonsSeries owners and proven generic buckets in isolated rename PRs.
 - Split hand-written oversized owners by responsibility; do not split generated/protocol files only to satisfy LOC.
 
+Logging implementation progress, pending PR integration:
+
+- ADR selected NLog 6.1.4 core with a private `LogFactory`; global NLog and provider-package usage are rejected by architecture tests.
+- Application owns only diagnostic contracts. Infrastructure owns the provider, redactor, async rolling sink, recent buffer, retention worker/policy and file-backed exporter; Core has zero logging implementation files.
+- Concurrent producer/flush loss and a full-suite-only final-entry disposal race were reproduced and fixed with a bounded deferred-write barrier plus a `FileTarget`-only handle reset; the async wrapper is never reconfigured.
+- Final same-machine post-migration runs wrote 10,000/10,000 events with zero drops at 23,482-29,716 events/s. Increased flush latency and allocation, including one slower producer run, remain documented non-gating evidence.
+- Final local gates: strict `AnalysisMode=All` Release build had zero warnings/errors; all 616 tests passed; format changed 0/800 files; logging tests passed five focused rounds and Infrastructure passed ten complete rounds; module-boundary, vulnerable/deprecated package, `git diff --check`, and 935-candidate Gitleaks checks passed.
+
 Verification:
 
 - redaction, flush, rotation, retention and shutdown tests remain green.

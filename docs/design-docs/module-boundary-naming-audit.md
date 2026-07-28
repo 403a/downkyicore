@@ -1,13 +1,13 @@
 # DownKyi Module Boundary And Naming Audit
 
 Status: maintained verified audit
-Last verified: 2026-07-26
-Verification base: `550709030210e4fe91113c9b1c05e451a7dc2120`
-Verification branch: `refactor/desktop-boundary`
+Last verified: 2026-07-28
+Verification base: `70ae964c2dd56018d8578db47c8b9d6fb95e4bfc` plus the Gate 9 logging working tree
+Verification branch: `refactor/logging-boundary`
 
 ## 結論
 
-附件報告指出的七類問題大多成立，但原始證據已被後續重構取代。以目前工作樹重新量測後，Desktop 已成為實際 UI owner、Core 已 headless、下載佇列與 HTTP 邊界也已收斂；剩餘主要缺口是 media execution context 仍讀取一個 UI projection，以及 aria2、FFmpeg、filesystem、logging 的最終 Infrastructure ownership。
+附件報告指出的七類問題大多成立，但原始證據已被後續重構取代。以目前工作樹重新量測後，Desktop 已成為實際 UI owner、Core 已 headless、下載佇列、HTTP 與 logging 邊界也已收斂；剩餘主要缺口是 media execution context 仍讀取一個 UI projection，以及 aria2、FFmpeg 與 filesystem 的最終 Infrastructure ownership。
 
 目前仍不得宣告整體重構完成或發布 v1.1.0：Gate 9 的 logging/naming/large-owner 工作尚未完成，最終 stacked branch 也尚未進入 `main`。版本唯一來源仍是 `1.0.32`。
 
@@ -46,9 +46,9 @@ pwsh ./script/audit-module-boundaries.ps1 `
 | resolved | Core headless boundary | 0 Avalonia/QRCoder/XAML owners | completed by Gate 8 |
 | resolved | service contracts 依賴 ViewModel | 0 interfaces | completed by Gate 8 |
 | resolved | custom collection contract | 0 custom collection references; standard read-only wrappers | completed by Gate 8 |
-| P2 | naming and folder taxonomy inconsistent | 9 duplicate-name groups, 5 generic names, 7 file/type mismatches | confirmed with qualifications |
-| P2 | oversized owners | 14 production files above 500 physical lines | confirmed, decreasing |
-| P2 | logging owner too broad | `ApplicationLogProvider` 715 lines and multiple responsibilities | confirmed design risk, not proven runtime defect |
+| P2 | naming and folder taxonomy inconsistent | 9 duplicate-name groups, 5 generic names, 4 file/type mismatches | confirmed with qualifications |
+| P2 | oversized owners | 13 production files above 500 physical lines | confirmed, decreasing |
+| resolved | logging owner too broad | contracts in Application; 263-line provider plus dedicated Infrastructure sink/buffer/retention/export owners | completed locally; pending Gate 9 PR integration |
 | P1 | AI knowledge environment incomplete | required root/docs structure and reproducible audit scripts now exist | resolved |
 
 ## Resolved Finding 1: Desktop 實際 ownership
@@ -156,23 +156,22 @@ collection contract 測試確認外部 mutation 會被拒絕，Host/XAML smoke �
 
 目前 generic-name baseline 有 5 項：兩個 `Utils`、兩個 `Constant`、一個 `StorageManager`。應以責任拆分和具名 owner 取代，不建議建立會禁止所有 `*Manager`、`*Helper` 的全域 analyzer。
 
-目前 file/type mismatch baseline 已由 7 項降為 5 項；`LoginQR.cs`/`LoginQr` 已正名為 `LoginQr.cs`，`QRCode.cs`/`QrCode` 隨 Core QR renderer 移除。其餘包含 multi-type aggregate file 或 intentionally named command wrapper，需逐檔決策。
+目前 file/type mismatch baseline 已由 7 項降為 4 項；`LoginQR.cs`/`LoginQr` 已正名為 `LoginQr.cs`，`QRCode.cs`/`QrCode` 隨 Core QR renderer 移除，`ApplicationDiagnosticManifest.cs` 也已與第一個型別對齊。其餘包含 multi-type aggregate file 或 intentionally named command wrapper，需逐檔決策。
 
 附件提供的「檔名必須等於第一個型別」正規表示式會誤判 partial、`.axaml.cs`、多型別 DTO 與 interface companion records。此方案不採用。
 
 ## Finding 11: 巨檔與 logging owner
 
-2026-07-26 的實際 boundary audit 有 14 個 production files 超過 500 physical lines；`DownloadPipeline`、`DownloadTaskProjectionStore`、`ViewMyFavoritesViewModel` 與 `ViewPublicationViewModel` 已從 allowlist 移除。其餘最優先的手寫 owners：
+2026-07-28 的實際 boundary audit 有 13 個 production files 超過 500 physical lines；`DownloadPipeline`、`DownloadTaskProjectionStore`、`ViewMyFavoritesViewModel`、`ViewPublicationViewModel` 與原 715 行 `ApplicationLogProvider` 已從 allowlist 移除。其餘最優先的手寫 owners：
 
 - `ViewVideoViewModel.cs` 1,020
 - `SqliteDownloadTaskStore.cs` 928
-- `ApplicationLogProvider.cs` 715
 - `ViewMySpaceViewModel.cs` 669
 - `AddToDownloadService.cs` 667
 
 `AriaClient.cs` 1,137 行屬 RPC client 類型，應先確認生成/同步來源，不可只為行數拆分。
 
-Logging 風險成立，但「換成熟 sink」需要 ADR 與跨平台/隱私 benchmark。專案特有 redaction 必須發生在磁碟、recent buffer 與 diagnostic export 之前。不能只因 class 很大就直接引入新套件。
+Logging 風險已依 ADR 收斂：Application 只保留 contracts，Infrastructure 使用私有 NLog 6.1.4 `LogFactory`，並拆出 recent buffer、retention、exporter 與 redactor。專案 redaction 在 NLog、recent buffer、磁碟與 export 之前完成；module audit 對 Core implementation 與 Infrastructure 外的 NLog consumer 採零容忍。
 
 ## 附件報告的修正
 

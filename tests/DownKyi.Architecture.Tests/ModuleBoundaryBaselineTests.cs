@@ -72,7 +72,6 @@ public sealed class ModuleBoundaryBaselineTests
     {
         "DownKyi.Core/BiliApi/Users/Models/SpaceSeasonsSeries.cs",
         "DownKyi.Core/BiliApi/Users/Models/SpaceSeriesMeta.cs",
-        "DownKyi.Core/Logging/ApplicationLogJsonModels.cs",
         "DownKyi.Core/Models/NfoModels.cs",
         "src/DownKyi.Desktop/Commands/AsyncDelegateCommand.cs"
     };
@@ -81,7 +80,6 @@ public sealed class ModuleBoundaryBaselineTests
     {
         ["DownKyi.Core/Aria2cNet/Client/AriaClient.cs"] = 1137,
         ["DownKyi.Core/BiliApi/BiliUtils/ParseEntrance.cs"] = 586,
-        ["DownKyi.Core/Logging/ApplicationLogProvider.cs"] = 715,
         ["DownKyi.Core/Settings/SettingsManager.Network.cs"] = 671,
         ["src/DownKyi.Desktop/CustomControl/CustomPagerViewModel.cs"] = 506,
         ["src/DownKyi.Desktop/Services/Download/AddToDownloadService.cs"] = 667,

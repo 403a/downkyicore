@@ -1,9 +1,11 @@
+using System.Text;
 using System.Text.Json;
-using DownKyi.Core.Logging;
+using DownKyi.Application.Diagnostics;
+using DownKyi.Infrastructure.Logging;
 using Microsoft.Extensions.Logging;
 using MicrosoftLogLevel = Microsoft.Extensions.Logging.LogLevel;
 
-namespace DownKyi.Core.Tests;
+namespace DownKyi.Infrastructure.Tests;
 
 public sealed class ApplicationLogProviderTests : IDisposable
 {
@@ -23,9 +25,14 @@ public sealed class ApplicationLogProviderTests : IDisposable
         MicrosoftLogLevel.Critical,
         new EventId(4, nameof(FinalEntry)),
         "final-entry");
+    private static readonly Action<ILogger, int, string, Exception?> ConcurrentEntry =
+        LoggerMessage.Define<int, string>(
+            MicrosoftLogLevel.Information,
+            new EventId(5, nameof(ConcurrentEntry)),
+            "concurrent={Index} cookie={Cookie}");
     private readonly string _directory = Path.Combine(
         Path.GetTempPath(),
-        "DownKyi.Core.Tests",
+        "DownKyi.Infrastructure.Tests",
         Guid.NewGuid().ToString("N"));
 
     [Theory]
@@ -67,6 +74,14 @@ public sealed class ApplicationLogProviderTests : IDisposable
             }
 
             await provider.FlushAsync(cancellationToken).ConfigureAwait(true);
+
+            var recent = Assert.Single(provider.GetRecentEvents());
+            var recentText = JsonSerializer.Serialize(recent);
+            Assert.DoesNotContain("query-secret", recentText, StringComparison.Ordinal);
+            Assert.DoesNotContain("scope-secret", recentText, StringComparison.Ordinal);
+            Assert.DoesNotContain("SESSDATA-value", recentText, StringComparison.Ordinal);
+            Assert.DoesNotContain("alice@example.test", recentText, StringComparison.Ordinal);
+            Assert.DoesNotContain("C:\\Users\\alice", recentText, StringComparison.OrdinalIgnoreCase);
 
             var path = Assert.Single(GetEventFiles());
             Assert.Equal("2026-07-18", Directory.GetParent(path)?.Name);
@@ -132,7 +147,9 @@ public sealed class ApplicationLogProviderTests : IDisposable
     public async Task WriterRotatesBeforeAppendingPastConfiguredFileLimit()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var provider = CreateProvider(maxFileBytes: 420);
+        var provider = CreateProvider(
+            maxFileBytes: 420,
+            clock: TimeProvider.System);
         try
         {
             var logger = provider.CreateLogger("Rotation");
@@ -140,13 +157,24 @@ public sealed class ApplicationLogProviderTests : IDisposable
             for (var index = 0; index < 8; index++)
             {
                 RotationEntry(logger, index, payload, null);
+                if ((index & 1) == 1)
+                {
+                    await provider.FlushAsync(cancellationToken).ConfigureAwait(true);
+                }
             }
 
             await provider.FlushAsync(cancellationToken).ConfigureAwait(true);
 
             var files = GetEventFiles();
-            Assert.True(files.Length > 1);
-            Assert.All(files, path => Assert.True(new FileInfo(path).Length <= 620, path));
+            Assert.True(
+                files.Length > 1,
+                string.Join(", ", files.Select(path => $"{path}:{new FileInfo(path).Length}")));
+            var maxEntryBytes = files
+                .SelectMany(File.ReadAllLines)
+                .Max(line => Encoding.UTF8.GetByteCount(line) + 1);
+            Assert.All(files, path => Assert.True(
+                new FileInfo(path).Length <= 420 + maxEntryBytes,
+                path));
         }
         finally
         {
@@ -155,30 +183,26 @@ public sealed class ApplicationLogProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task MaintenanceProtectsActiveFileAndRotationEnforcesCapacity()
+    public async Task MaintenanceProtectsActiveFileAndDeletesClosedFileForCapacity()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var provider = CreateProvider(maxFileBytes: 420, maxTotalBytes: 1);
-        try
-        {
-            var logger = provider.CreateLogger("Capacity");
-            RotationEntry(logger, 1, new string('x', 90), null);
-            await provider.RequestMaintenanceAsync(cancellationToken).ConfigureAwait(true);
+        var dayDirectory = Path.Combine(_directory, "2026-07-18");
+        Directory.CreateDirectory(dayDirectory);
+        var closedPath = Path.Combine(dayDirectory, "events-001.jsonl");
+        var activePath = Path.Combine(dayDirectory, "events.jsonl");
+        await File.WriteAllTextAsync(closedPath, new string('x', 200), cancellationToken).ConfigureAwait(true);
+        await File.WriteAllTextAsync(activePath, new string('y', 200), cancellationToken).ConfigureAwait(true);
+        File.SetLastWriteTimeUtc(closedPath, new DateTime(2026, 7, 18, 0, 0, 0, DateTimeKind.Utc));
+        File.SetLastWriteTimeUtc(activePath, new DateTime(2026, 7, 18, 0, 1, 0, DateTimeKind.Utc));
 
-            Assert.Single(GetEventFiles());
-            Assert.Equal(0, provider.GetMetrics().CapacityDeletionCount);
+        var retention = new ApplicationLogRetentionManager(
+            new ApplicationLogOptions(_directory) { MaxTotalBytes = 1 });
+        retention.Apply(activePath, new DateTimeOffset(2026, 7, 18, 0, 2, 0, TimeSpan.Zero));
 
-            RotationEntry(logger, 2, new string('y', 90), null);
-            await provider.FlushAsync(cancellationToken).ConfigureAwait(true);
-
-            Assert.Single(GetEventFiles());
-            Assert.True(provider.GetMetrics().CapacityDeletionCount >= 1);
-            Assert.True(provider.GetMetrics().CapacityRatio > 1);
-        }
-        finally
-        {
-            await provider.DisposeAsync().ConfigureAwait(true);
-        }
+        Assert.False(File.Exists(closedPath));
+        Assert.True(File.Exists(activePath));
+        Assert.Equal(1, retention.GetMetrics().CapacityDeletionCount);
+        Assert.Equal(200, retention.GetMetrics().RetainedBytes);
     }
 
     [Fact]
@@ -219,6 +243,72 @@ public sealed class ApplicationLogProviderTests : IDisposable
             "final-entry",
             await ReadEventFilesAsync(cancellationToken).ConfigureAwait(true),
             StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ConcurrentLoggingAndFlushPersistsRedactedValidJsonWithoutDrops()
+    {
+        const int producerCount = 4;
+        const int entriesPerProducer = 100;
+        const string secret = "concurrent-secret";
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var provider = CreateProvider(
+            recentEventCapacity: producerCount * entriesPerProducer,
+            queueCapacity: 4096);
+        try
+        {
+            var logger = provider.CreateLogger("Concurrent");
+            var producers = Enumerable.Range(0, producerCount)
+                .Select(producer => Task.Run(
+                    () =>
+                    {
+                        for (var index = 0; index < entriesPerProducer; index++)
+                        {
+                            ConcurrentEntry(
+                                logger,
+                                (producer * entriesPerProducer) + index,
+                                secret,
+                                null);
+                        }
+                    },
+                    cancellationToken))
+                .ToArray();
+            var flushes = Task.Run(
+                async () =>
+                {
+                    for (var index = 0; index < 12; index++)
+                    {
+                        await provider.FlushAsync(cancellationToken).ConfigureAwait(true);
+                        await Task.Yield();
+                    }
+                },
+                cancellationToken);
+
+            await Task.WhenAll([.. producers, flushes]).ConfigureAwait(true);
+            await provider.FlushAsync(cancellationToken).ConfigureAwait(true);
+
+            var lines = GetEventFiles()
+                .SelectMany(File.ReadAllLines)
+                .ToArray();
+            Assert.Equal(producerCount * entriesPerProducer, lines.Length);
+            Assert.Equal(0, provider.GetMetrics().DroppedEntries);
+            Assert.Equal(producerCount * entriesPerProducer, provider.GetMetrics().EventsWritten);
+            Assert.All(lines, line =>
+            {
+                using var document = JsonDocument.Parse(line);
+                Assert.Contains("cookie=[redacted]", document.RootElement.GetProperty("message").GetString(),
+                    StringComparison.Ordinal);
+                Assert.DoesNotContain(secret, line, StringComparison.Ordinal);
+            });
+            Assert.DoesNotContain(
+                secret,
+                JsonSerializer.Serialize(provider.GetRecentEvents()),
+                StringComparison.Ordinal);
+        }
+        finally
+        {
+            await provider.DisposeAsync().ConfigureAwait(true);
+        }
     }
 
     [Fact]
@@ -375,21 +465,125 @@ public sealed class ApplicationLogProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task DiagnosticExportReadsNewestPersistedEventsAfterProviderRestart()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var clock = new ManualTimeProvider(new DateTimeOffset(2026, 7, 18, 3, 4, 5, TimeSpan.Zero));
+        var firstProvider = CreateProvider(recentEventCapacity: 3, clock: clock);
+        var logger = firstProvider.CreateLogger("Persisted");
+        for (var index = 0; index < 6; index++)
+        {
+            RecentEntry(logger, index, null);
+        }
+
+        await firstProvider.FlushAsync(cancellationToken).ConfigureAwait(true);
+        await firstProvider.DisposeAsync().ConfigureAwait(true);
+
+        var secondProvider = CreateProvider(recentEventCapacity: 3, clock: clock);
+        try
+        {
+            Assert.Empty(secondProvider.GetRecentEvents());
+            var manifestPath = await secondProvider
+                .ExportDiagnosticLogAsync(cancellationToken)
+                .ConfigureAwait(true);
+            var exportedEvents = await File.ReadAllLinesAsync(
+                    Path.Combine(Path.GetDirectoryName(manifestPath)!, "events.jsonl"),
+                    cancellationToken)
+                .ConfigureAwait(true);
+
+            Assert.Equal(3, exportedEvents.Length);
+            Assert.DoesNotContain(exportedEvents, line => line.Contains("entry=2", StringComparison.Ordinal));
+            Assert.Contains(exportedEvents, line => line.Contains("entry=3", StringComparison.Ordinal));
+            Assert.Contains(exportedEvents, line => line.Contains("entry=5", StringComparison.Ordinal));
+        }
+        finally
+        {
+            await secondProvider.DisposeAsync().ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task DiagnosticExportSkipsMalformedPersistedLinesAndReportsMetric()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var provider = CreateProvider();
+        var logger = provider.CreateLogger("Malformed");
+        RecentEntry(logger, 1, null);
+        await provider.FlushAsync(cancellationToken).ConfigureAwait(true);
+        await provider.DisposeAsync().ConfigureAwait(true);
+
+        var eventPath = Assert.Single(GetEventFiles());
+        await File.AppendAllTextAsync(eventPath, "{not-json}\n", cancellationToken).ConfigureAwait(true);
+
+        var exportProvider = CreateProvider();
+        try
+        {
+            var manifestPath = await exportProvider
+                .ExportDiagnosticLogAsync(cancellationToken)
+                .ConfigureAwait(true);
+            var exportedEvents = await File.ReadAllLinesAsync(
+                    Path.Combine(Path.GetDirectoryName(manifestPath)!, "events.jsonl"),
+                    cancellationToken)
+                .ConfigureAwait(true);
+            Assert.Single(exportedEvents);
+            Assert.Equal(1, exportProvider.GetMetrics().MalformedExportRecords);
+
+            using var manifest = JsonDocument.Parse(
+                await File.ReadAllTextAsync(manifestPath, cancellationToken).ConfigureAwait(true));
+            Assert.Equal(
+                1,
+                manifest.RootElement
+                    .GetProperty("storage")
+                    .GetProperty("malformedExportRecords")
+                    .GetInt64());
+        }
+        finally
+        {
+            await exportProvider.DisposeAsync().ConfigureAwait(true);
+        }
+    }
+
+    [Fact]
+    public async Task CanceledDiagnosticExportRemovesReservedBundle()
+    {
+        var options = new ApplicationLogOptions(_directory);
+        var retention = new ApplicationLogRetentionManager(options);
+        var exporter = new DiagnosticLogExporter(
+            options,
+            new SensitiveDataRedactor(),
+            retention,
+            new ManualTimeProvider(new DateTimeOffset(2026, 7, 18, 3, 4, 5, TimeSpan.Zero)));
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync().ConfigureAwait(true);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                () => exporter.ExportAsync(
+                    () => new ApplicationLogMetrics(0, 0, 0, 0, 0, 0, 0, 0, null),
+                    cancellation.Token))
+            .ConfigureAwait(true);
+
+        var diagnosticsRoot = Path.Combine(_directory, ApplicationLogRetentionManager.DiagnosticDirectoryName);
+        Assert.Empty(Directory.Exists(diagnosticsRoot)
+            ? Directory.GetDirectories(diagnosticsRoot)
+            : []);
+    }
+
+    [Fact]
     public async Task FlushReportsWriterInitializationFailure()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         Directory.CreateDirectory(Path.GetDirectoryName(_directory)!);
         await File.WriteAllTextAsync(_directory, "not-a-directory", cancellationToken).ConfigureAwait(true);
-        var provider = CreateProvider();
-        try
-        {
-            await Assert.ThrowsAnyAsync<IOException>(
-                () => provider.FlushAsync(cancellationToken)).ConfigureAwait(true);
-        }
-        finally
-        {
-            await provider.DisposeAsync().ConfigureAwait(true);
-        }
+        await Assert.ThrowsAnyAsync<IOException>(
+            async () =>
+            {
+                var provider = CreateProvider();
+                await using (provider.ConfigureAwait(true))
+                {
+                    await Assert.ThrowsAnyAsync<IOException>(
+                        () => provider.FlushAsync(cancellationToken)).ConfigureAwait(true);
+                }
+            }).ConfigureAwait(true);
     }
 
     public void Dispose()
@@ -408,12 +602,13 @@ public sealed class ApplicationLogProviderTests : IDisposable
         int recentEventCapacity = 20,
         long maxFileBytes = 1024 * 1024,
         long maxTotalBytes = 512L * 1024 * 1024,
-        ManualTimeProvider? clock = null)
+        int queueCapacity = 64,
+        TimeProvider? clock = null)
     {
         return new ApplicationLogProvider(
             new ApplicationLogOptions(_directory)
             {
-                QueueCapacity = 64,
+                QueueCapacity = queueCapacity,
                 RecentEventCapacity = recentEventCapacity,
                 MaxFileBytes = maxFileBytes,
                 MaxTotalBytes = maxTotalBytes
@@ -425,7 +620,7 @@ public sealed class ApplicationLogProviderTests : IDisposable
     private string[] GetEventFiles()
     {
         return Directory.Exists(_directory)
-            ? Directory.GetFiles(_directory, "events-*.jsonl", SearchOption.AllDirectories)
+            ? Directory.GetFiles(_directory, "events*.jsonl", SearchOption.AllDirectories)
             : [];
     }
 

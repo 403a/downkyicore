@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
+using DownKyi.Application.Diagnostics;
 
-namespace DownKyi.Core.Logging;
+namespace DownKyi.Infrastructure.Logging;
 
 internal sealed record ApplicationDiagnosticManifest(
     int SchemaVersion,

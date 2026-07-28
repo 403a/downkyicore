@@ -5,7 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.Input;
 using DownKyi.Application.Desktop;
-using DownKyi.Core.Logging;
+using DownKyi.Application.Diagnostics;
 using DownKyi.Core.Settings;
 using DownKyi.Images;
 using DownKyi.Services;

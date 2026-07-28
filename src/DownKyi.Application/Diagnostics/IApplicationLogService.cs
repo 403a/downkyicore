@@ -1,4 +1,4 @@
-namespace DownKyi.Core.Logging;
+namespace DownKyi.Application.Diagnostics;
 
 public interface IApplicationLogService
 {

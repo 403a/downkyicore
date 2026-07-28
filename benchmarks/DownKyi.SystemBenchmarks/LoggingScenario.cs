@@ -1,5 +1,6 @@
 using System.Diagnostics;
-using DownKyi.Core.Logging;
+using DownKyi.Application.Diagnostics;
+using DownKyi.Infrastructure.Logging;
 using Microsoft.Extensions.Logging;
 
 namespace DownKyi.SystemBenchmarks;
@@ -54,7 +55,7 @@ internal static class LoggingScenario
         return new SystemBenchmarkResult(
             "logging",
             $"{eventCount} redacted structured events; queue=2048; recent=300",
-            "bcl-channel-jsonl",
+            "nlog-6.1.4-jsonl",
             Available: true,
             new Dictionary<string, double>(StringComparer.Ordinal)
             {

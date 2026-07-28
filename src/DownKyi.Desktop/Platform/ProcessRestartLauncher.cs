@@ -6,7 +6,7 @@ using System.IO;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
-using DownKyi.Core.Logging;
+using DownKyi.Application.Diagnostics;
 using Microsoft.Extensions.Logging;
 
 namespace DownKyi.Platform;

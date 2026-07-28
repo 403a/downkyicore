@@ -25,7 +25,7 @@ DownKyi 是 .NET 10 與 Avalonia 12 的跨平台 Bilibili 下載器。主要技�
 
 Prism、DryIoc、EventAggregator、RegionManager、ContainerLocator、靜態 `LogManager`、Debugging Console wrapper 與 `SettingsManager` singleton 已移除。不得重新引入。
 
-重要現況：`DownKyi.Desktop` 已實際擁有 Avalonia App、Views、ViewModels、UI projections、desktop adapters、Host composition 與 desktop runtime；`DownKyi` 只保留最小 `Program.cs`。`DownKyi.Core` 已無 Avalonia、QRCoder 或 XAML，但 aria2、FFmpeg、filesystem 與 logging 等相容實作仍主要位於 Core。修改前先執行 `script/audit-module-boundaries.ps1`，不可只依 project 名稱推斷實際 owner。
+重要現況：`DownKyi.Desktop` 已實際擁有 Avalonia App、Views、ViewModels、UI projections、desktop adapters、Host composition 與 desktop runtime；`DownKyi` 只保留最小 `Program.cs`。`DownKyi.Application` 擁有 logging contracts，`DownKyi.Infrastructure` 擁有 logging sink、retention 與 diagnostic export；`DownKyi.Core` 已無 Avalonia、QRCoder、XAML 或 logging 實作，但 aria2、FFmpeg 與 filesystem 相容實作仍主要位於 Core。修改前先執行 `script/audit-module-boundaries.ps1`，不可只依 project 名稱推斷實際 owner。
 
 ## 儲存庫結構
 
@@ -36,11 +36,11 @@ Directory.Packages.props           Central Package Management
 version.txt                        版本唯一來源
 
 src/DownKyi.Domain/                immutable domain state 與 typed results
-src/DownKyi.Application/           use-case contracts、desktop contracts、lifetime
-src/DownKyi.Infrastructure/        SQLite store、clock、write-behind 等 adapters
+src/DownKyi.Application/           use-case、desktop、lifetime、logging contracts
+src/DownKyi.Infrastructure/        SQLite、HTTP、logging、clock、write-behind adapters
 src/DownKyi.Desktop/               Avalonia App、composition、Views、ViewModels、Presentation、desktop runtime
 
-DownKyi.Core/                      Bilibili API、設定、日誌、aria2、FFmpeg 相容核心
+DownKyi.Core/                      Bilibili API、設定、aria2、FFmpeg 相容核心
 DownKyi/                           最小可執行入口，只委派至 DownKyi.Desktop
 
 tests/DownKyi.Domain.Tests/
