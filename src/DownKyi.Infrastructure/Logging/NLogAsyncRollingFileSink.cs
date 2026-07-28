@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using DownKyi.Application.Diagnostics;
 using NLog;
+using NLog.Common;
 using NLog.Config;
 using NLog.Layouts;
 using NLog.Targets;
@@ -61,9 +62,7 @@ internal sealed class NLogAsyncRollingFileSink : IAsyncDisposable
             _options.QueueCapacity,
             AsyncTargetWrapperOverflowAction.Discard)
         {
-            // FileTarget checks ArchiveAboveSize between writes. A multi-event batch can
-            // otherwise overshoot the configured limit before the next archive check.
-            BatchSize = 1,
+            BatchSize = Math.Min(200, _options.QueueCapacity),
             TimeToSleepBetweenBatches = 0,
             ForceLockingQueue = true
         };
@@ -258,6 +257,14 @@ internal sealed class NLogAsyncRollingFileSink : IAsyncDisposable
 
     private sealed class ReopenableFileTarget(string name) : FileTarget(name)
     {
+        protected override void Write(IList<AsyncLogEventInfo> logEvents)
+        {
+            foreach (var logEvent in logEvents)
+            {
+                Write(logEvent);
+            }
+        }
+
         public void ResetFileHandles()
         {
             CloseTarget();
