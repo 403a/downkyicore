@@ -640,6 +640,44 @@ public sealed class MediaAndHttpRuntimeArchitectureTests
     }
 
     [Fact]
+    public void MySpaceBindingStateRemainsSeparateFromItsWorkflowOwner()
+    {
+        var viewModelSource = File.ReadAllText(Path.Combine(
+            RepositoryRoot,
+            "src", "DownKyi.Desktop",
+            "ViewModels",
+            "ViewMySpaceViewModel.cs"));
+        var stateSource = File.ReadAllText(Path.Combine(
+            RepositoryRoot,
+            "src", "DownKyi.Desktop",
+            "ViewModels",
+            "ViewMySpaceViewModel.State.cs"));
+
+        Assert.All(
+            new[] { viewModelSource, stateSource },
+            source => Assert.True(source.Count(character => character == '\n') < 500));
+        Assert.Contains("IUserSpacePageCoordinator", viewModelSource, StringComparison.Ordinal);
+        Assert.Contains("ISettingsStore", viewModelSource, StringComparison.Ordinal);
+        Assert.Contains("ExecuteBackSpace", viewModelSource, StringComparison.Ordinal);
+        Assert.Contains("UpdateSpaceInfoAsync", viewModelSource, StringComparison.Ordinal);
+        Assert.Contains("OnNavigatedTo", viewModelSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("_arrowBack", viewModelSource, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "private ObservableCollection<SpaceItem> _statusList",
+            viewModelSource,
+            StringComparison.Ordinal);
+        Assert.Contains("_arrowBack", stateSource, StringComparison.Ordinal);
+        Assert.Contains(
+            "private ObservableCollection<SpaceItem> _statusList",
+            stateSource,
+            StringComparison.Ordinal);
+        Assert.Contains("ObservableCollection<SpaceItem>", stateSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("IUserSpacePageCoordinator", stateSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("ISettingsStore", stateSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("CancellationTokenSource", stateSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void LegacyUpgradeDialogDelegatesMigrationAndOwnsCancellation()
     {
         var viewModelSource = File.ReadAllText(Path.Combine(
