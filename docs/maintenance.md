@@ -7,7 +7,7 @@ This document records the project maintenance routine for dependencies, external
 1. Update managed package versions only in `Directory.Packages.props`.
 2. Run `dotnet restore ./DownKyi.sln`.
 3. Run `dotnet build ./DownKyi.sln -c Release --no-restore --no-incremental -p:TreatWarningsAsErrors=true -p:CodeAnalysisTreatWarningsAsErrors=true -p:EnableNETAnalyzers=true -p:AnalysisMode=All -p:EnforceCodeStyleInBuild=true`.
-4. Run `dotnet test ./DownKyi.sln -c Release --no-restore --no-build`.
+4. Run `pwsh ./script/test-solution.ps1 -Configuration Release -NoRestore -NoBuild`.
 5. Run `dotnet package list --project ./DownKyi.sln --vulnerable --include-transitive`.
 6. Run `dotnet package list --project ./DownKyi.sln --deprecated` and review the report.
 
@@ -99,6 +99,7 @@ Settings changes must pass `SettingsStoreTests`, `SettingsArchitectureTests`, th
 - Application-facing records, metrics and `IApplicationLogService` live in `DownKyi.Application.Diagnostics`. The provider, redactor, NLog sink, recent buffer, retention and exporter live in `DownKyi.Infrastructure.Logging`; Core and Desktop cannot own a logging implementation.
 - `ApplicationLogProvider` is the single MEL adapter and redaction boundary. It delegates to separate bounded recent-buffer, private NLog sink, retention and file-backed exporter owners. Do not create another log queue, file writer or export sanitizer.
 - Only NLog core is allowed. The sink owns a private `LogFactory`; global `LogManager` and `NLog.Extensions.Logging` are prohibited.
+- Keep per-record writes in the private `ReopenableFileTarget` batch override. NLog flushes the complete async queue as one `FileTarget` batch regardless of wrapper batch size, so the override is what guarantees a size-roll check between JSONL records while producers remain asynchronous.
 - Logging scopes carry correlation, download-task, or child-process context; messages must not contain raw cookies, sensitive query values, account IDs, email addresses, or full personal paths.
 - The writer queue and recent-event buffer stay bounded. A full queue may drop an entry and increments the diagnostic drop counter; logging must never block a download or UI thread.
 - Redaction completes before a record reaches NLog or the recent buffer. JSON serialization runs on NLog's async target through the thread-agnostic project layout.

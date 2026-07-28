@@ -1217,6 +1217,7 @@ paths:
   - src/DownKyi.Desktop/ViewModels/ViewMySpaceViewModel.cs
   - src/DownKyi.Desktop/ViewModels/ViewMySpaceViewModel.State.cs
   - src/DownKyi.Desktop/ViewModels/ViewMyBangumiFollowViewModel.cs
+  - src/DownKyi.Desktop/ViewModels/ViewMyBangumiFollowViewModel.State.cs
   - src/DownKyi.Desktop/Views/ViewPublication.axaml
   - src/DownKyi.Desktop/Views/ViewMyBangumiFollow.axaml
 responsibility: Projects publication pages and the signed-in user's profile/statistics while owning pager, selection, navigation, and visibility state.
@@ -1232,6 +1233,7 @@ contracts:
   - Replacing/leaving publication or bangumi pagers detaches handlers and cancels page/download work.
   - My-space renders the primary profile first; balance/relation failure does not hide an already loaded profile.
   - My-space binding properties and collections live in a service-free state partial below 500 lines; navigation, cancellation, settings, profile/stat loading, and projection remain in the workflow owner below 500 lines.
+  - Bangumi-follow's twelve XAML-facing properties live in a service-free state partial below 150 lines; pager events, typed navigation, cancellation, page loading, download coordination and batch projection remain in the workflow owner below 450 lines.
   - Canceling publication directory selection returns before media parsing.
   - Publication keyword search uses the WBI endpoint's exact `page.count` and applies one batch projection.
   - Returning from a child route preserves the same query, page, and media instances; only an interrupted page request is resumed.
@@ -1239,6 +1241,7 @@ hazards:
   - Per-item dispatcher calls stutter on large publication pages and can project stale rows after navigation.
   - Worker-thread mutation of profile properties and `StatusList` is unsafe for Avalonia bindings.
   - Binding status flags must be assigned both true and false; retaining an old false value hides a newly bound account.
+  - Moving pager, coordinator, cancellation, logger or navigation ownership into the bangumi-follow state partial would couple stable bindings back to runtime workflow.
 tests:
   - test.user-space-pages
   - test.download-add
@@ -2186,6 +2189,8 @@ id: workflow.strict-pr-ci
 type: workflow
 paths:
   - .github/workflows/quality.yml
+  - .github/workflows/build.yml
+  - script/test-solution.ps1
 responsibility: Blocks PRs that break formatting, restore, Release build, warnings-as-errors, unit tests, or vulnerable package policy.
 inbound:
   - github.pull_request
@@ -2198,9 +2203,12 @@ contracts:
   - Windows, Linux, and macOS builds expose the same analyzer diagnostics.
   - Compiler and CA warnings block every PR on Windows, Linux, and macOS with the repository default `CodeAnalysisTreatWarningsAsErrors=true`.
   - Cleaned analyzer rules are promoted to errors and cannot regress.
+  - Test projects run in stable path order so one constrained runner cannot make independent xUnit hosts starve one another during discovery or shutdown.
+  - Every test project writes a distinct assembly-named TRX; no solution-level logger filename may overwrite earlier project evidence.
 hazards:
   - Turning every historical analyzer suggestion into PR failure makes unrelated PRs impossible.
   - Broad NoWarn, global suppressions, nullable disable, or analyzer exclusions hide new defects.
+  - Restoring one parallel solution-level `dotnet test` command can reintroduce Windows foreground-thread timeouts and TRX overwrite.
 tests:
   - github.actions
 ```

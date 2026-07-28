@@ -157,10 +157,6 @@ public sealed class ApplicationLogProviderTests : IDisposable
             for (var index = 0; index < 8; index++)
             {
                 RotationEntry(logger, index, payload, null);
-                if ((index & 1) == 1)
-                {
-                    await provider.FlushAsync(cancellationToken).ConfigureAwait(true);
-                }
             }
 
             await provider.FlushAsync(cancellationToken).ConfigureAwait(true);
@@ -171,7 +167,7 @@ public sealed class ApplicationLogProviderTests : IDisposable
                 string.Join(", ", files.Select(path => $"{path}:{new FileInfo(path).Length}")));
             var maxEntryBytes = files
                 .SelectMany(File.ReadAllLines)
-                .Max(line => Encoding.UTF8.GetByteCount(line) + 1);
+                .Max(line => Encoding.UTF8.GetByteCount(line) + Encoding.UTF8.GetByteCount(Environment.NewLine));
             Assert.All(files, path => Assert.True(
                 new FileInfo(path).Length <= 420 + maxEntryBytes,
                 path));

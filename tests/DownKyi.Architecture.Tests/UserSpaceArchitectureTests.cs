@@ -88,6 +88,67 @@ public sealed class UserSpaceArchitectureTests
     }
 
     [Fact]
+    public void BangumiFollowBindingStateRemainsServiceFreeAndBelowTheOwnerBudget()
+    {
+        var viewModelDirectory = Path.Combine(
+            RepositoryRoot,
+            "src", "DownKyi.Desktop",
+            "ViewModels");
+        var workflowPath = Path.Combine(viewModelDirectory, "ViewMyBangumiFollowViewModel.cs");
+        var statePath = Path.Combine(viewModelDirectory, "ViewMyBangumiFollowViewModel.State.cs");
+        var workflowSource = File.ReadAllText(workflowPath);
+        var stateSource = File.ReadAllText(statePath);
+
+        Assert.True(
+            File.ReadLines(workflowPath).Count() <= 450,
+            "Bangumi-follow workflow owner exceeded its size budget.");
+        Assert.True(
+            File.ReadLines(statePath).Count() <= 150,
+            "Bangumi-follow binding-state owner exceeded its size budget.");
+        Assert.Contains("IUserSpacePageCoordinator", workflowSource, StringComparison.Ordinal);
+        Assert.Contains("IContentDownloadCoordinator", workflowSource, StringComparison.Ordinal);
+        Assert.Contains("CancellationTokenSource", workflowSource, StringComparison.Ordinal);
+        Assert.Contains("AppNavigationContext", workflowSource, StringComparison.Ordinal);
+        Assert.Contains("CustomPagerViewModel", workflowSource, StringComparison.Ordinal);
+        Assert.Contains("ILogger<ViewMyBangumiFollowViewModel>", workflowSource, StringComparison.Ordinal);
+
+        foreach (var property in new[]
+        {
+            "PageName",
+            "ArrowBack",
+            "DownloadManage",
+            "TabHeaders",
+            "SelectTabId",
+            "IsEnabled",
+            "ContentVisibility",
+            "Medias",
+            "IsSelectAll",
+            "Loading",
+            "LoadingVisibility",
+            "NoDataVisibility"
+        })
+        {
+            Assert.Contains($" {property}", stateSource, StringComparison.Ordinal);
+        }
+
+        foreach (var forbidden in new[]
+        {
+            "IUserSpacePageCoordinator",
+            "IContentDownloadCoordinator",
+            "CancellationToken",
+            "AppNavigation",
+            "CustomPagerViewModel",
+            "ILogger",
+            "LoadBangumiFollowPageAsync(",
+            "AddAsync(",
+            "Navigate("
+        })
+        {
+            Assert.DoesNotContain(forbidden, stateSource, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void PublicFavoriteFoldersUseTypedRegionNavigationWithoutPrism()
     {
         var viewModel = File.ReadAllText(Path.Combine(

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using DownKyi.Application.Diagnostics;
 using NLog;
+using NLog.Common;
 using NLog.Config;
 using NLog.Layouts;
 using NLog.Targets;
@@ -256,6 +257,14 @@ internal sealed class NLogAsyncRollingFileSink : IAsyncDisposable
 
     private sealed class ReopenableFileTarget(string name) : FileTarget(name)
     {
+        protected override void Write(IList<AsyncLogEventInfo> logEvents)
+        {
+            foreach (var logEvent in logEvents)
+            {
+                Write(logEvent);
+            }
+        }
+
         public void ResetFileHandles()
         {
             CloseTarget();
