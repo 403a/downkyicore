@@ -6,6 +6,17 @@ public sealed class ModuleBoundaryBaselineTests
 {
     private static readonly string RepositoryRoot = FindRepositoryRoot();
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(2);
+    private static readonly Regex NamespaceDeclarationRegex = new(
+        @"^[ \t]*namespace[ \t]+([A-Za-z_][\w\.]*)[ \t]*[;{]",
+        RegexOptions.CultureInvariant | RegexOptions.Multiline | RegexOptions.NonBacktracking,
+        RegexTimeout);
+    private static readonly Regex TypeDeclarationRegex = new(
+        @"^[ \t]*(?:(?:public|internal|protected|private|file)[ \t]+)?" +
+        @"(?:(?:sealed|abstract|static|partial)[ \t]+)*" +
+        @"(?:class|record(?:[ \t]+(?:class|struct))?|struct|interface|enum)[ \t]+" +
+        @"([A-Za-z_][\w]*)",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking,
+        RegexTimeout);
 
     private static readonly Dictionary<string, HashSet<string>> KnownDuplicateSimpleNames =
         new(StringComparer.Ordinal)
@@ -44,7 +55,6 @@ public sealed class ModuleBoundaryBaselineTests
         ["DownKyi.Core/BiliApi/BiliUtils/ParseEntrance.cs"] = 586,
         ["src/DownKyi.Desktop/CustomControl/CustomPagerViewModel.cs"] = 506,
         ["src/DownKyi.Desktop/Services/Download/AddToDownloadService.cs"] = 667,
-        ["src/DownKyi.Desktop/ViewModels/Settings/ViewVideoViewModel.cs"] = 1020,
         ["src/DownKyi.Desktop/ViewModels/ViewMyBangumiFollowViewModel.cs"] = 531,
         ["src/DownKyi.Desktop/ViewModels/ViewMySpaceViewModel.cs"] = 669,
         ["src/DownKyi.Desktop/ViewModels/ViewUserSpaceViewModel.cs"] = 569,
@@ -210,6 +220,18 @@ public sealed class ModuleBoundaryBaselineTests
             .ToArray();
 
         AssertSubset(actual, KnownFileTypeMismatches, "file/type mismatch");
+    }
+
+    [Fact]
+    public void TypeDeclarationScanUsesLineScopedNonBacktrackingMatching()
+    {
+        var adversarialLine =
+            $"{new string(' ', 100_000)}{string.Concat(Enumerable.Repeat("partial ", 20_000))}not-a-type";
+        var source = $"{adversarialLine}{Environment.NewLine}public sealed class ExpectedType";
+
+        var declarations = ReadDeclaredTypeNames(source);
+
+        Assert.Equal(["ExpectedType"], declarations);
     }
 
     [Fact]
@@ -385,11 +407,7 @@ public sealed class ModuleBoundaryBaselineTests
             .SelectMany(path =>
             {
                 var source = File.ReadAllText(path);
-                var namespaceMatch = Regex.Match(
-                    source,
-                    @"(?m)^\s*namespace\s+([A-Za-z_][\w\.]*)\s*[;{]",
-                    RegexOptions.CultureInvariant,
-                    RegexTimeout);
+                var namespaceMatch = NamespaceDeclarationRegex.Match(source);
                 if (!namespaceMatch.Success)
                 {
                     return [];
@@ -405,19 +423,19 @@ public sealed class ModuleBoundaryBaselineTests
 
     private static string[] ReadDeclaredTypeNames(string source)
     {
-        const string declarationPattern =
-            @"(?m)^\s*(?:public|internal|protected|private|file)?\s*" +
-            @"(?:sealed\s+|abstract\s+|static\s+|partial\s+)*" +
-            @"(?:class|record(?:\s+class|\s+struct)?|struct|interface|enum)\s+" +
-            @"([A-Za-z_][\w]*)";
-        return Regex.Matches(
-                source,
-                declarationPattern,
-                RegexOptions.CultureInvariant,
-                RegexTimeout)
-            .Select(match => match.Groups[1].Value)
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
+        var names = new List<string>();
+        var knownNames = new HashSet<string>(StringComparer.Ordinal);
+        using var reader = new StringReader(source);
+        while (reader.ReadLine() is { } line)
+        {
+            var match = TypeDeclarationRegex.Match(line);
+            if (match.Success && knownNames.Add(match.Groups[1].Value))
+            {
+                names.Add(match.Groups[1].Value);
+            }
+        }
+
+        return names.ToArray();
     }
 
     private static IEnumerable<string> EnumerateProductionFiles(string pattern)

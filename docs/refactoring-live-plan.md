@@ -3,7 +3,7 @@
 Status: active
 Last updated: 2026-07-28
 Current group: Gate 9 large-owner convergence
-Current branch: `refactor/network-settings-viewmodel-owner`
+Current branch: `refactor/video-settings-viewmodel-owner`
 
 This file contains only unfinished or not-yet-integrated work. Completed PR 02-32 items are not restored. Design rationale belongs in `design-docs`; product acceptance belongs in `product-specs`.
 
@@ -27,6 +27,7 @@ The previous `Status: complete` was incorrect.
 - Gate 9 SQLite store ownership passed Windows/Linux/macOS quality run `30349573925` and CodeQL run `30349573991`; all seven check-runs had zero annotations. PR #96 was merged into `refactor/pr-30-32-release-hardening` as merge commit `9f570f4`. The Store fell from 928 to 447 lines with byte-content-equivalent SQL literals and unchanged schema/resume contracts.
 - The authenticated read-only API audit was refreshed against `9f570f4`; all 14 probes passed with zero drift, Gitleaks found zero secrets, and all seven remote checks had zero annotations. PR #97 was merged into `refactor/pr-30-32-release-hardening` as merge commit `3394ff5`.
 - Gate 9 Settings network/aria ownership passed Windows/Linux/macOS quality run `30351528461` and CodeQL run `30351528583`; all seven check-runs had zero annotations. PR #98 was merged into `refactor/pr-30-32-release-hardening` as merge commit `ffa5674`. The 671-line mixed partial became 319-line general network and 355-line aria runtime owners with all 44 public compatibility methods unchanged.
+- Gate 9 network-settings ViewModel ownership passed Windows/Linux/macOS quality run `30352739481` and Analyze/CodeQL run `30352739315`; all seven check-runs had zero annotations. PR #99 was merged into `refactor/pr-30-32-release-hardening` as merge commit `660d223`. The 649-line mixed owner became 384-line navigation/general-command, 275-line aria-command, and 292-line binding-state owners with XAML binding names unchanged.
 - `version.txt` remains `1.0.32`; v1.1.0 has not passed its release gate.
 
 No release tag may be created while any release blocker below remains.
@@ -40,13 +41,13 @@ Owner branches: separate responsibility-based large-owner PRs.
 Scope:
 
 - Split hand-written oversized owners by responsibility; do not split generated/protocol files only to satisfy LOC.
-- Current owner: separate the 649-line network settings ViewModel into navigation/general-command, aria-command, and binding-state partial owners without changing command property names, XAML bindings, initialization, coordinator calls, or restart prompts.
+- Current owner: separate the 1,020-line video settings ViewModel into navigation/playback/transcoding, directory/content/filename-command, and binding-state partial owners without changing command property names, XAML bindings, initialization, settings persistence, or FFmpeg behavior.
 
 Current owner progress, pending PR integration:
 
-- Method-level comparison confirms all 28 methods and 25 command properties are present and content-equivalent after line-ending normalization.
-- The three partial owners are 384, 275, and 292 lines. The oversized inventory fell from 11 to 10, and architecture tests prevent aria command wiring from returning to the general owner.
-- Local gates: strict `AnalysisMode=All` Release build has zero warnings/errors; all 619 tests pass, including 58 focused architecture tests and 13 Desktop/Host smoke tests; format reports 0/810 changed files; vulnerable/deprecated package audits, `git diff --check`, and 936-candidate Gitleaks checks pass.
+- Method/member inventory confirms all 27 methods, 54 public members, and 56 private fields are present; method bodies are content-equivalent after whitespace normalization.
+- The three partial owners are 451, 353, and 248 lines. The oversized inventory fell from 10 to 9, and architecture tests prevent binding state or content/naming commands from returning to the main owner.
+- Local gates: strict `AnalysisMode=All` Release build has zero warnings/errors; all 621 tests pass, including 184 architecture tests and 13 Desktop/Host smoke tests; format reports 0/812 changed files; vulnerable/deprecated package audits, `git diff --check`, and 938-candidate Gitleaks checks pass. The reproducible boundary audit reports 9 oversized production files. A Windows CI regex-timeout exposed by the first remote run now has a deterministic adversarial regression test and line-scoped non-backtracking declaration scanner.
 
 Verification:
 
