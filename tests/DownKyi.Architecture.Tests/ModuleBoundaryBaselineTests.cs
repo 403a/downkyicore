@@ -55,7 +55,6 @@ public sealed class ModuleBoundaryBaselineTests
         ["DownKyi.Core/BiliApi/BiliUtils/ParseEntrance.cs"] = 586,
         ["src/DownKyi.Desktop/CustomControl/CustomPagerViewModel.cs"] = 506,
         ["src/DownKyi.Desktop/ViewModels/ViewMyBangumiFollowViewModel.cs"] = 531,
-        ["src/DownKyi.Desktop/ViewModels/ViewUserSpaceViewModel.cs"] = 569,
         ["src/DownKyi.Desktop/Views/Settings/ViewNetwork.axaml"] = 608,
         ["src/DownKyi.Desktop/Views/ViewVideoDetail.axaml"] = 565
     };

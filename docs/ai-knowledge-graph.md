@@ -1178,6 +1178,7 @@ id: viewmodel.user-space
 type: viewmodel
 paths:
   - src/DownKyi.Desktop/ViewModels/ViewUserSpaceViewModel.cs
+  - src/DownKyi.Desktop/ViewModels/ViewUserSpaceViewModel.State.cs
   - src/DownKyi.Desktop/ViewModels/ViewUserSpaceViewModel.Favorites.cs
   - src/DownKyi.Desktop/ViewModels/UserSpace/ViewFavoritesViewModel.cs
   - src/DownKyi.Desktop/Views/UserSpace/ViewFavorites.axaml
@@ -1195,8 +1196,10 @@ contracts:
   - Returning to the same MID restores the existing UserSpace instance and its tab/list state instead of clearing and reloading the snapshot.
   - Public favorite folders with zero media are omitted; selecting a folder uses the typed `UserSpaceFavorites -> PublicFavorites` route chain.
   - Favorite-folder API failure is optional profile metadata: known network/schema failures produce a sanitized warning and an empty folder tab, while cancellation still propagates.
+  - Twenty XAML-facing profile/visibility/tab properties live in a service-free state partial below 200 lines. Typed navigation, same-MID preservation, cancellation, settings, load coordination and projection remain in the workflow owner below 450 lines.
 hazards:
   - Optional profile metadata failures must remain sanitized and cannot suppress cancellation.
+  - Moving coordinator, settings, cancellation, logger or navigation dependencies into the state partial would couple stable bindings back to runtime ownership.
 tests:
   - test.user-space-favorites
   - test.typed-navigation

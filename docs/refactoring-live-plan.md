@@ -3,7 +3,7 @@
 Status: active
 Last updated: 2026-07-28
 Current group: Gate 9 large-owner convergence
-Current branch: `refactor/add-to-download-service-owner`
+Current branch: `refactor/user-space-viewmodel-owner`
 
 This file contains only unfinished or not-yet-integrated work. Completed PR 02-32 items are not restored. Design rationale belongs in `design-docs`; product acceptance belongs in `product-specs`.
 
@@ -31,6 +31,7 @@ The previous `Status: complete` was incorrect.
 - Gate 9 video-settings ViewModel ownership passed Windows/Linux/macOS quality run `30354918725` and CodeQL run `30354918709`; all seven check-runs had zero annotations. PR #100 was merged into `refactor/pr-30-32-release-hardening` as merge commit `e663281`. The 1,020-line mixed owner became 451-line navigation/playback/transcoding, 353-line content/naming-command, and 248-line binding-state owners. The first Windows run exposed a declaration-regex timeout; line-scoped non-backtracking matching and an adversarial regression test fixed it before merge.
 - Gate 9 my-space ViewModel ownership passed Windows/Linux/macOS quality run `30356078414` and CodeQL run `30356078409`; all seven check-runs had zero annotations. PR #101 was merged into `refactor/pr-30-32-release-hardening` as merge commit `11ee968`. The 669-line owner became a 408-line navigation/profile workflow owner and a 265-line service-free binding-state owner without changing typed navigation, cancellation or XAML binding contracts.
 - The authenticated read-only API audit was repeated against `11ee968`; the isolated process reloaded the credential from `~/.codex/.env`, the `/nav` hard gate passed, and all 14 allowlisted probes passed with zero contract drift. Gitleaks inspected 939 candidate files and reported zero findings. Strict PR CI run `30357290660` and CodeQL run `30357290313` completed seven successful checks with zero annotations; PR #102 was merged into `refactor/pr-30-32-release-hardening` as merge commit `cc8a9ca`.
+- Gate 9 add-to-download ownership passed Windows/Linux/macOS quality run `30359317685` and CodeQL run `30359317951`; all seven check-runs had zero annotations. PR #103 was merged into `refactor/pr-30-32-release-hardening` as merge commit `a00812e`. The 663-line mixed owner became a 275-line session coordinator plus dedicated duplicate, stateless draft and optional metadata owners without changing settings snapshots, task shape, cancellation or admission.
 - `version.txt` remains `1.0.32`; v1.1.0 has not passed its release gate.
 
 No release tag may be created while any release blocker below remains.
@@ -44,14 +45,13 @@ Owner branches: separate responsibility-based large-owner PRs.
 Scope:
 
 - Split hand-written oversized owners by responsibility; do not split generated/protocol files only to satisfy LOC.
-- Current owner: separate the oversized add-to-download session coordinator from duplicate policy, draft construction and optional movie-metadata ownership without changing queue admission, settings snapshots, cancellation, completed-record policy, persisted task shape or resume behavior.
+- Current owner: separate the oversized user-space ViewModel into navigation/load workflow and service-free binding-state owners without changing typed back navigation, same-MID projection preservation, cancellation, tabs, profile rendering or XAML binding names.
 
 Current owner progress, pending PR integration:
 
-- The 663-line mixed owner is now a 275-line session coordinator plus 114-line duplicate policy, 206-line stateless draft factory, 85-line optional metadata builder and immutable content-selection value.
-- Existing tag/cancellation/admission tests and new duplicate/draft owner tests pass 16/16. The completed-record Ask path proves persistence transitions to `Deleted` before the UI history projection is removed.
-- Architecture tests prevent the session from regaining list/projection/notification, filename/zone, legacy model construction or tag-loading ownership. Helper owners cannot obtain `ISettingsStore`; one immutable `ApplicationSettings` snapshot enters draft construction.
-- The oversized inventory fell from 8 to 7. Strict `AnalysisMode=All` Release build has zero warnings/errors; all 631 tests pass, including 186 architecture tests and 13 Desktop/Host smoke tests; format reports 0/818 changed files; vulnerable/deprecated package audits, `git diff --check`, and 944-candidate Gitleaks checks pass. Remote gates remain before integration.
+- The original 569-line owner is now a 412-line navigation/load/projection workflow owner plus a 161-line service-free binding-state owner; the existing 27-line favorite-folder partial remains unchanged.
+- The state-owner architecture test fixes all 20 XAML-facing properties and rejects settings, coordinator, cancellation, navigation, logger or load ownership. Focused strict build and 19 navigation/user-space/boundary tests pass.
+- The oversized inventory fell from 7 to 6. Strict `AnalysisMode=All` Release build has zero warnings/errors; all 632 tests pass, including 187 architecture tests and 13 Desktop/Host smoke tests; format, vulnerable/deprecated package audits, `git diff --check`, and 945-candidate Gitleaks checks pass. Remote gates remain before integration.
 
 Verification:
 
