@@ -88,6 +88,7 @@ flowchart TD
     AsyncImage["ui.async-image-loader\nCustomControl/AsyncImageLoader"]
     MainVm["viewmodel.main-window\nsrc/DownKyi.Desktop/ViewModels/MainWindowViewModel.cs"]
     IndexVm["viewmodel.index\nViewIndexViewModel.cs"]
+    Search["service.search-routing\nSearchService.cs"]
     LoginVm["viewmodel.login\nViewLoginViewModel.cs"]
     LoginQrRenderer["ui.login-qr-renderer\nLoginQrCodeRenderer.cs"]
     AccountSession["service.account-session\nServices/Account"]
@@ -108,6 +109,7 @@ flowchart TD
     BiliHelperVm["viewmodel.bili-helper\nViewBiliHelperViewModel.cs"]
     BiliHelper["service.bili-helper\nBiliHelperCoordinator.cs"]
     Resolver["service.video-input-resolver\nsrc/DownKyi.Application/Media"]
+    InputEntrance["core.input-entrance\nParseEntrance partial owners"]
     Parser["service.video-parse-coordinator\nsrc/DownKyi.Desktop/Services/Video/VideoParseCoordinator.cs"]
     InfoServices["service.info-services\nVideo/Bangumi/Cheese services"]
     VideoTags["service.video-tag-provider\nVideoTagProvider + VideoPage.LoadTagsAsync"]
@@ -172,6 +174,10 @@ flowchart TD
     MainVm -->|navigates| IndexVm
     MainVm -->|navigates| LoginVm
     MainVm -->|navigates| VideoVm
+    MainVm -->|routes input through| Search
+    IndexVm -->|routes input through| Search
+    Search -->|parses through| InputEntrance
+    Search -->|creates typed requests through| Navigation
     IndexVm -->|refreshes| AccountSession
     LoginVm -->|polls and persists| AccountSession
     LoginVm -->|renders absolute login URI| LoginQrRenderer
@@ -194,6 +200,7 @@ flowchart TD
     Navigation -->|restores existing views| MainWindow
     BiliHelperVm -->|calls| BiliHelper
     BiliHelper -->|uses cancellable CPU helpers| BiliApi
+    BiliHelper -->|validates AV and BV input through| InputEntrance
     VideoVm -->|calls| Resolver
     VideoVm -->|calls| Parser
     SettingsVms -->|network commands| NetworkSettings
@@ -201,6 +208,8 @@ flowchart TD
     NetworkSettings -->|validates and writes| Settings
     NetworkSettings -->|requests restart| Lifecycle
     Parser -->|calls| InfoServices
+    InfoServices -->|normalizes media identifiers through| InputEntrance
+    UserSpacePages -->|validates publication-list routes through| InputEntrance
     InfoServices -->|executes signed requests through| WbiExecutor
     InfoServices -->|calls unsigned endpoints| BiliApi
     InfoServices -->|creates current-token loaders| VideoTags
@@ -1435,6 +1444,66 @@ hazards:
   - Deep-copying pages creates stale parallel state and increases memory for large collections.
 tests:
   - test.video-search-state
+```
+
+### service.search-routing
+
+```yaml
+id: service.search-routing
+type: service
+paths:
+  - src/DownKyi.Desktop/Services/SearchService.cs
+responsibility: Converts recognized user input into typed application navigation requests.
+inbound:
+  - viewmodel.main-window
+  - viewmodel.index
+outbound:
+  - core.input-entrance
+  - service.typed-navigation
+contracts:
+  - Recognized media, user, favorite, and publication-list input produces `AppNavigationRequest`; no Prism event or string ViewName is used.
+  - Unrecognized input returns false without navigation.
+hazards:
+  - `ViewIndexViewModel` still constructs this service directly instead of using the Host-owned singleton; converge that ownership before release.
+tests:
+  - test.input-parsing
+  - test.typed-navigation
+  - test.architecture-boundaries
+```
+
+### core.input-entrance
+
+```yaml
+id: core.input-entrance
+type: core
+paths:
+  - DownKyi.Core/BiliApi/BiliUtils/ParseEntrance.cs
+  - DownKyi.Core/BiliApi/BiliUtils/ParseEntrance.Uri.cs
+  - DownKyi.Core/BiliApi/BiliUtils/ParseEntrance.Video.cs
+  - DownKyi.Core/BiliApi/BiliUtils/ParseEntrance.Bangumi.cs
+  - DownKyi.Core/BiliApi/BiliUtils/ParseEntrance.Cheese.cs
+  - DownKyi.Core/BiliApi/BiliUtils/ParseEntrance.Favorites.cs
+  - DownKyi.Core/BiliApi/BiliUtils/ParseEntrance.UserSpace.cs
+  - DownKyi.Core/BiliApi/BiliUtils/ParseEntrance.UserVideoList.cs
+responsibility: Normalizes supported Bilibili media, favorite, user-space, and publication-list identifiers at one headless input boundary.
+inbound:
+  - service.info-services
+  - service.bili-helper
+  - service.user-space-pages
+  - service.search-routing
+outbound: []
+contracts:
+  - Public method names and URL constants are compatibility surface; partial files divide responsibility without creating a second parser.
+  - Canonical AV/BV, bangumi, cheese, favorite, user-space, and bare publication-list forms retain their established numeric or string result.
+  - Unrecognized non-null input returns the established `-1` or empty-string sentinel; null input throws `ArgumentNullException`.
+  - User-space URLs require an HTTP(S) URI with the exact `space.bilibili.com` host and one numeric path segment; host substrings and mixed paths are rejected.
+  - A bare `bilibili.com/list/<positive MID>` is an uploader list, while `list/ml...` remains a favorites route and non-empty `sid` remains a series route.
+hazards:
+  - Broad substring matching can turn attacker-controlled hosts into trusted navigation input.
+  - Changing accepted casing, short-link mapping, or failure sentinels can silently break search and media-service routing.
+tests:
+  - test.input-parsing
+  - test.architecture-boundaries
 ```
 
 ### core.bili-api
@@ -3005,6 +3074,17 @@ test.video-input-resolver:
     - tests/DownKyi.Tests/PlayStreamTypeResolverTests.cs
   guards:
     - BV/AV/video/bangumi/cheese inputs classify consistently
+
+test.input-parsing:
+  paths:
+    - tests/DownKyi.Core.Tests/ParseEntranceContractTests.cs
+    - tests/DownKyi.Core.Tests/UserVideoListUrlTests.cs
+    - tests/DownKyi.Architecture.Tests/InputParsingArchitectureTests.cs
+  guards:
+    - canonical identifier and URL forms retain their established result and failure sentinel
+    - null input has one explicit exception contract
+    - spoofed user-space hosts and malformed paths are rejected
+    - parser families remain in focused partial owners below the owner budget
 
 test.video-selection-state:
   paths:
