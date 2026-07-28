@@ -47,7 +47,7 @@ Current owner progress, pending PR integration:
 
 - Method/member inventory confirms all 27 methods, 54 public members, and 56 private fields are present; method bodies are content-equivalent after whitespace normalization.
 - The three partial owners are 451, 353, and 248 lines. The oversized inventory fell from 10 to 9, and architecture tests prevent binding state or content/naming commands from returning to the main owner.
-- Local gates: strict `AnalysisMode=All` Release build has zero warnings/errors; all 620 tests pass, including 183 architecture tests and 13 Desktop/Host smoke tests; format reports 0/812 changed files; vulnerable/deprecated package audits, `git diff --check`, and 938-candidate Gitleaks checks pass. The reproducible boundary audit reports 9 oversized production files.
+- Local gates: strict `AnalysisMode=All` Release build has zero warnings/errors; all 621 tests pass, including 184 architecture tests and 13 Desktop/Host smoke tests; format reports 0/812 changed files; vulnerable/deprecated package audits, `git diff --check`, and 938-candidate Gitleaks checks pass. The reproducible boundary audit reports 9 oversized production files. A Windows CI regex-timeout exposed by the first remote run now has a deterministic adversarial regression test and line-scoped non-backtracking declaration scanner.
 
 Verification:
 

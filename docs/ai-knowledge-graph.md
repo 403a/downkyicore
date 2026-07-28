@@ -3031,6 +3031,7 @@ test.module-boundary-ratchets:
     - Core must contain zero UI/Avalonia/QRCoder dependencies and zero XAML resource owners
     - service contracts must contain zero dependencies on ViewModel types
     - duplicate simple-name sets, generic buckets, and file/type mismatch sets cannot grow
+    - source inventory declaration matching is line-scoped and non-backtracking so a large or malformed line cannot make Windows CI time out or hide later declarations
     - existing files over 500 physical lines cannot grow and new oversized files are rejected
     - Domain-to-legacy reconstruction and static/synchronous HTTP debt cannot spread to another owner; download work polling from UI collections is rejected entirely
     - the deleted custom mutable observable collection cannot return; download lists must expose standard read-only wrappers over owner-only backing collections
