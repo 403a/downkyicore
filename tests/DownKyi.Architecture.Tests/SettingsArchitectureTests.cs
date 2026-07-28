@@ -223,6 +223,18 @@ public sealed class SettingsArchitectureTests
             "Services", "Video",
             "VideoPagePlaybackMapper.cs");
         var addSource = ReadSource("src", "DownKyi.Desktop", "Services", "Download", "AddToDownloadService.cs");
+        var duplicateSource = ReadSource(
+            "src", "DownKyi.Desktop",
+            "Services", "Download",
+            "DownloadDuplicatePolicy.cs");
+        var draftSource = ReadSource(
+            "src", "DownKyi.Desktop",
+            "Services", "Download",
+            "DownloadTaskDraftFactory.cs");
+        var metadataSource = ReadSource(
+            "src", "DownKyi.Desktop",
+            "Services", "Download",
+            "DownloadMovieMetadataBuilder.cs");
         var contextFactorySource = ReadSource(
             "src", "DownKyi.Desktop",
             "Services",
@@ -236,6 +248,10 @@ public sealed class SettingsArchitectureTests
         Assert.DoesNotContain("ISettingsStore", utilitySource, StringComparison.Ordinal);
         Assert.DoesNotContain("settingsStore.Current", utilitySource, StringComparison.Ordinal);
         Assert.DoesNotContain("VideoPageInfo(playUrl, page, _settingsStore)", addSource, StringComparison.Ordinal);
+        Assert.Contains("ApplicationSettings settings", draftSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("ISettingsStore", duplicateSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("ISettingsStore", draftSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("ISettingsStore", metadataSource, StringComparison.Ordinal);
         Assert.Equal(1, CountOccurrences(contextFactorySource, "_settingsStore.Current"));
         Assert.DoesNotContain("ISettingsStore", artifactSource, StringComparison.Ordinal);
         Assert.DoesNotContain("ISettingsStore", diagnosticSource, StringComparison.Ordinal);

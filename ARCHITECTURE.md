@@ -88,7 +88,12 @@ Main region 的返回操作必須先縮減 `AvaloniaNavigationService` 的既有
 
 ```mermaid
 flowchart LR
-    Add["AddToDownloadService"] --> Admission["DownloadTaskAdmissionService"]
+    Add["AddToDownloadService session"] --> Duplicate["DownloadDuplicatePolicy"]
+    Add --> Draft["DownloadTaskDraftFactory"]
+    Add --> Metadata["DownloadMovieMetadataBuilder"]
+    Add --> Admission["DownloadTaskAdmissionService"]
+    Duplicate --> Projection
+    Duplicate --> UiList
     Admission --> Projection["DownloadTaskProjectionStore"]
     Admission --> UiList["DownloadingItem collection"]
     Admission --> QueueGateway["DownloadTaskQueueGateway"]

@@ -104,6 +104,8 @@ internal static class DesktopComposition
         services.AddSingleton<AriaRuntimeClientRegistry>();
         services.AddSingleton<IDownloadManagerCoordinator, DownloadManagerCoordinator>();
         services.AddSingleton<IVideoTagProvider, VideoTagProvider>();
+        services.AddSingleton<DownloadDuplicatePolicy>();
+        services.AddSingleton<DownloadMovieMetadataBuilder>();
         services.AddSingleton<IAddToDownloadServiceFactory, AddToDownloadServiceFactory>();
         services.AddTransient<IVideoDetailWorkflowCoordinator, VideoDetailWorkflowCoordinator>();
         services.AddSingleton<IVideoDetailDownloadCoordinator, VideoDetailDownloadCoordinator>();
