@@ -48,7 +48,7 @@ Run the complete quick suite from the repository root:
 dotnet run --project .\benchmarks\DownKyi.SystemBenchmarks\DownKyi.SystemBenchmarks.csproj -c Release -- --quick
 ```
 
-Omit `--quick` for the nightly-sized datasets. Use `--scenario shell`, `ui`, `restore`, `sqlite`, `transfer`, or `ffmpeg` to isolate a single investigation, and use `--output <path>` to select the JSON report path.
+Omit `--quick` for the nightly-sized datasets. Use `--scenario shell`, `ui`, `restore`, `sqlite`, `transfer`, `ffmpeg`, or `logging` to isolate a single investigation, and use `--output <path>` to select the JSON report path.
 
 The suite measures:
 
@@ -58,6 +58,7 @@ The suite measures:
 - aggregate built-in downloader throughput at 1, 4, and 8 tasks against an in-process Range server;
 - source samples, published UI progress updates, and resulting property notifications per second;
 - actual FFmpeg CPU and available hardware-encoder concurrency plus sampled child-process working set.
+- bounded logging producer throughput, explicit flush latency, allocations and dropped events through the production sink.
 
 The default `all` runner executes every scenario in a separate child process before merging the reports. This prevents Avalonia, SQLite pools, or encoder detection from contaminating another scenario and gives each working-set measurement a fresh process boundary.
 
