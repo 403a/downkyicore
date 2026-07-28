@@ -56,13 +56,11 @@ internal partial class ViewMyBangumiFollowViewModel : ViewModelBase
             if (_pager != null)
             {
                 _pager.CurrentChanging -= OnCurrentChangedPager;
-                _pager.CountChanged -= OnCountChangedPager;
             }
 
             _pager = value;
             OnPropertyChanged(nameof(Pager));
             _pager.CurrentChanging += OnCurrentChangedPager;
-            _pager.CountChanged += OnCountChangedPager;
         }
     }
 
@@ -288,10 +286,6 @@ internal partial class ViewMyBangumiFollowViewModel : ViewModelBase
         }
     }
 
-    private void OnCountChangedPager(object? sender, EventArgs e)
-    {
-    }
-
     private void OnCurrentChangedPager(object? sender, CancelEventArgs e)
     {
         if (!IsEnabled)
@@ -426,7 +420,6 @@ internal partial class ViewMyBangumiFollowViewModel : ViewModelBase
             if (_pager != null)
             {
                 _pager.CurrentChanging -= OnCurrentChangedPager;
-                _pager.CountChanged -= OnCountChangedPager;
             }
         }
 

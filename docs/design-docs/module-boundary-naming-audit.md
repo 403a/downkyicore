@@ -2,8 +2,8 @@
 
 Status: maintained verified audit
 Last verified: 2026-07-28
-Verification base: `1e265d1d3d610d0b337bc1c3d7910bab3cb5c859` plus the Gate 9 input-parser working tree
-Verification branch: `refactor/parse-entrance-owner`
+Verification base: `dd9a81a36cc3c6276f91e96f7004dbfa766b7aed` plus the Gate 9 pager working tree
+Verification branch: `refactor/custom-pager-owner`
 
 ## 結論
 
@@ -29,7 +29,7 @@ pwsh ./script/audit-module-boundaries.ps1 `
 | `src/DownKyi.Domain` | 11 | 681 |
 | `src/DownKyi.Application` | 30 | 1,143 |
 | `src/DownKyi.Infrastructure` | 27 | 3,760 |
-| `src/DownKyi.Desktop` | 327 | 44,183 |
+| `src/DownKyi.Desktop` | 330 | 43,984 |
 
 `DownKyi` executable 已降為單一 14 行 bootstrap；Desktop 是最大的產品 owner。行數不能單獨證明設計品質，因此後續仍以 project references、runtime type usage 與 architecture tests 判定責任邊界。
 
@@ -47,7 +47,7 @@ pwsh ./script/audit-module-boundaries.ps1 `
 | resolved | service contracts 依賴 ViewModel | 0 interfaces | completed by Gate 8 |
 | resolved | custom collection contract | 0 custom collection references; standard read-only wrappers | completed by Gate 8 |
 | resolved | naming and folder taxonomy inconsistent | 4 endpoint/role-scoped duplicate groups, 0 generic names, 0 file/type mismatches | completed in Gate 9 naming branch |
-| P2 | oversized owners | 4 production files above 500 physical lines | confirmed, decreasing |
+| P2 | oversized owners | 3 production files above 500 physical lines | confirmed, decreasing |
 | resolved | logging owner too broad | contracts in Application; 268-line provider plus dedicated Infrastructure sink/buffer/retention/export owners | completed by Gate 9 PR #94 |
 | P1 | AI knowledge environment incomplete | required root/docs structure and reproducible audit scripts now exist | resolved |
 
@@ -162,7 +162,7 @@ File/type mismatch baseline 已由 4 項降為 0。Bilibili JSON DTO 與 NFO XML
 
 ## Finding 11: 巨檔 owners
 
-2026-07-28 的實際 boundary audit 有 4 個 production files 超過 500 physical lines；`DownloadPipeline`、`DownloadTaskProjectionStore`、`AddToDownloadService`、`ViewMyFavoritesViewModel`、`ViewPublicationViewModel`、`SqliteDownloadTaskStore`、`SettingsManager.Network`、`ViewNetworkViewModel`、`ViewVideoViewModel`、`ViewMySpaceViewModel`、`ViewUserSpaceViewModel`、`ViewMyBangumiFollowViewModel`、`ParseEntrance` 與原 715 行 `ApplicationLogProvider` 已從 allowlist 移除。SQLite Store 從 928 行降為 447 行，交易/初始化協調、Domain row mapping、讀取/quarantine 與 SQL writes 已分成具名 owner，既有 schema/migration/resume tests 保持不變。Settings 的一般 network/downloader/proxy owner 為 319 行，aria RPC/runtime owner 為 355 行；44 個既有 public compatibility methods 的方法級內容相同，且仍讀寫同一個 `ApplicationSettings.Network` schema。Network settings ViewModel 現分為 384 行 navigation/general-command owner、275 行 aria-command owner 與 292 行 binding-state owner；28 個方法與 25 個 command properties 保持等價，XAML binding 名稱未變。Video settings ViewModel 現分為 451 行 navigation/playback/transcoding owner、353 行 directory/content/filename-command owner 與 248 行 binding-state owner；27 個方法、54 個 public members 與 56 個 private fields 保持等價，XAML binding 名稱與同一個 injected `ISettingsStore` ownership 未變。My-space ViewModel 現分為 408 行 navigation/profile workflow owner 與 265 行 service-free binding-state owner；12 個方法、36 個 public members 與 41 個 private fields 保持等價，typed back navigation、cancellation、settings 與 XAML bindings 未變。Add-to-download 現為 275 行 session coordinator、114 行 duplicate policy、206 行 stateless draft factory與 85 行 optional metadata builder；16 個 owner/tag/cancellation tests 固定完成紀錄、設定 snapshot、檔名、內容旗標與 queue admission 契約。User-space ViewModel 現為 412 行 typed-navigation/load/projection workflow owner、161 行 service-free binding-state owner與既有 27 行 favorite-folder owner；20 個 XAML properties 的名稱與生命週期責任由 architecture test 固定。Bangumi-follow ViewModel 現為 435 行 pager/navigation/load/download workflow owner與 103 行 service-free binding-state owner；12 個 XAML properties、pager event ownership、typed back navigation、cancellation、batch projection 與 download coordinator 邊界由 architecture test 固定。輸入解析現由 8 個責任 partial 擁有，所有檔案低於 120 行；確定性矩陣固定 AV/BV、番劇、課程、收藏夾、使用者空間與投稿清單契約，並拒絕偽造 `space.bilibili.com` host。
+2026-07-28 的實際 boundary audit 有 3 個 production files 超過 500 physical lines；`DownloadPipeline`、`DownloadTaskProjectionStore`、`AddToDownloadService`、`ViewMyFavoritesViewModel`、`ViewPublicationViewModel`、`SqliteDownloadTaskStore`、`SettingsManager.Network`、`ViewNetworkViewModel`、`ViewVideoViewModel`、`ViewMySpaceViewModel`、`ViewUserSpaceViewModel`、`ViewMyBangumiFollowViewModel`、`ParseEntrance`、`CustomPagerViewModel` 與原 715 行 `ApplicationLogProvider` 已從 allowlist 移除。SQLite Store 從 928 行降為 447 行，交易/初始化協調、Domain row mapping、讀取/quarantine 與 SQL writes 已分成具名 owner，既有 schema/migration/resume tests 保持不變。Settings 的一般 network/downloader/proxy owner 為 319 行，aria RPC/runtime owner 為 355 行；44 個既有 public compatibility methods 的方法級內容相同，且仍讀寫同一個 `ApplicationSettings.Network` schema。Network settings ViewModel 現分為 384 行 navigation/general-command owner、275 行 aria-command owner 與 292 行 binding-state owner；28 個方法與 25 個 command properties 保持等價，XAML binding 名稱未變。Video settings ViewModel 現分為 451 行 navigation/playback/transcoding owner、353 行 directory/content/filename-command owner 與 248 行 binding-state owner；27 個方法、54 個 public members 與 56 個 private fields 保持等價，XAML binding 名稱與同一個 injected `ISettingsStore` ownership 未變。My-space ViewModel 現分為 408 行 navigation/profile workflow owner 與 265 行 service-free binding-state owner；12 個方法、36 個 public members 與 41 個 private fields 保持等價，typed back navigation、cancellation、settings 與 XAML bindings 未變。Add-to-download 現為 275 行 session coordinator、114 行 duplicate policy、206 行 stateless draft factory與 85 行 optional metadata builder；16 個 owner/tag/cancellation tests 固定完成紀錄、設定 snapshot、檔名、內容旗標與 queue admission 契約。User-space ViewModel 現為 412 行 typed-navigation/load/projection workflow owner、161 行 service-free binding-state owner與既有 27 行 favorite-folder owner；20 個 XAML properties 的名稱與生命週期責任由 architecture test 固定。Bangumi-follow ViewModel 現為 435 行 pager/navigation/load/download workflow owner與 103 行 service-free binding-state owner；12 個 XAML properties、pager event ownership、typed back navigation、cancellation、batch projection 與 download coordinator 邊界由 architecture test 固定。輸入解析現由 8 個責任 partial 擁有，所有檔案低於 120 行；確定性矩陣固定 AV/BV、番劇、課程、收藏夾、使用者空間與投稿清單契約，並拒絕偽造 `space.bilibili.com` host。Pager 現為 103 行 change-veto owner、110 行 XAML state、51 行 command owner與 41 行純 layout value owner；無參數按鈕不再被 `RequiredParameterCommand` 靜默丟棄，建構子也會保留要求的目前頁。
 
 `AriaClient.cs` 1,119 行屬 RPC client 類型，應先確認生成/同步來源，不可只為行數拆分。
 

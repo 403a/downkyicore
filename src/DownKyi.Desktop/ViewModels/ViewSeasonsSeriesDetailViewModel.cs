@@ -323,10 +323,6 @@ internal class ViewSeasonsSeriesDetailViewModel : ViewModelBase
         };
     }
 
-    private void OnCountChangedPager(object? sender, EventArgs e)
-    {
-    }
-
     private void OnCurrentChangedPager(object? sender, CancelEventArgs e)
     {
         if (!IsEnabled)
@@ -346,12 +342,10 @@ internal class ViewSeasonsSeriesDetailViewModel : ViewModelBase
         if (Pager != null)
         {
             Pager.CurrentChanging -= OnCurrentChangedPager;
-            Pager.CountChanged -= OnCountChangedPager;
         }
 
         Pager = pager;
         Pager.CurrentChanging += OnCurrentChangedPager;
-        Pager.CountChanged += OnCountChangedPager;
     }
 
     public override void OnNavigatedTo(AppNavigationContext navigationContext)
@@ -409,7 +403,6 @@ internal class ViewSeasonsSeriesDetailViewModel : ViewModelBase
             if (Pager != null)
             {
                 Pager.CurrentChanging -= OnCurrentChangedPager;
-                Pager.CountChanged -= OnCountChangedPager;
             }
         }
 

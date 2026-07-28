@@ -201,21 +201,15 @@ internal class ViewFollowerViewModel : ViewModelBase
         }
     }
 
-    private void OnCountChangedPager(object? sender, EventArgs e)
-    {
-    }
-
     private void ReplacePager(CustomPagerViewModel pager)
     {
         if (Pager != null)
         {
             Pager.CurrentChanging -= OnCurrentChangedPager;
-            Pager.CountChanged -= OnCountChangedPager;
         }
 
         Pager = pager;
         Pager.CurrentChanging += OnCurrentChangedPager;
-        Pager.CountChanged += OnCountChangedPager;
     }
 
     private void OnCurrentChangedPager(object? sender, CancelEventArgs e)
@@ -290,7 +284,6 @@ internal class ViewFollowerViewModel : ViewModelBase
             if (Pager != null)
             {
                 Pager.CurrentChanging -= OnCurrentChangedPager;
-                Pager.CountChanged -= OnCountChangedPager;
             }
         }
 
