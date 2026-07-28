@@ -3,7 +3,7 @@
 Status: active
 Last updated: 2026-07-28
 Current group: Gate 9 large-owner convergence
-Current branch: `refactor/sqlite-download-store`
+Current branch: `refactor/network-settings-owner`
 
 This file contains only unfinished or not-yet-integrated work. Completed PR 02-32 items are not restored. Design rationale belongs in `design-docs`; product acceptance belongs in `product-specs`.
 
@@ -24,6 +24,8 @@ The previous `Status: complete` was incorrect.
 - Gate 8 passed Windows/Linux/macOS quality run `30191251004`, protobuf run `30191250997`, and CodeQL run `30191250992`; PR #92 was merged into `refactor/pr-30-32-release-hardening` as `f8e78c9a`. CodeQL reported no alert, but GitHub emitted one platform annotation because the single required ownership PR changed 396 files and its diff API is capped at 300 files.
 - Gate 9 logging ownership passed Windows/Linux/macOS quality run `30345373830`, protobuf run `30345371405`, and CodeQL run `30345371181`, with zero check annotations. PR #94 was merged into `refactor/pr-30-32-release-hardening` as merge commit `b290b204`.
 - Gate 9 naming convergence passed Windows/Linux/macOS quality run `30347937643` and CodeQL run `30347937639`; all seven check-runs had zero annotations. PR #95 was merged into `refactor/pr-30-32-release-hardening` as merge commit `e29ecc8`. Generic-name and file/type-mismatch baselines are zero; the four remaining duplicate-name sets are endpoint/role-scoped contracts.
+- Gate 9 SQLite store ownership passed Windows/Linux/macOS quality run `30349573925` and CodeQL run `30349573991`; all seven check-runs had zero annotations. PR #96 was merged into `refactor/pr-30-32-release-hardening` as merge commit `9f570f4`. The Store fell from 928 to 447 lines with byte-content-equivalent SQL literals and unchanged schema/resume contracts.
+- The authenticated read-only API audit was refreshed against `9f570f4`; all 14 probes passed with zero drift, Gitleaks found zero secrets, and all seven remote checks had zero annotations. PR #97 was merged into `refactor/pr-30-32-release-hardening` as merge commit `3394ff5`.
 - `version.txt` remains `1.0.32`; v1.1.0 has not passed its release gate.
 
 No release tag may be created while any release blocker below remains.
@@ -37,13 +39,7 @@ Owner branches: separate responsibility-based large-owner PRs.
 Scope:
 
 - Split hand-written oversized owners by responsibility; do not split generated/protocol files only to satisfy LOC.
-
-Current owner progress, pending PR integration:
-
-- `SqliteDownloadTaskStore` fell from 928 to 447 lines. It retains initialization, transactions, optimistic conflict handling, and public query coordination.
-- `DownloadTaskRecordMapper`, `DownloadTaskSqlReader`, and `DownloadTaskSqlWriter` now own Domain restoration, read/quarantine SQL, and state-write SQL respectively. Schema version, table/column names, migration, backup, JSON payloads, and resume state are unchanged.
-- The oversized-file inventory fell from 13 to 12. A zero-baseline architecture test prevents row restoration or state upsert SQL from returning to the Store coordinator.
-- Local gates: strict `AnalysisMode=All` Release build has zero warnings/errors; all 618 tests pass, including 52 Infrastructure and 181 architecture tests; all 14 raw SQL literals match the pre-extraction content; format, vulnerable/deprecated package audits, `git diff --check`, and 934-candidate Gitleaks checks pass.
+- Current owner: separate the 671-line settings network partial into a 319-line general network/downloader/proxy owner and a 355-line aria RPC/runtime owner without changing the public methods, defaults, JSON schema, migration, or persistence behavior.
 
 Verification:
 

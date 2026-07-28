@@ -1974,6 +1974,8 @@ paths:
   - DownKyi.Core/Settings/ISettingsStore.cs
   - DownKyi.Core/Settings/ApplicationSettings.cs
   - DownKyi.Core/Settings/SettingsManager.cs
+  - DownKyi.Core/Settings/SettingsManager.Network.cs
+  - DownKyi.Core/Settings/SettingsManager.Aria.cs
   - DownKyi.Core/Settings/SettingsManager.Snapshot.cs
   - DownKyi.Core/Settings/SettingsSchemaMigrator.cs
 responsibility: Publishes validated immutable settings snapshots, applies typed updates, migrates persisted schemas, and owns debounced atomic persistence plus shutdown flush.
@@ -2015,10 +2017,12 @@ contracts:
   - A temporary settings file must parse as one complete JSON object before replacement; malformed or interrupted output cannot replace the last valid file.
   - Nested settings collections are immutable arrays, so a later update cannot mutate a snapshot already captured by an operation.
   - HTTP, download planning, transfer, artifact, diagnostics, and FFmpeg capture one snapshot per operation. A dynamic supplier may select only the next queued worker policy.
+  - General network/downloader/proxy defaults and aria RPC/runtime defaults are separate partial implementation owners; both preserve the existing `ApplicationSettings.Network` JSON schema and public compatibility methods.
   - Shutdown flush is awaited without synchronously blocking the UI thread.
   - Production composition constructs the settings owner with the shared `ILoggerFactory`; validation, migration, load, flush, and cleanup diagnostics cannot use static `LogManager` or terminal output.
 hazards:
   - Exposing the internal mutable manager would bypass validation and create competing in-memory snapshots.
+  - Moving aria token, RPC, allocation, limit, or proxy settings back into the general network owner would recreate an oversized mixed-responsibility file.
   - Synchronous disposal intentionally stops scheduled writes without flushing; application shutdown and owners that require persistence must call `FlushAsync` or `DisposeAsync`.
   - Timer callbacks and shutdown flush must not race into partial or non-atomic writes.
 tests:

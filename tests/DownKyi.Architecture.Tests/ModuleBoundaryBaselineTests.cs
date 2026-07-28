@@ -42,7 +42,6 @@ public sealed class ModuleBoundaryBaselineTests
     {
         ["DownKyi.Core/Aria2cNet/Client/AriaClient.cs"] = 1137,
         ["DownKyi.Core/BiliApi/BiliUtils/ParseEntrance.cs"] = 586,
-        ["DownKyi.Core/Settings/SettingsManager.Network.cs"] = 671,
         ["src/DownKyi.Desktop/CustomControl/CustomPagerViewModel.cs"] = 506,
         ["src/DownKyi.Desktop/Services/Download/AddToDownloadService.cs"] = 667,
         ["src/DownKyi.Desktop/ViewModels/Settings/ViewNetworkViewModel.cs"] = 649,
@@ -272,6 +271,29 @@ public sealed class ModuleBoundaryBaselineTests
         Assert.Contains("DownloadTask.Restore", mapperSource, StringComparison.Ordinal);
         Assert.Contains("INSERT INTO download_quarantine", readerSource, StringComparison.Ordinal);
         Assert.Contains("INSERT INTO downloading", writerSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SettingsNetworkAndAriaOwnersRemainSeparated()
+    {
+        var settingsRoot = Path.Combine(RepositoryRoot, "DownKyi.Core", "Settings");
+        var networkSource = File.ReadAllText(Path.Combine(
+            settingsRoot,
+            "SettingsManager.Network.cs"));
+        var ariaSource = File.ReadAllText(Path.Combine(
+            settingsRoot,
+            "SettingsManager.Aria.cs"));
+
+        Assert.Contains("public partial class SettingsManager", networkSource, StringComparison.Ordinal);
+        Assert.Contains("public partial class SettingsManager", ariaSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetAriaToken", networkSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("SetAriaSplit", networkSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("AriaConfigLogLevel", networkSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("_ariaHttpProxy", networkSource, StringComparison.Ordinal);
+        Assert.Contains("GetAriaToken", ariaSource, StringComparison.Ordinal);
+        Assert.Contains("GetAriaSplit", ariaSource, StringComparison.Ordinal);
+        Assert.Contains("GetAriaFileAllocation", ariaSource, StringComparison.Ordinal);
+        Assert.Contains("GetAriaHttpProxy", ariaSource, StringComparison.Ordinal);
     }
 
     [Fact]
