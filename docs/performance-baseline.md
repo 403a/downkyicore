@@ -83,3 +83,17 @@ Environment: commit `0664617570e32b362e688cfa3e11c38aa79421f5`, .NET 10.0.10, Wi
 | FFmpeg NVENC | 2 jobs; concurrency 1 | 2 successful; 167,690,240-byte peak child working set |
 
 The committed report schema, rather than this one machine's values, is the long-term contract. Nightly artifacts remain the source for per-run evidence.
+
+## Logging Pre-Migration Baseline 2026-07-28
+
+Environment: commit `26f67d7837e5dbdfe87cacd8635165876ba693cc`, .NET 10.0.10, Windows 10.0.26200, x64. Three same-machine quick runs used 10,000 redacted structured events, queue capacity 2,048, recent capacity 300 and the `bcl-channel-jsonl` production backend.
+
+| Metric | Observed range |
+| --- | ---: |
+| producer time | 323.48-395.22 ms |
+| producer rate | 25,302.63-30,914.10 events/s |
+| explicit flush | 4.41-11.48 ms |
+| dropped events | 2,645-3,128 |
+| allocation | 232.26-232.30 bytes/source event |
+
+The burst intentionally exceeds normal UI logging volume and does not establish a release threshold. It exposes queue saturation and provides a same-scenario comparison point for the Gate 9 Infrastructure sink migration.
