@@ -61,7 +61,9 @@ internal sealed class NLogAsyncRollingFileSink : IAsyncDisposable
             _options.QueueCapacity,
             AsyncTargetWrapperOverflowAction.Discard)
         {
-            BatchSize = Math.Min(200, _options.QueueCapacity),
+            // FileTarget checks ArchiveAboveSize between writes. A multi-event batch can
+            // otherwise overshoot the configured limit before the next archive check.
+            BatchSize = 1,
             TimeToSleepBetweenBatches = 0,
             ForceLockingQueue = true
         };

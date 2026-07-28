@@ -2189,6 +2189,8 @@ id: workflow.strict-pr-ci
 type: workflow
 paths:
   - .github/workflows/quality.yml
+  - .github/workflows/build.yml
+  - script/test-solution.ps1
 responsibility: Blocks PRs that break formatting, restore, Release build, warnings-as-errors, unit tests, or vulnerable package policy.
 inbound:
   - github.pull_request
@@ -2201,9 +2203,12 @@ contracts:
   - Windows, Linux, and macOS builds expose the same analyzer diagnostics.
   - Compiler and CA warnings block every PR on Windows, Linux, and macOS with the repository default `CodeAnalysisTreatWarningsAsErrors=true`.
   - Cleaned analyzer rules are promoted to errors and cannot regress.
+  - Test projects run in stable path order so one constrained runner cannot make independent xUnit hosts starve one another during discovery or shutdown.
+  - Every test project writes a distinct assembly-named TRX; no solution-level logger filename may overwrite earlier project evidence.
 hazards:
   - Turning every historical analyzer suggestion into PR failure makes unrelated PRs impossible.
   - Broad NoWarn, global suppressions, nullable disable, or analyzer exclusions hide new defects.
+  - Restoring one parallel solution-level `dotnet test` command can reintroduce Windows foreground-thread timeouts and TRX overwrite.
 tests:
   - github.actions
 ```

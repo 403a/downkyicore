@@ -53,6 +53,7 @@ Current owner progress, pending PR integration:
 - The original 531-line owner is now a 435-line pager/navigation/load/download workflow owner plus a 103-line service-free binding-state owner.
 - The state-owner architecture test fixes all 12 XAML-facing properties, keeps pager events, both coordinators, cancellation, navigation and logging in the workflow owner, and rejects those runtime responsibilities from the state partial.
 - The oversized inventory fell from 6 to 5. Strict `AnalysisMode=All` Release build has zero warnings/errors; all 633 tests pass, including 188 architecture tests and 13 Desktop/Host smoke tests. Format, vulnerable/deprecated package audits, boundary audit, `git diff --check`, and 946-candidate Gitleaks checks pass. Remote gates remain before integration.
+- The first Windows CI attempt exposed two pre-existing load-sensitive gate defects: NLog could overshoot file rotation inside a multi-event async batch, and solution-level parallel xUnit hosts overwrote one TRX while three assembly-info processes timed out. The rotation test now enqueues one deterministic batch, the sink checks rolling per record, and PR/release workflows use the shared sequential `script/test-solution.ps1` with one assembly-named TRX per project. A new complete remote round is required.
 
 Verification:
 

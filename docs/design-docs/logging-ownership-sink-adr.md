@@ -108,6 +108,8 @@ Contracts and logger extension methods move to Application. Provider, redactor, 
 
 `NLogAsyncRollingFileSink` uses a bounded batch queue and a cooperative flush barrier. Events submitted while a flush releases the Windows file handle enter a second bounded queue; the sink drains them before resetting only the `FileTarget` handles. The private logger configuration and async wrapper stay alive throughout the reset. This removes both the unguarded configuration-null race that reproduced as 352 persisted records from 400 accepted records and the whole-configuration reset race that could lose the final accepted entry during disposal.
 
+The wrapper submits one event per target batch. `FileTarget` evaluates `ArchiveAboveSize` between writes, so a larger async batch can append several JSONL records before the next rolling check and exceed the configured file policy under runner load. The producer remains asynchronous and bounded; only the sink-side rolling check granularity is one record.
+
 ## Post-Implementation Evidence
 
 Three same-machine runs used the same runtime, OS, architecture and 10,000-event dataset as the pre-migration baseline.
