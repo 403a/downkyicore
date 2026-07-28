@@ -1,4 +1,4 @@
-using DownKyi.Core.Logging;
+using DownKyi.Application.Diagnostics;
 using DownKyi.Core.Settings;
 using Microsoft.Extensions.Logging;
 

@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace DownKyi.Core.Logging;
+namespace DownKyi.Infrastructure.Logging;
 
 internal interface ISensitiveDataRedactor
 {

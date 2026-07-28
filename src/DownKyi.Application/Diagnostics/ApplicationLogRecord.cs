@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
 using MicrosoftLogLevel = Microsoft.Extensions.Logging.LogLevel;
 
-namespace DownKyi.Core.Logging;
+namespace DownKyi.Application.Diagnostics;
 
 public sealed record ApplicationLogRecord(
     DateTimeOffset Timestamp,

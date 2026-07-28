@@ -1,4 +1,4 @@
-namespace DownKyi.Core.Logging;
+namespace DownKyi.Infrastructure.Logging;
 
 public sealed record ApplicationLogOptions(string LogDirectory)
 {

@@ -1,4 +1,4 @@
-namespace DownKyi.Core.Logging;
+namespace DownKyi.Application.Diagnostics;
 
 public sealed record ApplicationLogMetrics(
     long BytesWritten,
@@ -9,4 +9,5 @@ public sealed record ApplicationLogMetrics(
     long MaintenanceFailureCount,
     long RetainedBytes,
     double CapacityRatio,
-    DateTimeOffset? LastMaintenanceUtc);
+    DateTimeOffset? LastMaintenanceUtc,
+    long MalformedExportRecords = 0);

@@ -23,7 +23,7 @@ public sealed class AgentEnvironmentArchitectureTests
     {
         AssertPathsExist(
             "script/audit-module-boundaries.ps1",
-            "DownKyi.Core/Logging/ApplicationLogProvider.cs",
+            "src/DownKyi.Infrastructure/Logging/ApplicationLogProvider.cs",
             "tests/DownKyi.Desktop.Tests/UiSmokeTests.cs",
             "benchmarks/DownKyi.SystemBenchmarks",
             "docs/operations/verification-and-rollback.md",

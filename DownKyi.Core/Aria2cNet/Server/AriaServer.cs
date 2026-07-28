@@ -1,8 +1,8 @@
 using System.Diagnostics;
 using System.Net.Http;
 using System.Text;
+using DownKyi.Application.Diagnostics;
 using DownKyi.Core.Aria2cNet.Client;
-using DownKyi.Core.Logging;
 using DownKyi.Core.Storage;
 using Microsoft.Extensions.Logging;
 

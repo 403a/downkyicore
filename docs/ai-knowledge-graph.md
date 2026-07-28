@@ -2,7 +2,7 @@
 
 Status: maintained architecture index
 Schema version: 1.0
-Last reviewed: 2026-07-26
+Last reviewed: 2026-07-28
 
 This document is the first file an AI agent should read before changing DownKyi. Its goal is to preserve stable knowledge about project structure, ownership boundaries, and call relationships so agents do not rediscover the same code paths from scratch.
 
@@ -19,7 +19,7 @@ The target projects exist and the Desktop boundary is operational, but Infrastru
 
 - `src/DownKyi.Desktop` owns Avalonia App/XAML, Views, ViewModels, `Presentation` projections, navigation/dialog/platform adapters, lifecycle, Host composition, and desktop runtime. `DownKyi` contains only the minimal executable bootstrap.
 - `DownKyi.Core` is headless: it contains no Avalonia, QRCoder, or XAML ownership. Login QR bitmap rendering and Bilibili image dictionaries belong to Desktop.
-- `src/DownKyi.Infrastructure` currently owns SQLite task persistence, write-behind, clock, and the injected Bilibili HTTP/buvid runtime. Aria2, FFmpeg, filesystem paths, and logging implementation remain mainly in `DownKyi.Core` or `DownKyi`.
+- `src/DownKyi.Infrastructure` currently owns SQLite task persistence, write-behind, clock, the injected Bilibili HTTP/buvid runtime, and the logging sink/retention/export runtime. Aria2, FFmpeg and filesystem paths remain mainly in `DownKyi.Core`.
 - `DownKyi.Domain.DownloadTask` is the durable runtime state authority. `DownloadTaskApplicationService` loads by `DownloadTaskId`, invokes legal transitions, persists optimistic versions, and only then publishes committed snapshots. Normal runtime no longer reconstructs Domain state from mutable UI projections.
 - New tasks, resumed tasks, and persisted startup tasks directly enqueue `DownloadTaskId` through `DownloadTaskQueueGateway`; `DownloadOrchestrator` no longer scans a UI collection and each active task has its own linked cancellation owner.
 - Workers and pipeline entry points use `DownloadTaskId`. `DownloadPipeline` is a typed stage sequencer; localized activity rendering and completion-list mutation have separate Desktop owners. `DownloadListState` privately owns mutable collections and exposes stable `ReadOnlyObservableCollection<T>` projections. `DownloadExecutionContext` still exposes a transient `DownloadingItem` for playback/UI context. Bilibili HTTP uses injected Application ports with an async Infrastructure implementation; the old static/synchronous compatibility layer is gone.
@@ -34,7 +34,7 @@ Node types:
 - `ui`: Avalonia view or UI behavior.
 - `viewmodel`: binding state and command wiring.
 - `service`: application service with business workflow.
-- `core`: reusable API, storage, settings, logging, media, or utility logic.
+- `core`: reusable API, storage, settings, media, or utility compatibility logic.
 - `external`: outside process, binary, web API, or package.
 - `test`: executable test coverage.
 - `workflow`: CI, release, or maintenance automation.
@@ -128,7 +128,7 @@ flowchart TD
     Storage["core.storage\nStorageManager"]
     Aria["external.aria2\naria2c process"]
     FFmpeg["external.ffmpeg\nffmpeg process"]
-    Logs["core.logging\nApplicationLogProvider + diagnostic export"]
+    Logs["infrastructure.logging\nredaction + NLog sink + diagnostic export"]
     Tests["test.suites\ntests/*"]
     ArchitectureTests["test.architecture-boundaries\nDownKyi.Architecture.Tests"]
     UiSmoke["test.ui-smoke\nDownKyi.Desktop.Tests"]
@@ -291,7 +291,7 @@ outbound:
   - service.download-list-state
   - core.storage
   - core.settings
-  - core.logging
+  - infrastructure.logging
 contracts:
   - UI shell should appear before heavy download state and service startup finish.
   - The Host is created with default configuration sources disabled and must not redirect database, settings, login, portable-mode, or aria2 session paths.
@@ -368,7 +368,7 @@ inbound:
 outbound:
   - app.host-composition
   - core.settings
-  - core.logging
+  - infrastructure.logging
   - external.aria2
   - external.os-process
 contracts:
@@ -550,7 +550,7 @@ outbound:
   - viewmodel.index
   - viewmodel.login
   - viewmodel.video-detail
-  - core.logging
+  - infrastructure.logging
   - service.desktop-platform-boundaries
 contracts:
   - Commands should be cached properties, not rebuilt on every getter call.
@@ -1800,7 +1800,7 @@ outbound:
   - service.download-list-state
   - external.aria2
   - external.ffmpeg
-  - core.logging
+  - infrastructure.logging
   - core.settings
 contracts:
   - A bounded Channel and fixed workers own queue consumption; global shutdown and per-task cancellation cannot create unbounded transfer tasks.
@@ -1911,18 +1911,24 @@ tests:
   - test.ui-smoke
 ```
 
-### core.logging
+### infrastructure.logging
 
 ```yaml
-id: core.logging
-type: core
+id: infrastructure.logging
+type: infrastructure
 paths:
-  - DownKyi.Core/Logging/ApplicationLogProvider.cs
-  - DownKyi.Core/Logging/ApplicationLogOptions.cs
-  - DownKyi.Core/Logging/ApplicationLogRecord.cs
-  - DownKyi.Core/Logging/IApplicationLogService.cs
-  - DownKyi.Core/Logging/SensitiveDataRedactor.cs
-responsibility: Provides the Microsoft.Extensions.Logging sink, bounded asynchronous persistence, rotation/retention, recent-event diagnostics, export, and one sensitive-data redaction policy.
+  - src/DownKyi.Application/Diagnostics/ApplicationLogMetrics.cs
+  - src/DownKyi.Application/Diagnostics/ApplicationLogRecord.cs
+  - src/DownKyi.Application/Diagnostics/IApplicationLogService.cs
+  - src/DownKyi.Infrastructure/Logging/ApplicationLogProvider.cs
+  - src/DownKyi.Infrastructure/Logging/NLogAsyncRollingFileSink.cs
+  - src/DownKyi.Infrastructure/Logging/ApplicationLogJsonLayout.cs
+  - src/DownKyi.Infrastructure/Logging/ApplicationRecentLogBuffer.cs
+  - src/DownKyi.Infrastructure/Logging/DiagnosticLogExporter.cs
+  - src/DownKyi.Infrastructure/Logging/ApplicationLogRetentionManager.cs
+  - src/DownKyi.Infrastructure/Logging/ApplicationLogRetentionWorker.cs
+  - src/DownKyi.Infrastructure/Logging/SensitiveDataRedactor.cs
+responsibility: Keeps application-facing diagnostic contracts in Application and implements redaction, bounded asynchronous NLog persistence, recent-event diagnostics, file-backed export, retention, and lifecycle ownership in Infrastructure.
 inbound:
   - app.application
   - core.bili-api
@@ -1931,19 +1937,23 @@ outbound:
   - external.filesystem
 contracts:
   - Diagnostic export must redact cookies, tokens, sensitive URLs, and personal local paths.
-  - Accepted entries pass through one redactor before entering either the bounded recent-event buffer or the bounded writer queue.
+  - Accepted entries pass through the project redactor before entering either the bounded recent-event buffer or the NLog sink; NLog never receives raw structured values.
+  - Redacted-record JSON serialization runs through a thread-agnostic layout on the async target thread, not the caller thread.
+  - NLog is an Infrastructure-private sink configured through a private `LogFactory`; production code cannot use global `LogManager` or `NLog.Extensions.Logging`.
   - Every entry records timestamp, category, event ID, process ID, thread ID, and captured scope context.
-  - Explicit flush drains accepted entries, closes the active file handle so logs are immediately readable on Windows, and reports writer failures.
+  - Explicit flush drains accepted entries, closes the active file handle so logs are immediately readable on Windows, and reports writer failures; async disposal completes cleanup and then rethrows the first persistence failure.
+  - Writes concurrent with file-handle release enter a second queue with the same configured bound; flush drains it before resetting only the `FileTarget` handles and counts overflow rather than rebuilding the logger configuration or losing accepted events.
   - UTC JSONL files live under `yyyy-MM-dd` directories, rotate at 32 MiB, retain at most seven days, and observe a 512 MiB hard safety cap while protecting the active file.
   - Maintenance runs at startup, hourly, day change, rotation, and before export; storage metrics report capacity ratio, age/capacity deletions, and bytes/events written.
-  - Diagnostic export contains a redacted bounded event stream and a machine-readable manifest; it cannot copy raw application logs or user paths.
+  - Diagnostic export reads persisted JSONL files after a flush, re-redacts defensively, skips and counts malformed records, and writes a bounded event stream plus machine-readable manifest.
+  - Recent buffer, sink, retention worker, retention policy, and exporter are separate owners; the Application project contains contracts only and Core contains no logging implementation.
   - Async disposal drains accepted entries without a synchronous wait.
   - Async commands and ViewModel fire-and-forget observation require an injected logger; cancellation retains cancellation semantics while operational failures are sanitized and recorded.
   - Production code cannot restore `LogManager`, the legacy terminal wrapper, or direct terminal diagnostics.
 hazards:
   - Bypassing the shared provider loses redaction, bounded buffering, retention, and export consistency.
-  - The provider also owns queueing, file writing, rotation, retention, recent-event buffering, metrics, and diagnostic export; changing its lifecycle requires focused shutdown and privacy tests.
-  - Replacing it with a third-party sink requires an ADR and evidence that redaction occurs before every persistent or cached destination.
+  - Reconfiguring the private NLog target or flush sequence can reopen Windows file-sharing and shutdown races; changes require focused concurrent flush, disposal, and privacy tests.
+  - Adding another sink requires an ADR and proof that project redaction runs before every persistent or cached destination.
 tests:
   - test.diagnostic-log-redaction
   - test.architecture-boundaries
@@ -2795,12 +2805,12 @@ test.network-settings:
 
 test.diagnostic-log-redaction:
   paths:
-    - tests/DownKyi.Core.Tests/ApplicationLogProviderTests.cs
+    - tests/DownKyi.Infrastructure.Tests/ApplicationLogProviderTests.cs
   guards:
     - message, exception, and scope data share the same cookie, query-secret, email, account-ID, and personal-path redactor
-    - the recent-event buffer is bounded and diagnostic export includes only its retained entries
+    - the recent-event buffer is bounded while diagnostic export reads the newest persisted entries after a provider restart
     - accepted entries are drained by async disposal and explicit flush releases the current log file
-    - size rotation and age/count retention remain bounded
+    - size rotation, age/byte retention, active-file protection, malformed-line accounting, and canceled-export cleanup remain bounded
     - writer initialization failures are visible to flush callers
 
 test.ui-smoke:
