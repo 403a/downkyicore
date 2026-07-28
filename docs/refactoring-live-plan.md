@@ -46,7 +46,7 @@ Current owner progress, pending PR integration:
 
 - Method-level comparison confirms all 28 methods and 25 command properties are present and content-equivalent after line-ending normalization.
 - The three partial owners are 384, 275, and 292 lines. The oversized inventory fell from 11 to 10, and architecture tests prevent aria command wiring from returning to the general owner.
-- Focused gates: Settings/ModuleBoundary architecture tests pass 58/58 and Desktop/Host smoke passes 13/13. Full Release, solution, format, package, diff, and secret gates remain pending before PR publication.
+- Local gates: strict `AnalysisMode=All` Release build has zero warnings/errors; all 619 tests pass, including 58 focused architecture tests and 13 Desktop/Host smoke tests; format reports 0/810 changed files; vulnerable/deprecated package audits, `git diff --check`, and 936-candidate Gitleaks checks pass.
 
 Verification:
 
