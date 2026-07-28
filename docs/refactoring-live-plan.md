@@ -3,7 +3,7 @@
 Status: active
 Last updated: 2026-07-28
 Current group: Gate 9 large-owner convergence
-Current branch: `refactor/custom-pager-owner`
+Current branch: `refactor/network-settings-view-owner`
 
 This file contains only unfinished or not-yet-integrated work. Completed PR 02-32 items are not restored. Design rationale belongs in `design-docs`; product acceptance belongs in `product-specs`.
 
@@ -36,6 +36,7 @@ The previous `Status: complete` was incorrect.
 - Gate 9 bangumi-follow ViewModel ownership passed Windows/Linux/macOS quality run `30364267364` and CodeQL run `30364266723`; all seven check-runs had zero annotations and every platform retained seven assembly-named TRX artifacts. PR #105 was merged into `refactor/pr-30-32-release-hardening` as merge commit `1e265d1`. The 531-line mixed owner became a 435-line pager/navigation/load/download workflow owner and a 103-line service-free binding-state owner. CI also exposed and fixed NLog target-batch rotation overshoot plus solution-level xUnit host/TRX contention before merge.
 - Gate 9 input-parser ownership passed Windows/Linux/macOS quality run `30366101959` and CodeQL run `30366101939`; all seven check-runs had zero annotations and every platform retained seven assembly-named TRX artifacts. PR #106 was merged into `refactor/pr-30-32-release-hardening` as merge commit `152e4a4`. The 586-line mixed parser became eight responsibility partials below 120 lines, with deterministic canonical, sentinel, null and exact-host contracts.
 - Gate 9 search composition passed Windows/Linux/macOS quality run `30367302324` and CodeQL run `30367302508`; all seven check-runs had zero annotations and every platform retained seven assembly-named TRX artifacts. PR #107 was merged into `refactor/pr-30-32-release-hardening` as merge commit `dd9a81a`. MainWindow and Index now share the Host-owned `SearchService`, and an architecture ratchet rejects direct ViewModel construction.
+- Gate 9 pager ownership passed Windows/Linux/macOS quality run `30369076250` and CodeQL run `30369076284`; all seven check-runs had zero annotations and every platform retained seven assembly-named TRX artifacts. PR #108 was merged into `refactor/pr-30-32-release-hardening` as merge commit `59e7a1c`. The 506-line pager became focused state/command/layout owners, and parameterless XAML buttons plus constructor current-page behavior were repaired.
 - `version.txt` remains `1.0.32`; v1.1.0 has not passed its release gate.
 
 No release tag may be created while any release blocker below remains.
@@ -49,13 +50,13 @@ Owner branches: separate responsibility-based large-owner PRs.
 Scope:
 
 - Split hand-written oversized owners by responsibility; do not split generated/protocol files only to satisfy LOC.
-- Current owner: separate the oversized custom pager into change-veto, XAML state, parameterless command and pure layout owners while fixing ignored button clicks and constructor state.
+- Current owner: separate the oversized network-settings XAML into ordered general, built-in downloader, bundled aria2, and external aria2 views without changing bindings or layout.
 
 Current owner progress, pending PR integration:
 
-- The 506-line owner is now 103-line change-veto coordination, 110-line binding state, 51-line commands and a 41-line framework-free layout value owner.
-- Previous/next/first/last buttons now use parameterless commands matching their XAML; constructor state honors its requested page, listener-free changes work, veto remains effective, and the unused `CountChanged` event plus six empty handlers are removed.
-- Strict `AnalysisMode=All` Release build has zero warnings/errors; all 702 tests pass, including six deterministic pager behaviors, three pager architecture checks, and Host/XAML smoke. Format, vulnerable/deprecated package audits, boundary audit, `git diff --check`, and 960-candidate Gitleaks checks pass. Remote gates remain before integration.
+- The 608-line view is now a 21-line ordered composition shell plus 152-line general, 108-line built-in, 274-line bundled aria2, and 77-line external aria2 typed child views.
+- Structured comparison retains all 94 bindings, 40 named controls, 72 dynamic resources, 4 static resources, and 26 command parameters. The aria proxy source and dependent visibility binding remain in one namescope.
+- Strict `AnalysisMode=All` Release build has zero warnings/errors; all 706 tests pass, including 199 architecture tests and 13 Desktop/Host smoke tests. Format, vulnerable/deprecated package audits, boundary audit, `git diff --check`, and 969-candidate Gitleaks checks pass. Remote gates remain before integration.
 
 Verification:
 
