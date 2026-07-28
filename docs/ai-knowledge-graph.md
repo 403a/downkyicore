@@ -512,9 +512,12 @@ type: core
 paths:
   - src/DownKyi.Infrastructure/Time/SystemClock.cs
   - src/DownKyi.Infrastructure/Downloads/SqliteDownloadTaskStore.cs
+  - src/DownKyi.Infrastructure/Downloads/DownloadTaskRecordMapper.cs
+  - src/DownKyi.Infrastructure/Downloads/DownloadTaskSqlReader.cs
+  - src/DownKyi.Infrastructure/Downloads/DownloadTaskSqlWriter.cs
   - src/DownKyi.Infrastructure/Downloads/DownloadStoreSchema.cs
   - src/DownKyi.Infrastructure/Downloads/DownloadProgressWriteBehind.cs
-responsibility: Implements Application time and download persistence contracts using pooled SQLite connections and bounded background writes.
+responsibility: Implements Application time and download persistence contracts using a transaction coordinator, dedicated row mapper/read/write owners, pooled SQLite connections, and bounded background writes.
 inbound:
   - app.host-composition
 outbound:
@@ -524,6 +527,7 @@ contracts:
   - Infrastructure never references Desktop or Prism.
   - SystemClock returns UTC time; deterministic tests replace IClock at the composition boundary.
   - SQLite uses one short pooled connection per operation, WAL, parameterized queries, optimistic versions, and transactional state moves.
+  - `SqliteDownloadTaskStore` owns initialization, transactions, and public query coordination; record restoration, quarantine reads, and SQL write commands stay in their dedicated owners.
   - Existing databases are backed up before schema migration; failed migrations roll back and never advance `user_version`.
   - One malformed row is quarantined with record ID, field, and sanitized reason; raw JSON and personal paths are not copied into diagnostics.
   - The progress writer has a one-slot bounded wake channel, a bounded task set, contiguous coalescing, and a final shutdown flush.
@@ -2920,6 +2924,7 @@ test.download-store:
     - malformed JSON quarantines only the affected row and does not expose raw personal data
     - completed state moves atomically from downloading to keyset-paged history
     - a legacy success row left in downloading is queued for recovery instead of quarantined
+    - architecture tests prevent the store coordinator from reclaiming Domain row reconstruction or state-row upsert SQL
 
 test.progress-write-behind:
   paths:
