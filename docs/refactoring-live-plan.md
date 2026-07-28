@@ -2,8 +2,8 @@
 
 Status: active
 Last updated: 2026-07-28
-Current group: Gate 9 naming and large-owner convergence
-Current branch: `refactor/naming-boundaries`
+Current group: Gate 9 large-owner convergence
+Current branch: `refactor/sqlite-download-store`
 
 This file contains only unfinished or not-yet-integrated work. Completed PR 02-32 items are not restored. Design rationale belongs in `design-docs`; product acceptance belongs in `product-specs`.
 
@@ -23,37 +23,35 @@ The previous `Status: complete` was incorrect.
 - Gate 7 async Bilibili Infrastructure ownership passed Windows/Linux/macOS quality run `30189537538`, protobuf run `30189537553`, and CodeQL run `30189537541`, then PR #91 was merged into `refactor/pr-30-32-release-hardening` as merge commit `55070903`.
 - Gate 8 passed Windows/Linux/macOS quality run `30191251004`, protobuf run `30191250997`, and CodeQL run `30191250992`; PR #92 was merged into `refactor/pr-30-32-release-hardening` as `f8e78c9a`. CodeQL reported no alert, but GitHub emitted one platform annotation because the single required ownership PR changed 396 files and its diff API is capped at 300 files.
 - Gate 9 logging ownership passed Windows/Linux/macOS quality run `30345373830`, protobuf run `30345371405`, and CodeQL run `30345371181`, with zero check annotations. PR #94 was merged into `refactor/pr-30-32-release-hardening` as merge commit `b290b204`.
+- Gate 9 naming convergence passed Windows/Linux/macOS quality run `30347937643` and CodeQL run `30347937639`; all seven check-runs had zero annotations. PR #95 was merged into `refactor/pr-30-32-release-hardening` as merge commit `e29ecc8`. Generic-name and file/type-mismatch baselines are zero; the four remaining duplicate-name sets are endpoint/role-scoped contracts.
 - `version.txt` remains `1.0.32`; v1.1.0 has not passed its release gate.
 
 No release tag may be created while any release blocker below remains.
 
 ## Execution Order
 
-### Gate 9: Naming And Large-Owner Convergence
+### Gate 9: Large-Owner Convergence
 
-Owner branches: separate naming and large-owner PRs.
+Owner branches: separate responsibility-based large-owner PRs.
 
 Scope:
 
-- Rename `Languanges`, QR/FFmpeg casing, duplicate SeasonsSeries owners and proven generic buckets in isolated rename PRs.
 - Split hand-written oversized owners by responsibility; do not split generated/protocol files only to satisfy LOC.
 
-Naming implementation progress, pending PR integration:
+Current owner progress, pending PR integration:
 
-- Canonical resource/runtime casing is `Languages` and `DownKyi.Core.FFmpeg`; architecture tests reject the historical spellings.
-- Seasons/series detail and user-space list owners now have distinct View/ViewModel names. Application owns the sole `VideoInputResolver`; Desktop owns only `PlayStreamTypeResolver`.
-- Generic type names fell from 5 to 0 and file/type mismatches from 4 to 0. JSON/XML DTOs were split into same-name files without changing CLR names or wire contracts.
-- Duplicate simple-name groups fell from 9 to 4. The remaining complete sets are endpoint/role-scoped `BangumiType`, `FavoritesMedia`, `Subtitle`, and `VideoPage` contracts and cannot grow.
-- Local gates: strict `AnalysisMode=All` Release build has zero warnings/errors; all 617 tests pass; format changed 0/805 files; vulnerable/deprecated package audits, `git diff --check`, 180 architecture tests, 13 Desktop smoke tests, and 931-candidate Gitleaks checks pass.
+- `SqliteDownloadTaskStore` fell from 928 to 447 lines. It retains initialization, transactions, optimistic conflict handling, and public query coordination.
+- `DownloadTaskRecordMapper`, `DownloadTaskSqlReader`, and `DownloadTaskSqlWriter` now own Domain restoration, read/quarantine SQL, and state-write SQL respectively. Schema version, table/column names, migration, backup, JSON payloads, and resume state are unchanged.
+- The oversized-file inventory fell from 13 to 12. A zero-baseline architecture test prevents row restoration or state upsert SQL from returning to the Store coordinator.
+- Local gates: strict `AnalysisMode=All` Release build has zero warnings/errors; all 618 tests pass, including 52 Infrastructure and 181 architecture tests; all 14 raw SQL literals match the pre-extraction content; format, vulnerable/deprecated package audits, `git diff --check`, and 934-candidate Gitleaks checks pass.
 
 Verification:
 
-- all XAML/resource URI and typed route smoke tests pass after rename.
-- module-boundary ratchet entries decrease and no new entries are added.
+- owner-specific contract and behavior tests pass before the full solution gate.
+- oversized-file ratchet entries decrease and no new entries are added.
 
 Completion:
 
-- remaining naming exceptions have a documented protocol/generated-code reason.
 - knowledge graph and architecture docs match final ownership.
 
 Rollback:
