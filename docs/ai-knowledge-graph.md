@@ -1212,6 +1212,7 @@ paths:
   - src/DownKyi.Desktop/ViewModels/ViewPublicationViewModel.cs
   - src/DownKyi.Desktop/ViewModels/ViewPublicationViewModel.Search.cs
   - src/DownKyi.Desktop/ViewModels/ViewMySpaceViewModel.cs
+  - src/DownKyi.Desktop/ViewModels/ViewMySpaceViewModel.State.cs
   - src/DownKyi.Desktop/ViewModels/ViewMyBangumiFollowViewModel.cs
   - src/DownKyi.Desktop/Views/ViewPublication.axaml
   - src/DownKyi.Desktop/Views/ViewMyBangumiFollow.axaml
@@ -1227,6 +1228,7 @@ contracts:
   - Publication and bangumi-follow results use one `AddRange` notification and ordinary clicks toggle independent selections.
   - Replacing/leaving publication or bangumi pagers detaches handlers and cancels page/download work.
   - My-space renders the primary profile first; balance/relation failure does not hide an already loaded profile.
+  - My-space binding properties and collections live in a service-free state partial below 500 lines; navigation, cancellation, settings, profile/stat loading, and projection remain in the workflow owner below 500 lines.
   - Canceling publication directory selection returns before media parsing.
   - Publication keyword search uses the WBI endpoint's exact `page.count` and applies one batch projection.
   - Returning from a child route preserves the same query, page, and media instances; only an interrupted page request is resumed.
