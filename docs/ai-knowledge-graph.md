@@ -1002,6 +1002,11 @@ paths:
   - src/DownKyi.Desktop/ViewModels/Settings/ViewVideoViewModel.ContentNamingCommands.cs
   - src/DownKyi.Desktop/ViewModels/Settings/ViewDanmakuViewModel.cs
   - src/DownKyi.Desktop/ViewModels/Settings/ViewAboutViewModel.cs
+  - src/DownKyi.Desktop/Views/Settings/ViewNetwork.axaml
+  - src/DownKyi.Desktop/Views/Settings/NetworkGeneralSettingsView.axaml
+  - src/DownKyi.Desktop/Views/Settings/BuiltinDownloaderSettingsView.axaml
+  - src/DownKyi.Desktop/Views/Settings/AriaDownloaderSettingsView.axaml
+  - src/DownKyi.Desktop/Views/Settings/CustomAriaSettingsView.axaml
 responsibility: Projects current settings into Avalonia binding state and wires commands to typed settings owners.
 inbound:
   - typed navigation through the Avalonia router
@@ -1013,6 +1018,8 @@ contracts:
   - Basic, video, danmaku, and about pages receive `ISettingsStore`; the network page receives only `INetworkSettingsCoordinator` and cannot persist, validate, prompt, or restart directly.
   - Existing setting getter/setter behavior, persisted JSON names, and enum values remain unchanged during the compatibility migration.
   - Network binding properties, general network command wiring, and aria runtime command wiring are separate partial owners; every partial remains below 500 lines and uses the same injected coordinator.
+  - The network settings root is an ordered composition shell. General network selection, built-in downloader, bundled aria2, and external aria2 controls are separate typed views below 300 lines and inherit the same ViewModel.
+  - The five network XAML owners retain 94 binding tokens, 40 named controls, 72 dynamic resources, 4 static resources, and 26 command parameters; the aria proxy source and dependent panel remain in one namescope.
   - Aria command properties retain their existing XAML binding names and cannot move back into the general navigation/network command owner.
   - Video settings binding state, directory/content/filename commands, and navigation/playback/transcoding commands are separate partial owners below 500 lines; only the main owner receives `ISettingsStore`.
   - Video settings partial extraction cannot rename XAML properties or commands, alter FFmpeg defaults, or move file-picker and persistence ownership into state.
@@ -2940,6 +2947,7 @@ test.network-settings:
   paths:
     - tests/DownKyi.Tests/NetworkSettingsCoordinatorTests.cs
     - tests/DownKyi.Architecture.Tests/SettingsArchitectureTests.cs
+    - tests/DownKyi.Architecture.Tests/NetworkSettingsViewArchitectureTests.cs
     - tests/DownKyi.Desktop.Tests/UiSmokeTests.cs
   guards:
     - immutable option catalogs retain the supported downloader, split, log-level, and file-allocation choices
@@ -2947,7 +2955,7 @@ test.network-settings:
     - initialization projection cannot show feedback, open a dialog, or request restart
     - rejected values cannot open a restart prompt, while an accepted prompt requests exactly one asynchronous restart
     - ViewNetworkViewModel cannot regain settings persistence, lifecycle, dialog, option-construction, or resource-feedback ownership
-    - Host smoke resolves ViewNetworkViewModel and its coordinator without loading or initializing Prism ContainerLocator
+    - Host smoke resolves ViewNetworkViewModel and constructs the complete ordered network-settings child-view graph without loading or initializing Prism ContainerLocator
 
 test.diagnostic-log-redaction:
   paths:

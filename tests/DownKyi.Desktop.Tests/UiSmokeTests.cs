@@ -26,6 +26,7 @@ using DownKyi.Services.UserSpace;
 using DownKyi.ViewModels;
 using DownKyi.ViewModels.Settings;
 using DownKyi.Views;
+using DownKyi.Views.Settings;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -315,8 +316,20 @@ public sealed class UiSmokeTests
                 Assert.NotNull(host.Services.GetRequiredService<ViewIndexViewModel>());
                 Assert.NotNull(host.Services.GetRequiredService<ViewVideoDetailViewModel>());
                 Assert.NotNull(host.Services.GetRequiredService<ViewDownloadManagerViewModel>());
-                Assert.NotNull(host.Services.GetRequiredService<ViewNetworkViewModel>());
+                var networkViewModel = host.Services.GetRequiredService<ViewNetworkViewModel>();
+                Assert.NotNull(networkViewModel);
                 Assert.NotNull(host.Services.GetRequiredService<DownKyi.ViewModels.UserSpace.ViewFavoritesViewModel>());
+
+                var networkView = new ViewNetwork { DataContext = networkViewModel };
+                var networkScroll = Assert.IsType<ScrollViewer>(networkView.Content);
+                var networkSections = Assert.IsType<StackPanel>(networkScroll.Content);
+                Assert.Collection(
+                    networkSections.Children,
+                    child => Assert.IsType<NetworkGeneralSettingsView>(child),
+                    child => Assert.IsType<BuiltinDownloaderSettingsView>(child),
+                    child => Assert.IsType<AriaDownloaderSettingsView>(child),
+                    child => Assert.IsType<CustomAriaSettingsView>(child),
+                    child => Assert.IsType<StackPanel>(child));
 
                 host.Services
                     .GetRequiredService<IAppNavigationService>()
