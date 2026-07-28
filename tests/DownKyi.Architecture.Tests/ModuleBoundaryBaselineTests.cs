@@ -44,7 +44,6 @@ public sealed class ModuleBoundaryBaselineTests
         ["DownKyi.Core/BiliApi/BiliUtils/ParseEntrance.cs"] = 586,
         ["src/DownKyi.Desktop/CustomControl/CustomPagerViewModel.cs"] = 506,
         ["src/DownKyi.Desktop/Services/Download/AddToDownloadService.cs"] = 667,
-        ["src/DownKyi.Desktop/ViewModels/Settings/ViewVideoViewModel.cs"] = 1020,
         ["src/DownKyi.Desktop/ViewModels/ViewMyBangumiFollowViewModel.cs"] = 531,
         ["src/DownKyi.Desktop/ViewModels/ViewMySpaceViewModel.cs"] = 669,
         ["src/DownKyi.Desktop/ViewModels/ViewUserSpaceViewModel.cs"] = 569,

@@ -120,6 +120,43 @@ public sealed class SettingsArchitectureTests
     }
 
     [Fact]
+    public void VideoSettingsViewModelResponsibilitiesRemainSeparated()
+    {
+        var viewModelSource = ReadSource(
+            "src", "DownKyi.Desktop",
+            "ViewModels",
+            "Settings",
+            "ViewVideoViewModel.cs");
+        var stateSource = ReadSource(
+            "src", "DownKyi.Desktop",
+            "ViewModels",
+            "Settings",
+            "ViewVideoViewModel.State.cs");
+        var contentNamingSource = ReadSource(
+            "src", "DownKyi.Desktop",
+            "ViewModels",
+            "Settings",
+            "ViewVideoViewModel.ContentNamingCommands.cs");
+
+        Assert.All(
+            new[] { viewModelSource, stateSource, contentNamingSource },
+            source => Assert.True(source.Count(character => character == '\n') < 500));
+        Assert.Contains("ISettingsStore settingsStore", viewModelSource, StringComparison.Ordinal);
+        Assert.Contains("OnNavigatedTo", viewModelSource, StringComparison.Ordinal);
+        Assert.Contains("VideoQualityCommand", viewModelSource, StringComparison.Ordinal);
+        Assert.Contains("FfmpegHardwareAccelerationCommand", viewModelSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("_downloadAllCommand", viewModelSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("_selectedVideoCodec", viewModelSource, StringComparison.Ordinal);
+        Assert.Contains("_selectedVideoCodec", stateSource, StringComparison.Ordinal);
+        Assert.Contains("SelectedFileName", stateSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("ISettingsStore", stateSource, StringComparison.Ordinal);
+        Assert.Contains("ChangeSaveVideoDirectoryCommand", contentNamingSource, StringComparison.Ordinal);
+        Assert.Contains("DownloadAllCommand", contentNamingSource, StringComparison.Ordinal);
+        Assert.Contains("OrderFormatCommand", contentNamingSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("ISettingsStore", contentNamingSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void FfmpegProcessorIsOneInjectedCompositionOwner()
     {
         var processorSource = ReadSource("DownKyi.Core", "FFmpeg", "FfmpegProcessor.cs");

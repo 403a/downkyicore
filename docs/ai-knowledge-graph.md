@@ -951,6 +951,8 @@ paths:
   - src/DownKyi.Desktop/ViewModels/Settings/ViewNetworkViewModel.State.cs
   - src/DownKyi.Desktop/ViewModels/Settings/ViewNetworkViewModel.AriaCommands.cs
   - src/DownKyi.Desktop/ViewModels/Settings/ViewVideoViewModel.cs
+  - src/DownKyi.Desktop/ViewModels/Settings/ViewVideoViewModel.State.cs
+  - src/DownKyi.Desktop/ViewModels/Settings/ViewVideoViewModel.ContentNamingCommands.cs
   - src/DownKyi.Desktop/ViewModels/Settings/ViewDanmakuViewModel.cs
   - src/DownKyi.Desktop/ViewModels/Settings/ViewAboutViewModel.cs
 responsibility: Projects current settings into Avalonia binding state and wires commands to typed settings owners.
@@ -965,6 +967,8 @@ contracts:
   - Existing setting getter/setter behavior, persisted JSON names, and enum values remain unchanged during the compatibility migration.
   - Network binding properties, general network command wiring, and aria runtime command wiring are separate partial owners; every partial remains below 500 lines and uses the same injected coordinator.
   - Aria command properties retain their existing XAML binding names and cannot move back into the general navigation/network command owner.
+  - Video settings binding state, directory/content/filename commands, and navigation/playback/transcoding commands are separate partial owners below 500 lines; only the main owner receives `ISettingsStore`.
+  - Video settings partial extraction cannot rename XAML properties or commands, alter FFmpeg defaults, or move file-picker and persistence ownership into state.
 tests:
   - test.network-settings
   - test.architecture-boundaries

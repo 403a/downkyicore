@@ -2,8 +2,8 @@
 
 Status: maintained verified audit
 Last verified: 2026-07-28
-Verification base: `ffa56743ba58a4a20ee2b12ccfce8e778c9b1d82` plus the Gate 9 network-settings ViewModel working tree
-Verification branch: `refactor/network-settings-viewmodel-owner`
+Verification base: `660d223fba22d4262e8e1091f66458fbcabe97bc` plus the Gate 9 video-settings ViewModel working tree
+Verification branch: `refactor/video-settings-viewmodel-owner`
 
 ## 結論
 
@@ -29,7 +29,7 @@ pwsh ./script/audit-module-boundaries.ps1 `
 | `src/DownKyi.Domain` | 11 | 681 |
 | `src/DownKyi.Application` | 30 | 1,143 |
 | `src/DownKyi.Infrastructure` | 27 | 3,751 |
-| `src/DownKyi.Desktop` | 318 | 44,093 |
+| `src/DownKyi.Desktop` | 320 | 44,125 |
 
 `DownKyi` executable 已降為單一 14 行 bootstrap；Desktop 是最大的產品 owner。行數不能單獨證明設計品質，因此後續仍以 project references、runtime type usage 與 architecture tests 判定責任邊界。
 
@@ -47,7 +47,7 @@ pwsh ./script/audit-module-boundaries.ps1 `
 | resolved | service contracts 依賴 ViewModel | 0 interfaces | completed by Gate 8 |
 | resolved | custom collection contract | 0 custom collection references; standard read-only wrappers | completed by Gate 8 |
 | resolved | naming and folder taxonomy inconsistent | 4 endpoint/role-scoped duplicate groups, 0 generic names, 0 file/type mismatches | completed in Gate 9 naming branch |
-| P2 | oversized owners | 10 production files above 500 physical lines | confirmed, decreasing |
+| P2 | oversized owners | 9 production files above 500 physical lines | confirmed, decreasing |
 | resolved | logging owner too broad | contracts in Application; 268-line provider plus dedicated Infrastructure sink/buffer/retention/export owners | completed by Gate 9 PR #94 |
 | P1 | AI knowledge environment incomplete | required root/docs structure and reproducible audit scripts now exist | resolved |
 
@@ -162,11 +162,11 @@ File/type mismatch baseline 已由 4 項降為 0。Bilibili JSON DTO 與 NFO XML
 
 ## Finding 11: 巨檔 owners
 
-2026-07-28 的實際 boundary audit 有 10 個 production files 超過 500 physical lines；`DownloadPipeline`、`DownloadTaskProjectionStore`、`ViewMyFavoritesViewModel`、`ViewPublicationViewModel`、`SqliteDownloadTaskStore`、`SettingsManager.Network`、`ViewNetworkViewModel` 與原 715 行 `ApplicationLogProvider` 已從 allowlist 移除。SQLite Store 從 928 行降為 447 行，交易/初始化協調、Domain row mapping、讀取/quarantine 與 SQL writes 已分成具名 owner，既有 schema/migration/resume tests 保持不變。Settings 的一般 network/downloader/proxy owner 為 319 行，aria RPC/runtime owner 為 355 行；44 個既有 public compatibility methods 的方法級內容相同，且仍讀寫同一個 `ApplicationSettings.Network` schema。Network settings ViewModel 現分為 384 行 navigation/general-command owner、275 行 aria-command owner 與 292 行 binding-state owner；28 個方法與 25 個 command properties 保持等價，XAML binding 名稱未變。其餘最優先的手寫 owners：
+2026-07-28 的實際 boundary audit 有 9 個 production files 超過 500 physical lines；`DownloadPipeline`、`DownloadTaskProjectionStore`、`ViewMyFavoritesViewModel`、`ViewPublicationViewModel`、`SqliteDownloadTaskStore`、`SettingsManager.Network`、`ViewNetworkViewModel`、`ViewVideoViewModel` 與原 715 行 `ApplicationLogProvider` 已從 allowlist 移除。SQLite Store 從 928 行降為 447 行，交易/初始化協調、Domain row mapping、讀取/quarantine 與 SQL writes 已分成具名 owner，既有 schema/migration/resume tests 保持不變。Settings 的一般 network/downloader/proxy owner 為 319 行，aria RPC/runtime owner 為 355 行；44 個既有 public compatibility methods 的方法級內容相同，且仍讀寫同一個 `ApplicationSettings.Network` schema。Network settings ViewModel 現分為 384 行 navigation/general-command owner、275 行 aria-command owner 與 292 行 binding-state owner；28 個方法與 25 個 command properties 保持等價，XAML binding 名稱未變。Video settings ViewModel 現分為 451 行 navigation/playback/transcoding owner、353 行 directory/content/filename-command owner 與 248 行 binding-state owner；27 個方法、54 個 public members 與 56 個 private fields 保持等價，XAML binding 名稱與同一個 injected `ISettingsStore` ownership 未變。其餘最優先的手寫 owners：
 
-- `ViewVideoViewModel.cs` 1,020
 - `ViewMySpaceViewModel.cs` 669
 - `AddToDownloadService.cs` 663
+- `ViewUserSpaceViewModel.cs` 569
 
 `AriaClient.cs` 1,119 行屬 RPC client 類型，應先確認生成/同步來源，不可只為行數拆分。
 
@@ -202,6 +202,7 @@ Logging 風險已依 ADR 收斂並由 PR #94 整合：Application 只保留 cont
 10. 已刪除的 custom mutable collection 不得返回；下載清單只能公開標準唯讀 wrapper。
 11. 一般 network 與 aria RPC/runtime settings owners 必須維持分離，且兩個檔案都受 500 行上限約束。
 12. Network settings 的 navigation/general commands、aria commands 與 binding state 必須維持分離，每個 partial 都受 500 行上限約束。
+13. Video settings 的 navigation/playback/transcoding commands、directory/content/filename commands 與 binding state 必須維持分離，每個 partial 都受 500 行上限約束，且只有 main owner 可接收 `ISettingsStore`。
 
 這些測試是過渡 ratchet。每移除一項債務，應同步刪除對應 baseline entry；不得把 baseline 當成永久例外清單。
 
