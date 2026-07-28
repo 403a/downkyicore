@@ -949,6 +949,7 @@ paths:
   - src/DownKyi.Desktop/ViewModels/Settings/ViewBasicViewModel.cs
   - src/DownKyi.Desktop/ViewModels/Settings/ViewNetworkViewModel.cs
   - src/DownKyi.Desktop/ViewModels/Settings/ViewNetworkViewModel.State.cs
+  - src/DownKyi.Desktop/ViewModels/Settings/ViewNetworkViewModel.AriaCommands.cs
   - src/DownKyi.Desktop/ViewModels/Settings/ViewVideoViewModel.cs
   - src/DownKyi.Desktop/ViewModels/Settings/ViewDanmakuViewModel.cs
   - src/DownKyi.Desktop/ViewModels/Settings/ViewAboutViewModel.cs
@@ -962,7 +963,8 @@ outbound:
 contracts:
   - Basic, video, danmaku, and about pages receive `ISettingsStore`; the network page receives only `INetworkSettingsCoordinator` and cannot persist, validate, prompt, or restart directly.
   - Existing setting getter/setter behavior, persisted JSON names, and enum values remain unchanged during the compatibility migration.
-  - Network binding properties live in a dedicated partial state file; the main file remains below 700 lines and contains navigation projection plus command wiring.
+  - Network binding properties, general network command wiring, and aria runtime command wiring are separate partial owners; every partial remains below 500 lines and uses the same injected coordinator.
+  - Aria command properties retain their existing XAML binding names and cannot move back into the general navigation/network command owner.
 tests:
   - test.network-settings
   - test.architecture-boundaries

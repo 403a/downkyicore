@@ -86,6 +86,12 @@ public sealed class SettingsArchitectureTests
             "ViewModels",
             "Settings",
             "ViewNetworkViewModel.State.cs");
+        var ariaCommandsSource = ReadSource(
+            "src", "DownKyi.Desktop",
+            "ViewModels",
+            "Settings",
+            "ViewNetworkViewModel.AriaCommands.cs");
+        var allViewModelSources = string.Concat(viewModelSource, stateSource, ariaCommandsSource);
         var coordinatorSource = ReadSource(
             "src", "DownKyi.Desktop",
             "Services",
@@ -94,13 +100,19 @@ public sealed class SettingsArchitectureTests
         var composition = ReadSource("src", "DownKyi.Desktop", "Composition", "DesktopComposition.cs");
 
         Assert.Contains("INetworkSettingsCoordinator", viewModelSource, StringComparison.Ordinal);
-        Assert.DoesNotContain("ISettingsStore", viewModelSource, StringComparison.Ordinal);
-        Assert.DoesNotContain("IApplicationLifecycle", viewModelSource, StringComparison.Ordinal);
-        Assert.DoesNotContain("AlertService", viewModelSource, StringComparison.Ordinal);
-        Assert.DoesNotContain("Enumerable.Range", viewModelSource, StringComparison.Ordinal);
-        Assert.DoesNotContain("DictionaryResource", viewModelSource, StringComparison.Ordinal);
-        Assert.True(viewModelSource.Count(character => character == '\n') < 700);
+        Assert.DoesNotContain("ISettingsStore", allViewModelSources, StringComparison.Ordinal);
+        Assert.DoesNotContain("IApplicationLifecycle", allViewModelSources, StringComparison.Ordinal);
+        Assert.DoesNotContain("AlertService", allViewModelSources, StringComparison.Ordinal);
+        Assert.DoesNotContain("Enumerable.Range", allViewModelSources, StringComparison.Ordinal);
+        Assert.DoesNotContain("DictionaryResource", allViewModelSources, StringComparison.Ordinal);
+        Assert.All(
+            new[] { viewModelSource, stateSource, ariaCommandsSource },
+            source => Assert.True(source.Count(character => character == '\n') < 500));
         Assert.Contains("#region 页面属性申明", stateSource, StringComparison.Ordinal);
+        Assert.Contains("ExecuteAriaHostCommand", ariaCommandsSource, StringComparison.Ordinal);
+        Assert.Contains("ExecuteAriaFileAllocationsCommand", ariaCommandsSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("ExecuteAriaHostCommand", viewModelSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("AriaConfigLogLevel", viewModelSource, StringComparison.Ordinal);
         Assert.Contains("ISettingsStore", coordinatorSource, StringComparison.Ordinal);
         Assert.Contains("ApplyWithRestartPromptAsync", coordinatorSource, StringComparison.Ordinal);
         Assert.Contains("INetworkSettingsCoordinator, NetworkSettingsCoordinator", composition,
