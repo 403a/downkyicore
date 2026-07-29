@@ -126,6 +126,12 @@ history, not repeated here.
   contentions, recovered, parsed all marker states and reported no error. One
   5220.745 ms Architecture execution crossed the unchanged five-second
   threshold and retained evidence; no slow evidence was missing.
+- Follow-up review made the proof predicate explicit rather than relying on
+  derived booleans: positive contention and null error are checked directly,
+  the self-test phase shares the final predicate, and mutation cases reject
+  error-bearing, zero-contention and incomplete nominally-passed states.
+  Unauthorized access and non-sharing I/O now remain marker read errors instead
+  of being mislabeled as contention.
 
 ## Gate 10 Checklist
 

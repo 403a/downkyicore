@@ -38,9 +38,15 @@ only; do not compare them directly with schema 2.
 Formal Windows PR, Main, Rehearsal and Flaky lifecycle profiles require
 `-ValidateForensics`. Their schema 2 report must show a detailed
 `markerReaderSelfTest` with `executed`, `passed`, `contentionObserved`,
-`recoveredAfterLockRelease` and `markerParsedAfterRecovery` all true. Missing,
-null, unknown or non-contending proofs fail closed; the top-level
+`contentionCount > 0`, `recoveredAfterLockRelease` and
+`markerParsedAfterRecovery` all true, plus `errorType == null`. Its contract
+mutation checks must also pass. Missing, null, unknown or non-contending proofs
+fail closed; the top-level
 `markerReaderSelfTestPassed` value is only a summary.
+
+Only Windows sharing/lock error codes count as marker contention.
+`UnauthorizedAccessException` and other I/O errors remain separately visible
+as `markerReadErrorCount` and `markerReadErrorType`.
 
 Pull requests are guarded by `.github/workflows/quality.yml`:
 
