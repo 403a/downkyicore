@@ -262,8 +262,8 @@ jobs:
         working-directory: ./script
       - name: Build ${{ matrix.cpu }}
         run: |
-          dotnet restore
-          dotnet publish DownKyi/DownKyi.csproj --self-contained -r osx-${{ matrix.cpu }} -c Release -p:DebugType=None -p:DebugSymbols=false
+          dotnet restore DownKyi/DownKyi.csproj -r osx-${{ matrix.cpu }}
+          dotnet publish DownKyi/DownKyi.csproj --no-restore --self-contained -r osx-${{ matrix.cpu }} -c Release -p:DebugType=None -p:DebugSymbols=false
       - name: Package app
         run: |
           chmod +x package.sh

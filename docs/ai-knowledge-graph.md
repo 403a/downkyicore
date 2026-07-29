@@ -2427,6 +2427,7 @@ type: workflow
 paths:
   - .github/workflows/build.yml
   - Directory.Build.props
+  - DownKyi.Core/DownKyi.Core.csproj
   - version.txt
   - script/validate-publish-output.ps1
   - script/assets/external-assets.json
@@ -2449,9 +2450,13 @@ contracts:
   - Each RID validates a fixed publish directory containing non-empty DownKyi, aria2, FFmpeg, ffprobe, and dependency-manifest files.
   - Publish validation checks the expected assembly version, requires Fluent, rejects Simple, and emits per-file SHA-256 values.
   - Every package uploads its own `.sha256` sidecar and publish manifest with the artifact.
-  - External archives are accepted only after their manifest SHA-256 matches.
+  - External archive URLs and SHA-256 values have one owner in `script/assets/external-assets.json`; every PowerShell and Bash downloader resolves that manifest relative to its own file.
+  - External archives use immutable release tags and are accepted only after TLS validation, a successful HTTP status and their manifest SHA-256 match.
+  - `DownKyiAssetRuntimeIdentifier` selects packaged binary content without assigning the .NET SDK `RuntimeIdentifier`; package restore and publish explicitly own the target RID.
   - `version.txt` is the only project version source. Directory build metadata, application display, package names, publish manifests and tags must agree with it.
 hazards:
+  - Autobuild releases can be removed upstream. A checksum mismatch on a short error page is a hard package failure; refresh the immutable URL and publisher digest, never skip verification or switch to mutable `latest`.
+  - Inferring the SDK `RuntimeIdentifier` from the runner host corrupts cross-target restore graphs, such as osx-x64 publication on an arm64 runner.
   - Inspecting PupNet's temporary publish path is not stable; validation publish directories must be explicit.
   - Cross-compiling proves package shape, not native execution. Native Host/XAML tests remain owned by each matrix runner.
 tests:

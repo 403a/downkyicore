@@ -30,6 +30,17 @@ history, not repeated here.
   and all 14 allowlisted contracts with HTTP 200, Bilibili code 0, required
   fields present and zero contract drift. Gitleaks 8.30.1 then reported zero
   findings across all 986 candidate files.
+- PR #112 first-head quality run `30426137294`, protobuf run `30426137279`
+  and CodeQL run `30426137276` passed. Each platform uploaded seven distinct
+  TRX files; 713 tests executed successfully and the FFmpeg-dependent seek
+  integration was the only non-executed CI case.
+- Manual package rehearsal `30426554087` then exposed two release-only
+  defects: expired BtbN autobuild URLs on Windows x64/Linux and host-derived
+  `RuntimeIdentifier` contamination during x64 publication on arm64 macOS.
+  The candidate now pins existing immutable FFmpeg releases, resolves all
+  asset scripts from their own directory, uses one manifest on every OS, and
+  separates asset selection from the SDK runtime identifier. Local strict
+  build, all 718 tests, Windows x86 cross-publish and package validation pass.
 - Final remote and package validation is not complete, so no tag may be
   created.
 

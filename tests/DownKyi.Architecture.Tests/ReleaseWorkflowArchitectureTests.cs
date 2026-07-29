@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Reflection;
+using System.Text.Json;
 using System.Xml.Linq;
 
 namespace DownKyi.Architecture.Tests;
@@ -36,6 +37,99 @@ public sealed class ReleaseWorkflowArchitectureTests
         Assert.Contains("aria2/aria2c", validator, StringComparison.Ordinal);
         Assert.Contains("Avalonia.Themes.Fluent", validator, StringComparison.Ordinal);
         Assert.Contains("Get-FileHash", validator, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CoreSelectsExternalAssetsWithoutSettingTheSdkRuntimeIdentifier()
+    {
+        var projectPath = Path.Combine(RepositoryRoot, "DownKyi.Core", "DownKyi.Core.csproj");
+        var project = XDocument.Load(projectPath);
+
+        Assert.DoesNotContain(
+            project.Descendants(),
+            element => element.Name.LocalName == "RuntimeIdentifier");
+
+        var source = File.ReadAllText(projectPath);
+        Assert.Contains("DownKyiAssetRuntimeIdentifier", source, StringComparison.Ordinal);
+        Assert.Contains(
+            "Binary/$(DownKyiAssetRuntimeIdentifier)/aria2/*",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Binary/$(DownKyiAssetRuntimeIdentifier)/ffmpeg/*",
+            source,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ExternalAssetManifestPinsImmutableReleaseUrlsAndSha256Digests()
+    {
+        var manifestPath = Path.Combine(
+            RepositoryRoot,
+            "script",
+            "assets",
+            "external-assets.json");
+        using var manifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
+
+        foreach (var tool in manifest.RootElement.EnumerateObject())
+        {
+            foreach (var asset in tool.Value.GetProperty("assets").EnumerateObject())
+            {
+                AssertPinnedAsset(asset.Value, "url", "sha256");
+
+                if (asset.Value.TryGetProperty("ffprobeUrl", out _))
+                {
+                    AssertPinnedAsset(asset.Value, "ffprobeUrl", "ffprobeSha256");
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void ExternalAssetScriptsResolveFromTheirOwnDirectoryAndShareTheManifest()
+    {
+        var scripts = new[]
+        {
+            File.ReadAllText(Path.Combine(RepositoryRoot, "script", "ffmpeg.ps1")),
+            File.ReadAllText(Path.Combine(RepositoryRoot, "script", "aria2.ps1")),
+            File.ReadAllText(Path.Combine(RepositoryRoot, "script", "ffmpeg.sh")),
+            File.ReadAllText(Path.Combine(RepositoryRoot, "script", "aria2.sh")),
+        };
+
+        Assert.All(scripts, source =>
+        {
+            Assert.Contains("external-assets.json", source, StringComparison.Ordinal);
+            Assert.DoesNotContain(
+                "download_dir=\"./downloads\"",
+                source,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain(
+                "Create-Dir \".\\downloads\"",
+                source,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain("curl -k", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("curl --insecure", source, StringComparison.Ordinal);
+        });
+        Assert.Contains("$PSScriptRoot", scripts[0], StringComparison.Ordinal);
+        Assert.Contains("$PSScriptRoot", scripts[1], StringComparison.Ordinal);
+        Assert.Contains("BASH_SOURCE[0]", scripts[2], StringComparison.Ordinal);
+        Assert.Contains("BASH_SOURCE[0]", scripts[3], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MacPackageBuildRestoresTheRequestedRuntimeBeforePublishing()
+    {
+        var workflow = File.ReadAllText(
+            Path.Combine(RepositoryRoot, ".github", "workflows", "build.yml"));
+
+        Assert.Contains(
+            "dotnet restore DownKyi/DownKyi.csproj -r osx-${{ matrix.cpu }}",
+            workflow,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "dotnet publish DownKyi/DownKyi.csproj --no-restore --self-contained -r osx-${{ matrix.cpu }}",
+            workflow,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -86,6 +180,22 @@ public sealed class ReleaseWorkflowArchitectureTests
     private static int CountOccurrences(string source, string value)
     {
         return source.Split(value, StringSplitOptions.None).Length - 1;
+    }
+
+    private static void AssertPinnedAsset(
+        JsonElement asset,
+        string urlProperty,
+        string checksumProperty)
+    {
+        var url = asset.GetProperty(urlProperty).GetString();
+        var checksum = asset.GetProperty(checksumProperty).GetString();
+
+        Assert.NotNull(url);
+        Assert.NotNull(checksum);
+        Assert.True(Uri.TryCreate(url, UriKind.Absolute, out var uri));
+        Assert.Equal(Uri.UriSchemeHttps, uri.Scheme);
+        Assert.DoesNotContain("/latest/", url, StringComparison.OrdinalIgnoreCase);
+        Assert.Matches("^[a-f0-9]{64}$", checksum);
     }
 
     private static bool IsBuildOutput(string path)
