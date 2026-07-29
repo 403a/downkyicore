@@ -49,10 +49,7 @@ public sealed class ModuleBoundaryBaselineTests
 
     private static readonly HashSet<string> KnownFileTypeMismatches = new(StringComparer.Ordinal);
 
-    private static readonly Dictionary<string, int> KnownOversizedFiles = new(StringComparer.Ordinal)
-    {
-        ["DownKyi.Core/Aria2cNet/Client/AriaClient.cs"] = 1137
-    };
+    private static readonly Dictionary<string, int> KnownOversizedFiles = new(StringComparer.Ordinal);
 
     [Fact]
     public void CoreHasNoUiOrQrRenderingDependencies()
