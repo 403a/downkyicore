@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
@@ -10,9 +11,20 @@ internal static class Program
 {
     public static int Main(string[] args)
     {
+        if (TryReadChildHoldArguments(args, out var childHoldMilliseconds))
+        {
+            Thread.Sleep(childHoldMilliseconds);
+            return 0;
+        }
+
+        if (TryReadResidualChildArguments(args, out var residualChildHoldMilliseconds))
+        {
+            return RunResidualChildProbe(residualChildHoldMilliseconds);
+        }
+
         if (!TryReadArguments(args, out var assemblyPath, out var holdAfterUnloadMilliseconds))
         {
-            WriteResult(new ProbeResult(false, null, null, false, "invalid_arguments"));
+            WriteResult(new ProbeResult(false, null, null, false, "invalid_arguments", null));
             return 2;
         }
 
@@ -29,8 +41,53 @@ internal static class Program
             loaded.AssemblyName,
             loaded.AssemblyVersion,
             unloaded,
-            unloaded ? null : "assembly_context_retained"));
+            unloaded ? null : "assembly_context_retained",
+            null));
         return unloaded ? 0 : 1;
+    }
+
+    private static int RunResidualChildProbe(int holdMilliseconds)
+    {
+        var processPath = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(processPath))
+        {
+            WriteResult(new ProbeResult(
+                false,
+                null,
+                null,
+                false,
+                "process_path_unavailable",
+                null));
+            return 1;
+        }
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = processPath,
+            UseShellExecute = true,
+            WindowStyle = ProcessWindowStyle.Hidden
+        };
+        startInfo.ArgumentList.Add(typeof(Program).Assembly.Location);
+        startInfo.ArgumentList.Add("--child-hold-ms");
+        startInfo.ArgumentList.Add(
+            holdMilliseconds.ToString(
+                System.Globalization.CultureInfo.InvariantCulture));
+
+        using var child = Process.Start(startInfo);
+        if (child is null)
+        {
+            WriteResult(new ProbeResult(
+                false,
+                null,
+                null,
+                false,
+                "residual_child_start_failed",
+                null));
+            return 1;
+        }
+
+        WriteResult(new ProbeResult(true, null, null, true, null, child.Id));
+        return 0;
     }
 
     private static bool TryReadArguments(
@@ -65,6 +122,42 @@ internal static class Program
                 System.Globalization.CultureInfo.InvariantCulture,
                 out holdAfterUnloadMilliseconds) &&
             holdAfterUnloadMilliseconds is >= 0 and <= 30_000;
+    }
+
+    private static bool TryReadChildHoldArguments(
+        string[] args,
+        out int holdMilliseconds)
+    {
+        return TryReadBoundedMillisecondsArgument(
+            args,
+            "--child-hold-ms",
+            out holdMilliseconds);
+    }
+
+    private static bool TryReadResidualChildArguments(
+        string[] args,
+        out int holdMilliseconds)
+    {
+        return TryReadBoundedMillisecondsArgument(
+            args,
+            "--spawn-residual-child-ms",
+            out holdMilliseconds);
+    }
+
+    private static bool TryReadBoundedMillisecondsArgument(
+        string[] args,
+        string option,
+        out int milliseconds)
+    {
+        milliseconds = 0;
+        return args.Length == 2 &&
+            string.Equals(args[0], option, StringComparison.Ordinal) &&
+            int.TryParse(
+                args[1],
+                System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out milliseconds) &&
+            milliseconds is >= 1_000 and <= 30_000;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -130,7 +223,8 @@ internal static class Program
         string? AssemblyName,
         string? AssemblyVersion,
         bool Unloaded,
-        string? ErrorType);
+        string? ErrorType,
+        int? ChildProcessId);
 }
 
 [JsonSerializable(typeof(Program.ProbeResult))]

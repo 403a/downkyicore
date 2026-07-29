@@ -19,6 +19,7 @@ $rules = [ordered]@{
     module_initializer = '\[ModuleInitializer\]'
     process_exit = '\bProcessExit\b'
     static_initialization = '(?:^\s*static\s+[A-Za-z_][A-Za-z0-9_]*\s*\(|^\s*(?:(?:public|internal|private|protected)\s+)?static\s+(?:readonly\s+)?[^();]+\s+[A-Za-z_][A-Za-z0-9_]*\s*(?:=|;))'
+    external_process = '\b(?:Process\.Start\s*\(|new\s+Process\s*(?:\(\s*\)|\{))'
     new_thread = '\bnew\s+Thread\s*\('
     task_run = '\bTask\.Run\s*\('
     dispatcher = '\bDispatcher(?:\.UIThread|Timer)?\b'

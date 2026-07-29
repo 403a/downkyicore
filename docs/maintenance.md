@@ -62,6 +62,16 @@ Only Windows sharing/lock error codes count as marker contention.
 `UnauthorizedAccessException` and other I/O errors remain separately visible
 as `markerReadErrorCount` and `markerReadErrorType`.
 
+Residual-child failures are independently fail-closed. Every failed phase must
+preserve a sanitized `residualChildren` identity list plus a
+`residual-children.json` manifest; live managed children also receive thread,
+tree and managed-stack evidence. `-ValidateForensics` must prove this path by
+creating a controlled residual child, observing its identity, writing evidence,
+classifying the phase as `ResidualChildProcess` and cleaning the synthetic tree
+by PID plus creation time. It must also prove path, URL, cookie and secret
+redaction. `residualChildSelfTestPassed` is only the summary;
+the detailed `residualChildSelfTest` fields are the contract.
+
 PR #116 merged the final lifecycle proof consistency fix into `main` at
 `6a61247`. Strict PR CI `30450175286` and CodeQL `30450175415` passed. Its
 Main profile report contains 2,102 phase results across seven assemblies and
@@ -70,6 +80,21 @@ read errors. Teardown max is 7 ms and OS process-exit max is 187 ms; all 14
 slow execution phases retained evidence. This report validates the corrected
 lifecycle owner and gate, but the final versioned release commit must still
 pass its own Main profile and the 100-iteration Rehearsal profile.
+
+The first v1.1.1 Rehearsal run `30455540672` correctly blocked packaging after
+`DownKyi.Tests` assembly-info iteration 78 observed one residual child. The
+historical report retained only `residualChildCount=1`, so that runner's exact
+child identity cannot be recovered after the hosted VM was destroyed. The
+phase did not execute tests, Host, Dispatcher or application services; its
+stdout was valid xUnit metadata, stderr was empty and exit code was zero.
+Five hundred local repetitions of the same
+`dotnet DownKyi.Tests.dll -assemblyInfo` command observed no residual child,
+excluding a deterministic
+application owner but not the low-probability runner race. The corrected gate
+therefore preserves identity and evidence on every future observation and
+dynamically self-tests the full residual-child failure path. A new Main profile
+and complete Rehearsal remain mandatory; the failed run is not replaced by a
+blind rerun.
 
 Pull requests are guarded by `.github/workflows/quality.yml`:
 

@@ -2392,9 +2392,11 @@ contracts:
   - Diagnostic capture wall time is reported separately because managed-stack collection perturbs the instrumented phase; slow execution evidence cannot be presented as post-teardown exit evidence.
   - Unexpected stdout/stderr, timeout, residual child process, missing teardown marker or failed process exit blocks the gate.
   - Slow and timed-out Windows processes preserve thread state, wait reason, process tree and a managed stack when `dotnet-stack` is available.
+  - Residual children preserve PID, parent PID, process name, creation time, tree depth and a redacted command line in the phase result plus `residual-children.json`; live managed children also receive thread/tree/stack evidence.
+  - Residual evidence never changes failure into success and does not add a grace period. `ValidateForensics` creates a synthetic residual process tree and fails unless identity, manifest, `ResidualChildProcess` classification and PID-plus-creation-time cleanup all succeed.
   - `ValidateForensics` proves both marker-aware managed-stack capture and exclusive marker-lock recovery; formal Windows profiles fail closed unless the detailed self-test reports execution, positive contention count, recovery, parsing, null error and success, and mutation checks reject inconsistent nominally-passed states.
   - Marker self-test phase status, report summary and formal gate consume one complete proof result rather than re-expanding equivalent predicates.
-  - Every scanned lifecycle mechanism maps to a declared owner with explicit start, stop and teardown behavior.
+  - Every scanned lifecycle mechanism, including external process creation, maps to a declared owner with explicit start, stop and teardown behavior.
 hazards:
   - A green rerun can hide a race and does not replace owner identification or deterministic teardown.
   - Comparing timing from different runner metadata creates invalid performance conclusions.
@@ -3154,6 +3156,7 @@ test.assembly-lifecycle-architecture:
   guards:
     - every test assembly receives async fixture-owned data isolation without ModuleInitializer or ProcessExit cleanup
     - the lifecycle gate retains all six process phases, timing statistics, output-pollution checks and timeout forensics
+    - residual-child failures retain sanitized identity and evidence, stay fail-closed, and execute a deterministic observation/classification/cleanup self-test
     - PR, main and release workflows cannot drop their lifecycle profiles or managed-stack diagnostics
     - formal Verification cannot omit the ownership audit, five-iteration local gate or Rehearsal report
     - Desktop main-loop teardown awaits async App and Host disposal

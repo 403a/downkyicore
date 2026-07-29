@@ -50,8 +50,11 @@ each phase in an independent child process:
    deadline without residual children or runner-protocol pollution.
 
 Every phase records its exit code, duration, timeout state, stdout/stderr
-protocol state, residual child count and evidence paths. The report aggregates
-P50, P95, P99 and maximum duration per assembly and phase.
+protocol state, residual child count, sanitized child identity and evidence
+paths. Residual identity includes PID, parent PID, process name, creation time,
+tree depth and a command line with repository, user-profile, temporary, URL and
+credential values redacted. The report aggregates P50, P95, P99 and maximum
+duration per assembly and phase.
 Every phase result also has general `failureType` and `errorType` fields.
 `slowEvidenceErrorType` is reserved for failures inside slow-evidence capture
 and must not carry unrelated self-test or lifecycle contract failures.
@@ -112,6 +115,7 @@ tool sources for:
 
 - module initializers and process-exit handlers;
 - static constructors and static field initialization;
+- external process creation;
 - explicit threads, `Task.Run`, dispatchers and timers;
 - global event registration;
 - Generic Host startup and shutdown;
@@ -158,12 +162,28 @@ On Windows, a slow phase or slow post-teardown exit automatically captures:
 - a sanitized process tree containing PID, parent PID and process name;
 - `dotnet-stack report --process-id` output when the tool is available.
 
+Residual children use a separate evidence path. The first observation is always
+written to `residual-children.json`, even when a process exits before deeper
+collection begins. A still-live managed child receives the normal thread,
+process-tree and managed-stack capture; native descendants retain identity and
+thread/process evidence without waiting on an inapplicable managed collector.
+Any observed residual child remains a blocking `ResidualChildProcess`; evidence
+capture never converts it to success and no grace period weakens the contract.
+
 CI installs the pinned Microsoft `dotnet-stack` tool and runs
 `-ValidateForensics`. That self-test deliberately holds a marker-aware
 `execution` probe beyond the slow threshold. It fails unless the same code path
 used by test execution produces evidence and a non-empty managed stack.
 On Windows it also opens a valid marker with exclusive sharing and proves that
 the reader tolerates the temporary lock, then parses the marker after release.
+It additionally launches a deterministic residual `dotnet` child, requires the
+gate to preserve its identity and evidence manifest, requires
+`ResidualChildProcess` classification, and terminates the synthetic process tree
+by matching both PID and creation time. The same self-test proves that private
+paths, URLs, cookies and command-line secrets are redacted. Schema 2 exposes the detailed
+`residualChildSelfTest` object and top-level `residualChildSelfTestPassed`
+summary. Missing execution, identity, evidence, failure classification or
+cleanup fails closed.
 Timeout evidence is saved before the process tree is terminated.
 
 Schema 2 records the marker-reader proof as a fail-closed object:

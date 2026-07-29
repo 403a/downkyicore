@@ -3,7 +3,7 @@
 Status: active
 Last updated: 2026-07-29
 Current group: Gate 10 Windows lifecycle blocker and corrective release
-Current branch: `release/v1.1.1-corrective`
+Current branch: `fix/lifecycle-residual-child-evidence`
 
 This file contains only unfinished or not-yet-integrated work. Completed Gate
 1-9 detail is retained in `docs/maintenance.md`, design documents and Git
@@ -160,6 +160,33 @@ history, not repeated here.
   error, teardown is at most 2 ms and OS process exit is at most 145 ms. This
   dirty-worktree report validates the candidate locally but is not release
   evidence.
+- PR #117 merged the v1.1.1 corrective candidate into `main` at `c251a4f`.
+  Strict PR CI `30453512364`, CodeQL `30453517140` and the exact-commit Main
+  lifecycle run `30453933568` passed. The Main report contains 2,102 phases,
+  zero failures, four captured slow phases, zero missing evidence, teardown at
+  no more than 3 ms and OS process exit at no more than 24 ms.
+- The first v1.1.1 Rehearsal `30455540672` correctly stopped before packaging.
+  `DownKyi.Tests` assembly-info iteration 78 exited zero with valid xUnit JSON
+  and empty stderr, but the post-exit scan observed one residual child. Schema 2
+  stored only the count, so the hosted runner's exact child identity is
+  unrecoverable. No test, Host, Dispatcher or application service executes in
+  this phase.
+- The same assembly-info command completed 500 isolated local repetitions with
+  zero residual children. This excludes a deterministic application owner but
+  does not erase the low-probability runner race. The corrective gate now
+  preserves sanitized child identity and a residual evidence manifest, captures
+  live managed children, and dynamically proves observation, classification and
+  PID-plus-creation-time cleanup with a synthetic residual process tree.
+- The residual-evidence candidate passes strict `AnalysisMode=All` build with
+  zero warnings/errors and all 731 tests. Formal local lifecycle Verification
+  covers 213 phases with zero failures, zero real residual children, five slow
+  phases with five captures and zero missing evidence. Residual-child,
+  redaction, capture-lead and marker-reader self-tests all pass; teardown is at
+  most 3 ms and OS process exit at most 14 ms. Ownership now includes external
+  process creation with 452 matches and zero violations. Format, module
+  boundaries, vulnerable/deprecated dependency audits, Gitleaks and diff checks
+  pass. This dirty-worktree result is candidate evidence, not Main or release
+  evidence.
 
 ## Gate 10 Checklist
 
@@ -204,6 +231,13 @@ history, not repeated here.
 - [x] Repeat Windows assembly-info and Desktop/full-solution tests enough to
       make the original race observable if it remains.
 - [x] Pass a new strict PR quality run on the corrected lifecycle commit.
+- [x] Merge v1.1.1 PR #117 and pass its exact-commit Main 50 lifecycle profile.
+- [x] Preserve the failed Rehearsal evidence and classify the remaining gap as
+      missing residual-child identity, not a passing rerun.
+- [x] Repeat the exact failing assembly-info command 500 times without observing
+      a deterministic residual owner.
+- [ ] Merge the residual-child identity, evidence and dynamic self-test fix.
+- [ ] Pass a new exact-commit Main 50 lifecycle profile after that fix.
 - [ ] Pass the complete manual release rehearsal on the final versioned
       candidate commit.
 - [ ] Keep `v1.1.0` immutable. Document the withdrawn draft and publish a
