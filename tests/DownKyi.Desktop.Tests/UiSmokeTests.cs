@@ -314,7 +314,8 @@ public sealed class UiSmokeTests
                 Assert.Same(mainViewModel, window.DataContext);
                 Assert.IsType<DiskCachedWebImageLoader>(imageLoader);
                 Assert.NotNull(host.Services.GetRequiredService<ViewIndexViewModel>());
-                Assert.NotNull(host.Services.GetRequiredService<ViewVideoDetailViewModel>());
+                var videoDetailViewModel = host.Services.GetRequiredService<ViewVideoDetailViewModel>();
+                Assert.NotNull(videoDetailViewModel);
                 Assert.NotNull(host.Services.GetRequiredService<ViewDownloadManagerViewModel>());
                 var networkViewModel = host.Services.GetRequiredService<ViewNetworkViewModel>();
                 Assert.NotNull(networkViewModel);
@@ -330,6 +331,29 @@ public sealed class UiSmokeTests
                     child => Assert.IsType<AriaDownloaderSettingsView>(child),
                     child => Assert.IsType<CustomAriaSettingsView>(child),
                     child => Assert.IsType<StackPanel>(child));
+
+                var videoDetailView = new ViewVideoDetail { DataContext = videoDetailViewModel };
+                var videoDetailRoot = Assert.IsType<Grid>(videoDetailView.Content);
+                Assert.Collection(
+                    videoDetailRoot.Children,
+                    child => Assert.IsType<VideoDetailToolbarView>(child),
+                    child => Assert.IsType<TextBlock>(child),
+                    child =>
+                    {
+                        var content = Assert.IsType<Grid>(child);
+                        Assert.Collection(
+                            content.Children,
+                            summary => Assert.IsType<VideoDetailSummaryView>(summary),
+                            selectionArea =>
+                            {
+                                var selectionGrid = Assert.IsType<Grid>(selectionArea);
+                                Assert.Collection(
+                                    selectionGrid.Children,
+                                    selection => Assert.IsType<VideoDetailSelectionView>(selection),
+                                    actions => Assert.IsType<VideoDetailActionsView>(actions));
+                            });
+                    },
+                    child => Assert.IsType<Image>(child));
 
                 host.Services
                     .GetRequiredService<IAppNavigationService>()

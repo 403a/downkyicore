@@ -955,6 +955,10 @@ paths:
   - src/DownKyi.Desktop/ViewModels/ViewVideoDetailViewModel.cs
   - src/DownKyi.Desktop/ViewModels/UiState/VideoDetailUiState.cs
   - src/DownKyi.Desktop/Views/ViewVideoDetail.axaml
+  - src/DownKyi.Desktop/Views/VideoDetailToolbarView.axaml
+  - src/DownKyi.Desktop/Views/VideoDetailSummaryView.axaml
+  - src/DownKyi.Desktop/Views/VideoDetailSelectionView.axaml
+  - src/DownKyi.Desktop/Views/VideoDetailActionsView.axaml
 responsibility: Wires video-detail commands, navigation, and UI result projection while one CommunityToolkit state object exposes mutually consistent bindings.
 inbound:
   - viewmodel.main-window
@@ -976,6 +980,10 @@ contracts:
   - Search filtering projects from one shallow source of the original `VideoPage` objects; clearing a search must preserve parsed stream, quality, and selection mutations.
   - Only the current operation generation may project detail/stream results or restore display state; canceled work cannot overwrite a newer request.
   - The ViewModel remains at or below 425 lines and cannot regain parse-service construction, search-source ownership, cancellation-source ownership, or download-service construction.
+  - The root View is an ordered composition shell. Toolbar, summary, section/page selection, and actions are separate typed views below 300 lines and inherit the same ViewModel.
+  - The five video-detail XAML owners retain 56 binding tokens, 12 named controls, 48 dynamic resources, 8 static resources, and 13 behaviors.
+  - Section selection and the page DataGrid remain in one namescope; no extra selection property or cross-view service is introduced only to support composition.
+  - DataGrid row highlight styles layer on the application-provided row theme without a child-construction-time `BasedOn` lookup; `App.axaml` must retain the DataGrid Fluent theme include.
 hazards:
   - This file historically accumulated unrelated parsing, selection, and download orchestration logic.
   - Reintroducing a complete cached section/page object graph duplicates memory and can restore stale parsed or selected state.
@@ -1453,7 +1461,7 @@ type: behavior
 paths:
   - src/DownKyi.Desktop/CustomAction/VideoPageSelectionBehavior.cs
   - src/DownKyi.Desktop/CustomAction/ResetGridSplitterBehavior.cs
-  - src/DownKyi.Desktop/Views/ViewVideoDetail.axaml
+  - src/DownKyi.Desktop/Views/VideoDetailSelectionView.axaml
 responsibility: Maps pointer, keyboard, checkbox, select-all, section changes, and splitter reset bindings to Avalonia controls.
 inbound:
   - viewmodel.video-detail
@@ -2975,6 +2983,7 @@ test.ui-smoke:
     - MainWindow XAML and its ViewModel binding resolve from the real Host without setting Prism ContainerLocator
     - no Prism assembly is loaded before Host creation or after root XAML construction
     - MainWindow, index, video-detail, download-manager, and user-space favorites ViewModels resolve from Microsoft DI
+    - the smoke application constructs the complete video-detail child-view graph without mutating global theme state
     - three-level main-region history restores the same A/B instances, disposes removed B/C instances, and reaches an empty history
     - the UserSpace to UserSpaceFavorites to PublicFavorites route chain returns to the original folder and UserSpace instances
     - the public-favorites back arrow resolves to visible black and white brushes under Light and Dark theme variants
@@ -3143,6 +3152,18 @@ test.custom-pager:
     - parameterless XAML buttons execute and vetoed changes do not mutate current page
     - jump and count boundaries cannot publish an invalid page
     - state, command, and pure layout owners remain focused and below budget
+
+test.video-detail-view:
+  paths:
+    - tests/DownKyi.Architecture.Tests/VideoDetailViewArchitectureTests.cs
+    - tests/DownKyi.Architecture.Tests/MediaAndHttpRuntimeArchitectureTests.cs
+    - tests/DownKyi.Desktop.Tests/UiSmokeTests.cs
+  guards:
+    - the root remains a thin ordered toolbar, summary, selection, and action composition
+    - all five typed XAML owners remain below 300 lines and retain the binding/resource/behavior inventory
+    - section and page controls remain in one namescope while the ViewModel stays free of Avalonia controls
+    - DataGrid row styles layer on the application theme without a child-construction-time base-theme lookup, while App retains the Fluent DataGrid include
+    - the real Host constructs the complete child-view graph without global test-theme mutation
 
 test.video-selection-state:
   paths:

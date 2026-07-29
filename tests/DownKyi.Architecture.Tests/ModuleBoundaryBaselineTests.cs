@@ -51,8 +51,7 @@ public sealed class ModuleBoundaryBaselineTests
 
     private static readonly Dictionary<string, int> KnownOversizedFiles = new(StringComparer.Ordinal)
     {
-        ["DownKyi.Core/Aria2cNet/Client/AriaClient.cs"] = 1137,
-        ["src/DownKyi.Desktop/Views/ViewVideoDetail.axaml"] = 565
+        ["DownKyi.Core/Aria2cNet/Client/AriaClient.cs"] = 1137
     };
 
     [Fact]

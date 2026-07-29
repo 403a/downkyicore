@@ -1,9 +1,9 @@
 # DownKyi Core Live Refactoring Plan
 
 Status: active
-Last updated: 2026-07-28
+Last updated: 2026-07-29
 Current group: Gate 9 large-owner convergence
-Current branch: `refactor/network-settings-view-owner`
+Current branch: `refactor/video-detail-view-owner`
 
 This file contains only unfinished or not-yet-integrated work. Completed PR 02-32 items are not restored. Design rationale belongs in `design-docs`; product acceptance belongs in `product-specs`.
 
@@ -37,6 +37,7 @@ The previous `Status: complete` was incorrect.
 - Gate 9 input-parser ownership passed Windows/Linux/macOS quality run `30366101959` and CodeQL run `30366101939`; all seven check-runs had zero annotations and every platform retained seven assembly-named TRX artifacts. PR #106 was merged into `refactor/pr-30-32-release-hardening` as merge commit `152e4a4`. The 586-line mixed parser became eight responsibility partials below 120 lines, with deterministic canonical, sentinel, null and exact-host contracts.
 - Gate 9 search composition passed Windows/Linux/macOS quality run `30367302324` and CodeQL run `30367302508`; all seven check-runs had zero annotations and every platform retained seven assembly-named TRX artifacts. PR #107 was merged into `refactor/pr-30-32-release-hardening` as merge commit `dd9a81a`. MainWindow and Index now share the Host-owned `SearchService`, and an architecture ratchet rejects direct ViewModel construction.
 - Gate 9 pager ownership passed Windows/Linux/macOS quality run `30369076250` and CodeQL run `30369076284`; all seven check-runs had zero annotations and every platform retained seven assembly-named TRX artifacts. PR #108 was merged into `refactor/pr-30-32-release-hardening` as merge commit `59e7a1c`. The 506-line pager became focused state/command/layout owners, and parameterless XAML buttons plus constructor current-page behavior were repaired.
+- Gate 9 network-settings View ownership passed Windows/Linux/macOS quality run `30370919469` and CodeQL run `30370919558`; all seven check-runs had zero annotations and every platform retained seven assembly-named TRX artifacts. PR #109 was merged into `refactor/pr-30-32-release-hardening` as merge commit `e181659`. The 608-line XAML became a thin ordered composition plus four typed section owners while retaining every binding, named control, resource, and command parameter.
 - `version.txt` remains `1.0.32`; v1.1.0 has not passed its release gate.
 
 No release tag may be created while any release blocker below remains.
@@ -50,13 +51,14 @@ Owner branches: separate responsibility-based large-owner PRs.
 Scope:
 
 - Split hand-written oversized owners by responsibility; do not split generated/protocol files only to satisfy LOC.
-- Current owner: separate the oversized network-settings XAML into ordered general, built-in downloader, bundled aria2, and external aria2 views without changing bindings or layout.
+- Current owner: separate the oversized video-detail XAML into ordered toolbar, summary, section/page selection, and action views without changing bindings, selection behavior, or layout.
 
 Current owner progress, pending PR integration:
 
-- The 608-line view is now a 21-line ordered composition shell plus 152-line general, 108-line built-in, 274-line bundled aria2, and 77-line external aria2 typed child views.
-- Structured comparison retains all 94 bindings, 40 named controls, 72 dynamic resources, 4 static resources, and 26 command parameters. The aria proxy source and dependent visibility binding remain in one namescope.
-- Strict `AnalysisMode=All` Release build has zero warnings/errors; all 706 tests pass, including 199 architecture tests and 13 Desktop/Host smoke tests. Format, vulnerable/deprecated package audits, boundary audit, `git diff --check`, and 969-candidate Gitleaks checks pass. Remote gates remain before integration.
+- The 565-line view is now a 46-line ordered composition shell plus 74-line toolbar, 168-line summary, 247-line section/page selection, and 66-line action typed child views.
+- Structured comparison retains all 56 bindings, 12 named controls, 48 dynamic resources, 8 static resources, and 13 behaviors. Section selection and the page DataGrid remain in one namescope; row highlight styles layer on the application theme without replacing it.
+- The first remote round exposed child-construction-time DataGrid static-resource lookup on macOS and global smoke-theme mutation instability on Windows. The focused fix removes the child base-theme lookup, keeps the production App theme contract under architecture test, and removes test-global theme mutation. Full local and remote gates must be repeated before integration.
+- After the focused fix, strict `AnalysisMode=All` Release build has zero warnings/errors and all 711 tests pass, including 204 architecture tests and 13 Desktop/Host smoke tests. Format, vulnerable/deprecated package audits, boundary audit, `git diff --check`, and 978-candidate Gitleaks checks pass. Remote gates remain before integration.
 
 Verification:
 
