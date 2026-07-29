@@ -44,6 +44,7 @@
       "teardown": "Assembly fixture cleanup completes before the process is allowed to exit.",
       "allowedMechanisms": [
         "static_initialization",
+        "external_process",
         "task_run",
         "dispatcher",
         "timer",
@@ -79,6 +80,7 @@
       "teardown": "No process-wide event handler may substitute for fixture cleanup.",
       "allowedMechanisms": [
         "static_initialization",
+        "external_process",
         "task_run",
         "dispatcher",
         "timer",
@@ -140,6 +142,7 @@
       "teardown": "Long-running work must accept cancellation and be awaited by its owner.",
       "allowedMechanisms": [
         "static_initialization",
+        "external_process",
         "task_run",
         "dispatcher",
         "timer",
@@ -193,6 +196,7 @@
       "teardown": "Cancellation and bounded process termination prevent orphaned aria2 children.",
       "allowedMechanisms": [
         "static_initialization",
+        "external_process",
         "task_run",
         "timer",
         "host_lifecycle",
@@ -210,6 +214,7 @@
       "teardown": "External process, stream and file owners must expose deterministic cleanup.",
       "allowedMechanisms": [
         "static_initialization",
+        "external_process",
         "task_run",
         "timer",
         "host_lifecycle",
@@ -265,11 +270,12 @@
         "tools/DownKyi.AssemblyLifecycleProbe/**"
       ],
       "owner": "Assembly lifecycle gate child process",
-      "start": "The probe creates one collectible AssemblyLoadContext.",
-      "stop": "The probe unloads it and performs bounded garbage collection checks.",
-      "teardown": "A retained context fails the load phase.",
+      "start": "The probe creates one collectible AssemblyLoadContext or, only for the forensics self-test, one bounded residual child.",
+      "stop": "The probe unloads the context; the lifecycle gate identifies and stops the synthetic residual tree.",
+      "teardown": "A retained context fails the load phase. Residual-child self-test cleanup matches PID and creation time, kills the synthetic tree and performs a bounded wait.",
       "allowedMechanisms": [
         "static_initialization",
+        "external_process",
         "bounded_sleep"
       ]
     }

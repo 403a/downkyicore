@@ -50,6 +50,12 @@ public sealed class AssemblyLifecycleArchitectureTests
             "stdoutPolluted",
             "stderrPolluted",
             "residualChildCount",
+            "residualChildren",
+            "residualChildEvidence",
+            "residualChildEvidenceStatus",
+            "residualChildEvidenceErrorType",
+            "residualChildEvidenceCapturedCount",
+            "residualChildEvidenceMissingCount",
             "failureType",
             "errorType",
             "workingTreeDirty",
@@ -97,6 +103,50 @@ public sealed class AssemblyLifecycleArchitectureTests
         Assert.Contains(
             "$forensicsSelfTestCaptureLeadValidated =",
             source,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ResidualChildForensicsPreserveIdentityAndFailClosed()
+    {
+        var gate = Read("script/test-assembly-lifecycle.ps1");
+        var probe = Read("tools/DownKyi.AssemblyLifecycleProbe/Program.cs");
+        string[] requiredGateContract =
+        [
+            "Protect-ProcessDiagnosticText",
+            "Save-ResidualChildEvidence",
+            "residual-children.json",
+            "failureType -eq \"ResidualChildProcess\"",
+            "residualChildSelfTestPassed",
+            "residualChildSelfTest",
+            "childObserved",
+            "identityCaptured",
+            "evidenceManifestWritten",
+            "failureClassified",
+            "cleanupCompleted",
+            "redactionValidated",
+            "$residualChildSelfTestContractPassed",
+            "$residualChildSelfTestComplete",
+            "\"--spawn-residual-child-ms\"",
+            "$childProcess.Kill($true)",
+            "$childProcess.WaitForExit(5000)"
+        ];
+
+        foreach (var token in requiredGateContract)
+        {
+            Assert.Contains(token, gate, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("--spawn-residual-child-ms", probe, StringComparison.Ordinal);
+        Assert.Contains("--child-hold-ms", probe, StringComparison.Ordinal);
+        Assert.Contains("UseShellExecute = true", probe, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "residualChildCount -eq 0 -or",
+            gate,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "residualChildEvidenceStatus -eq \"captured\" -or",
+            gate,
             StringComparison.Ordinal);
     }
 
