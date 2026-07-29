@@ -62,8 +62,26 @@ source assets. Passing a custom RID through project-reference metadata was
 explicitly rejected because it creates multiple project instances that race on
 the same `obj/bin` paths during a solution build. The final ownership model
 passes the strict Release build with zero warnings/errors, all 719 tests,
-format, module-boundary, dependency, secret and diff gates. A third remote
-rehearsal is still required.
+format, module-boundary, dependency, secret and diff gates.
+
+PR #112 quality run `30430722500`, protobuf run `30430722468` and CodeQL run
+`30430722421` pass on `1968c9d`. Windows, Linux and macOS each retain seven
+distinct TRX files with 718 executed/passed tests and no failures; the only
+non-executed result is the FFmpeg-runtime seek integration that passes locally.
+Code and test annotations are zero. The single Analyze C# warning is GitHub's
+platform notice that a PR with more than 300 changed files cannot expose its
+complete diff to CodeQL, not an analyzer finding.
+
+Manual rehearsal `30431043860` passes all three release gates and all nine
+package jobs; manual dispatch correctly skips GitHub Release publication.
+Every downloaded package SHA-256 sidecar matches, all nine publish manifests
+agree on version/RID and contain 54 valid required-file entries, and manifests
+for repeated package formats of the same RID are identical. Direct content
+inspection covers both Windows zips, both debs, the rpm, both AppImages and
+both DMGs. Every package contains DownKyi, aria2, FFmpeg, ffprobe and Fluent
+runtime content, with no Config, Logs, Cache, Storage, Cookie, SQLite/database
+or user-data path. Remote Windows binary hashes also match the checked-in
+runtime catalog.
 
 The repository always uses the supported `AnalysisMode=All` value. The pre-fix baseline is 1,654 unique diagnostics across 71 CA rules; see `docs/analyzer-baseline.md` and `docs/analyzer-baseline.csv`. `CodeAnalysisTreatWarningsAsErrors=true` is the repository default. Every cleaned rule is also pinned to `error` in `.editorconfig`, preventing a future SDK severity change from reopening the baseline. The before/after inventory and retained exceptions are recorded in `docs/analyzer-cleanup-report.md`.
 

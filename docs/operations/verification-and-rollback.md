@@ -62,6 +62,12 @@ catalog 檔案加入 output/publish；自訂 RID 不得跨 ProjectReference。
 sidecar，並檢查 manifest、版本、必要 binary、Fluent theme 與使用者
 資料排除。
 
+v1.1.0 的通過證據是 rehearsal `30431043860`：三個 release gate、九個
+package job 全部成功，手動 dispatch 的 release job 正確跳過。九個
+sidecar、九個 manifest 與所有 zip/deb/rpm/AppImage/DMG 實際內容都已
+檢查；相同 RID 的 manifest hash 一致，必要 runtime 完整，且沒有
+Config、Logs、Cache、Storage、Cookie 或資料庫路徑。
+
 登入態 API audit 只能由明確授權的 operator 執行：
 
 ```powershell

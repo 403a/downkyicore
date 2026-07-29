@@ -53,7 +53,20 @@ history, not repeated here.
   format, module boundary, dependency, secret and diff gates. A project
   reference property-propagation attempt was rejected because a solution build
   created competing project instances that wrote the same `obj/bin` paths.
-  Only the third remote rehearsal remains pending.
+  PR quality `30430722500`, protobuf `30430722468` and CodeQL `30430722421`
+  pass on `1968c9d`; each platform retains seven distinct TRX files, 718
+  tests execute and pass, and only the runner-dependent FFmpeg seek test is
+  not executed. Code and test annotations are zero; the one CodeQL annotation
+  is GitHub's documented 300-file diff-display limit.
+- Third rehearsal `30431043860` passes every release gate and all nine package
+  jobs. Manual dispatch correctly skips release publication. All nine package
+  sidecars match their package SHA-256; the nine manifests contain 54 valid
+  required-file entries with version/RID agreement. Direct archive inspection
+  passes for both Windows zips, both debs, the rpm, both AppImages and both
+  DMGs, with required DownKyi/aria2/FFmpeg/ffprobe files and zero Config, Logs,
+  Cache, Storage, Cookie, database or other user-data paths. Same-RID package
+  manifests agree, and remote Windows asset hashes match the repository
+  catalog.
 - Final remote and package validation is not complete, so no tag may be
   created.
 
@@ -66,18 +79,17 @@ history, not repeated here.
       `1.1.0`; UI and package validation remains part of the publish rehearsal.
 - [x] Repeat the sanitized authenticated read-only Bilibili contract audit on
       the final candidate and run Gitleaks.
-- [ ] Pass strict PR CI and CodeQL on Windows, Linux and macOS for the final
+- [x] Pass strict PR CI and CodeQL on Windows, Linux and macOS for the final
       candidate SHA.
-- [ ] Manually dispatch `.github/workflows/build.yml` on that SHA.
-- [ ] Require Windows x64/x86, Linux x64/arm64 and macOS x64/arm64 package jobs
+- [x] Manually dispatch `.github/workflows/build.yml` on that SHA.
+- [x] Require Windows x64/x86, Linux x64/arm64 and macOS x64/arm64 package jobs
       plus their release-gate jobs to pass.
-- [ ] Inspect every package, `.sha256` sidecar and publish manifest; confirm
+- [x] Inspect every package, `.sha256` sidecar and publish manifest; confirm
       DownKyi, aria2, FFmpeg, ffprobe, Fluent theme and version.
 - [x] Confirm settings JSON, legacy SQLite, unfinished tasks, GID, partial file
       map, completed segment keys and resume fixtures remain green.
-- [x] Confirm the source candidate contains no credential or account data.
-      Package-specific Config, Logs, Cache, Storage and user-data inspection
-      remains part of the cross-platform publish rehearsal.
+- [x] Confirm the source candidate and inspected packages contain no
+      credential, account data, Config, Logs, Cache, Storage or user database.
 - [ ] Merge the integration PR into `main`.
 - [ ] Verify clean `main` points at the tested integration tree.
 - [ ] Create tag `v1.1.0` once, wait for the tag workflow, inspect its release
