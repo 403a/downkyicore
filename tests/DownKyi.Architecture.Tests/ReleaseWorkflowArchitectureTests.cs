@@ -1,3 +1,7 @@
+using System.Diagnostics;
+using System.Reflection;
+using System.Xml.Linq;
+
 namespace DownKyi.Architecture.Tests;
 
 public sealed class ReleaseWorkflowArchitectureTests
@@ -34,9 +38,61 @@ public sealed class ReleaseWorkflowArchitectureTests
         Assert.Contains("Get-FileHash", validator, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void VersionFileIsTheOnlyProjectVersionSourceAndControlsAssemblyMetadata()
+    {
+        var versionText = File.ReadAllText(Path.Combine(RepositoryRoot, "version.txt")).Trim();
+        var expected = Version.Parse(versionText);
+        var expectedAssemblyVersion = new Version(
+            expected.Major,
+            expected.Minor,
+            expected.Build,
+            0);
+        var props = File.ReadAllText(Path.Combine(RepositoryRoot, "Directory.Build.props"));
+
+        Assert.Contains(
+            "System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)version.txt').Trim()",
+            props,
+            StringComparison.Ordinal);
+
+        var projectVersionElements = Directory
+            .EnumerateFiles(RepositoryRoot, "*.csproj", SearchOption.AllDirectories)
+            .Where(path => !IsBuildOutput(path))
+            .SelectMany(path => XDocument.Load(path)
+                .Descendants()
+                .Where(element => element.Name.LocalName is
+                    "Version" or
+                    "VersionPrefix" or
+                    "AssemblyVersion" or
+                    "FileVersion" or
+                    "InformationalVersion")
+                .Select(element => $"{Path.GetRelativePath(RepositoryRoot, path)} -> {element.Name.LocalName}"))
+            .ToArray();
+
+        Assert.Empty(projectVersionElements);
+
+        var assembly = typeof(ReleaseWorkflowArchitectureTests).Assembly;
+        Assert.Equal(expectedAssemblyVersion, assembly.GetName().Version);
+
+        var fileVersion = FileVersionInfo.GetVersionInfo(assembly.Location).FileVersion;
+        Assert.Equal(expectedAssemblyVersion.ToString(), fileVersion);
+
+        var informationalVersion = assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion;
+        Assert.StartsWith(versionText, informationalVersion, StringComparison.Ordinal);
+    }
+
     private static int CountOccurrences(string source, string value)
     {
         return source.Split(value, StringSplitOptions.None).Length - 1;
+    }
+
+    private static bool IsBuildOutput(string path)
+    {
+        return path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .Any(segment => string.Equals(segment, "bin", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(segment, "obj", StringComparison.OrdinalIgnoreCase));
     }
 
     private static string FindRepositoryRoot()

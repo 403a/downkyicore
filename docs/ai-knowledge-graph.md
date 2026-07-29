@@ -2,7 +2,7 @@
 
 Status: maintained architecture index
 Schema version: 1.0
-Last reviewed: 2026-07-28
+Last reviewed: 2026-07-29
 
 This document is the first file an AI agent should read before changing DownKyi. Its goal is to preserve stable knowledge about project structure, ownership boundaries, and call relationships so agents do not rediscover the same code paths from scratch.
 
@@ -2426,6 +2426,8 @@ id: workflow.release-packaging
 type: workflow
 paths:
   - .github/workflows/build.yml
+  - Directory.Build.props
+  - version.txt
   - script/validate-publish-output.ps1
   - script/assets/external-assets.json
   - script/aria2.ps1
@@ -2448,6 +2450,7 @@ contracts:
   - Publish validation checks the expected assembly version, requires Fluent, rejects Simple, and emits per-file SHA-256 values.
   - Every package uploads its own `.sha256` sidecar and publish manifest with the artifact.
   - External archives are accepted only after their manifest SHA-256 matches.
+  - `version.txt` is the only project version source. Directory build metadata, application display, package names, publish manifests and tags must agree with it.
 hazards:
   - Inspecting PupNet's temporary publish path is not stable; validation publish directories must be explicit.
   - Cross-compiling proves package shape, not native execution. Native Host/XAML tests remain owned by each matrix runner.
