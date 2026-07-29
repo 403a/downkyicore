@@ -72,18 +72,20 @@ and must not carry unrelated self-test or lifecycle contract failures.
   child's OS `Process.ExitTime`. Report serialization, stdout/stderr copying and
   process-tree inspection are not part of this metric.
 - The slow classification remains exactly
-  `duration >= slowPhaseThresholdSeconds`. To prevent a 25 ms monitor poll
-  from crossing directly from just below the threshold to an already-exited
-  child, evidence capture is armed 100 ms early. The report records this as
+  `duration >= slowPhaseThresholdSeconds`. To prevent runner scheduling from
+  crossing directly from just below the threshold to an already-exited child,
+  evidence capture is armed 1,000 ms early. The report records this as
   `slowEvidenceCaptureLeadMilliseconds` and per phase as
   `slowEvidenceTriggeredBeforeThreshold`; it does not lower the slow
   threshold. `slowEvidenceStatus` is `captured`, `capture-failed`, or
   `process-exited-before-capture`; the latter two still fail a slow phase
   instead of leaving an unexplained empty evidence array.
 - `-ValidateForensics` uses its held child to prove the capture lead actually
-  ran before the synthetic 250 ms threshold. The machine report exposes
-  `forensicsSelfTestCaptureLeadValidated`; the forensics self-test fails when
-  that value is false, even if a later stack capture would otherwise exist.
+  ran before a synthetic 1.25-second threshold. The one-second lead therefore
+  arms at 0.25 seconds instead of relying on a zero-clamped threshold. The
+  machine report exposes `forensicsSelfTestCaptureLeadValidated`; the forensics
+  self-test fails when that value is false, even if a later stack capture would
+  otherwise exist.
 - Managed-stack collection can pause or otherwise perturb the observed child.
   `durationMs` remains the honest instrumented wall-clock value, while
   `diagnosticCaptureDurationMs` records collector wall time separately. These

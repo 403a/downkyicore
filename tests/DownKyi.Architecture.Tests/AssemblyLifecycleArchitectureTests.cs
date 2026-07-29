@@ -89,11 +89,15 @@ public sealed class AssemblyLifecycleArchitectureTests
             source,
             StringComparison.Ordinal);
         Assert.Contains(
-            "$slowEvidenceCaptureLeadMilliseconds = 100",
+            "$slowEvidenceCaptureLeadMilliseconds = 1000",
             source,
             StringComparison.Ordinal);
         Assert.Contains(
             "$EvidenceThresholdSeconds - ($slowEvidenceCaptureLeadMilliseconds / 1000)",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "-EvidenceThresholdSeconds 1.25",
             source,
             StringComparison.Ordinal);
         Assert.Contains(

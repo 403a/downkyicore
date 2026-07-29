@@ -36,8 +36,8 @@ missing. Schema 1 exit values include collector overhead and are historical
 only; do not compare them directly with schema 2.
 
 The slow classification threshold remains five seconds. Evidence collection
-is armed 100 ms before that boundary so a 25 ms monitor poll cannot observe a
-5.005-second process only after it has exited. Reports expose both the capture
+is armed 1,000 ms before that boundary so hosted-runner scheduling cannot
+observe a borderline process only after it has exited. Reports expose both the capture
 lead and whether a phase was sampled before the classification boundary;
 `capture-failed` and `process-exited-before-capture` remain fail-closed for
 phases whose final duration reaches the threshold.
@@ -95,6 +95,18 @@ therefore preserves identity and evidence on every future observation and
 dynamically self-tests the full residual-child failure path. A new Main profile
 and complete Rehearsal remain mandatory; the failed run is not replaced by a
 blind rerun.
+
+After PR #118 merged at `ad5ac64`, Main run `30461640781` proved that the
+original 100 ms capture lead was still insufficient under hosted-runner load.
+`DownKyi.Tests` execution iteration 24 exited successfully at 5007.386 ms but
+the monitor never entered the capture branch while the process was alive.
+The report failed closed with `SlowEvidenceMissing`; residual-child and
+marker-reader self-tests passed and no real residual process was observed.
+The five-second classification threshold remains unchanged. The capture arm is
+now one second early, and architecture tests prevent reducing it back to the
+demonstrably insufficient 100 ms window. The held-child self-test uses a
+1.25-second synthetic threshold so it dynamically proves capture starts after
+0.25 seconds and before classification, without relying on a zero-clamped arm.
 
 Pull requests are guarded by `.github/workflows/quality.yml`:
 

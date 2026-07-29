@@ -3,7 +3,7 @@
 Status: active
 Last updated: 2026-07-29
 Current group: Gate 10 Windows lifecycle blocker and corrective release
-Current branch: `fix/lifecycle-residual-child-evidence`
+Current branch: `fix/lifecycle-slow-evidence-arm-window`
 
 This file contains only unfinished or not-yet-integrated work. Completed Gate
 1-9 detail is retained in `docs/maintenance.md`, design documents and Git
@@ -187,6 +187,27 @@ history, not repeated here.
   boundaries, vulnerable/deprecated dependency audits, Gitleaks and diff checks
   pass. This dirty-worktree result is candidate evidence, not Main or release
   evidence.
+- PR #118 merged the residual-child evidence fix at `ad5ac64`. Strict PR CI
+  `30461103180` and CodeQL `30461103401` passed; its PR lifecycle report has
+  129 phases, zero failures, complete residual identity/evidence/classification/
+  cleanup/redaction proof and zero real residual children.
+- The exact-commit Main 50 run `30461640781` failed closed on one different
+  boundary race: `DownKyi.Tests` execution iteration 24 ended normally at
+  5007.386 ms, but the 100 ms pre-threshold arm was still skipped under runner
+  scheduling. The report contains 2,103 phases, one `SlowEvidenceMissing`,
+  zero real residual processes, and passing residual/marker self-tests. The
+  five-second classification stays unchanged; capture now arms 1,000 ms early.
+  Its held-child test uses a 1.25-second synthetic threshold, proving the full
+  lead dynamically instead of passing through a zero-clamped arm.
+- Clean code commit `ca8103e` passes strict `AnalysisMode=All` build with zero
+  warnings/errors, all 731 tests, format, module boundaries,
+  vulnerable/deprecated dependency audits, Gitleaks and diff checks. Its
+  five-iteration lifecycle run covers seven assemblies and 213 phases with
+  zero failures, seven slow phases, seven evidence captures, zero missing
+  evidence and zero real residual processes. Both dynamic self-tests pass;
+  teardown is at most 7 ms and OS process exit is at most 75 ms. Diagnostic
+  collection consumed 19,765.952 ms in total and remains separately disclosed;
+  exact-commit PR and Main evidence are still required.
 
 ## Gate 10 Checklist
 
@@ -236,7 +257,10 @@ history, not repeated here.
       missing residual-child identity, not a passing rerun.
 - [x] Repeat the exact failing assembly-info command 500 times without observing
       a deterministic residual owner.
-- [ ] Merge the residual-child identity, evidence and dynamic self-test fix.
+- [x] Merge the residual-child identity, evidence and dynamic self-test fix.
+- [x] Preserve the failed post-merge Main report showing the 100 ms arm window
+      is insufficient; do not replace it with a blind rerun.
+- [ ] Merge the one-second pre-threshold capture-arm correction.
 - [ ] Pass a new exact-commit Main 50 lifecycle profile after that fix.
 - [ ] Pass the complete manual release rehearsal on the final versioned
       candidate commit.

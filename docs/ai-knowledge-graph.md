@@ -2386,8 +2386,8 @@ contracts:
   - Every phase exposes general failure/error type; slow-evidence error type is reserved for the diagnostic capture path.
   - Execution duration includes runner startup through OS process exit; teardown uses fixture marker timestamps, while process-exit uses the child's OS ExitTime and excludes collector overhead.
   - Marker-aware execution phases are sampled at the unchanged slow threshold; missing slow evidence is a gate failure rather than an unexplained empty array.
-  - Forensics is armed 100 ms before the unchanged classification threshold to close the monitor-poll/child-exit race; reports disclose the lead and per-phase pre-threshold capture state.
-  - The held-child forensics self-test must report `forensicsSelfTestCaptureLeadValidated=true`, proving the proactive capture path executed.
+  - Forensics is armed 1,000 ms before the unchanged classification threshold to survive hosted-runner scheduling gaps; reports disclose the lead and per-phase pre-threshold capture state.
+  - The held-child forensics self-test uses a 1.25-second synthetic threshold and must report `forensicsSelfTestCaptureLeadValidated=true`, proving the one-second proactive capture lead executed without a zero-clamped arm.
   - Lifecycle marker reads tolerate bounded writer contention and report contention/retry-exhaustion counts; only Windows sharing/lock error codes are contention, while access and other I/O errors retain a separate count/type; the final marker contract remains blocking.
   - Diagnostic capture wall time is reported separately because managed-stack collection perturbs the instrumented phase; slow execution evidence cannot be presented as post-teardown exit evidence.
   - Unexpected stdout/stderr, timeout, residual child process, missing teardown marker or failed process exit blocks the gate.
