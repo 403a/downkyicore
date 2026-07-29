@@ -29,6 +29,12 @@ per test assembly with `-ValidateForensics`. The release workflow uses the
 `artifacts/assembly-lifecycle/release`; neither step may be replaced by a
 successful one-off rerun.
 
+Lifecycle report schema 2 uses the child OS `Process.ExitTime` for post-fixture
+exit, captures marker-aware execution at the unchanged slow threshold, records
+diagnostic collection wall time, and fails a slow phase whose evidence is
+missing. Schema 1 exit values include collector overhead and are historical
+only; do not compare them directly with schema 2.
+
 Pull requests are guarded by `.github/workflows/quality.yml`:
 
 - format check with `dotnet format --verify-no-changes --verbosity diagnostic`

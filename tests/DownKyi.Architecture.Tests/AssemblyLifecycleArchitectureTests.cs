@@ -51,6 +51,11 @@ public sealed class AssemblyLifecycleArchitectureTests
             "stderrPolluted",
             "residualChildCount",
             "workingTreeDirty",
+            "slowEvidenceStatus",
+            "slowEvidenceComplete",
+            "slowEvidenceMissingCount",
+            "diagnosticCaptureDurationMs",
+            "processExitedAtUnixMs",
             "ValidateForensics"
         ];
 
@@ -58,6 +63,13 @@ public sealed class AssemblyLifecycleArchitectureTests
         {
             Assert.Contains(token, source, StringComparison.Ordinal);
         }
+
+        Assert.Contains("-Phase \"execution\"", source, StringComparison.Ordinal);
+        Assert.Contains("-LifecycleMarkerPath $selfTestMarker", source, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "[string]::IsNullOrWhiteSpace($LifecycleMarkerPath) -and",
+            source,
+            StringComparison.Ordinal);
     }
 
     [Fact]

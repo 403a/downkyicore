@@ -53,6 +53,36 @@ Every phase records its exit code, duration, timeout state, stdout/stderr
 protocol state, residual child count and evidence paths. The report aggregates
 P50, P95, P99 and maximum duration per assembly and phase.
 
+### Measurement Definitions
+
+- `load`, `assembly-info`, `discovery` and `execution` duration starts
+  immediately before child-process creation and stops when the OS reports that
+  child exited. `execution` therefore includes runner startup, test methods,
+  assembly fixture teardown and CLR/runner shutdown.
+- `assembly-teardown` is the fixture marker interval from `disposing` to
+  `disposed`. Marker timestamps use Unix milliseconds, so this metric has
+  millisecond resolution.
+- `process-exit` is the interval from the fixture `disposed` marker to the
+  child's OS `Process.ExitTime`. Report serialization, stdout/stderr copying and
+  process-tree inspection are not part of this metric.
+- A phase whose wall-clock duration reaches `slowPhaseThresholdSeconds` is
+  sampled while the child is still alive. `slowEvidenceStatus` is `captured`,
+  `capture-failed`, or `process-exited-before-capture`; the latter two fail the
+  phase instead of leaving an unexplained empty evidence array.
+- Managed-stack collection can pause or otherwise perturb the observed child.
+  `durationMs` remains the honest instrumented wall-clock value, while
+  `diagnosticCaptureDurationMs` records collector wall time separately. These
+  lifecycle timings are diagnostic evidence, not performance baselines.
+- Execution slow-phase, post-teardown slow-exit and timeout evidence have
+  separate arrays. A process-exit row cannot inherit unrelated execution
+  evidence.
+
+Schema 1 reports used the collector observation timestamp for `process-exit`,
+so they include post-exit stdout/reporting overhead. In the
+`20260729T102215715Z` report, the historical values remain teardown maximum
+65 ms and process-exit maximum 170 ms. Schema 2 uses the OS exit timestamp and
+must not be compared directly with that old exit metric.
+
 ## Static Ownership
 
 `script/audit-lifecycle-ownership.ps1` scans production, test, benchmark and
@@ -107,10 +137,10 @@ On Windows, a slow phase or slow post-teardown exit automatically captures:
 - `dotnet-stack report --process-id` output when the tool is available.
 
 CI installs the pinned Microsoft `dotnet-stack` tool and runs
-`-ValidateForensics`. That self-test deliberately holds a probe child process
-after assembly unload and fails unless evidence and a managed stack are
-actually produced. Timeout evidence is saved before the process tree is
-terminated.
+`-ValidateForensics`. That self-test deliberately holds a marker-aware
+`execution` probe beyond the slow threshold. It fails unless the same code path
+used by test execution produces evidence and a non-empty managed stack.
+Timeout evidence is saved before the process tree is terminated.
 
 Raw stdout/stderr, JSON evidence, the machine report and Markdown summary are
 written below `artifacts/assembly-lifecycle/<run-id>/`. CI uploads the entire

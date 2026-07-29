@@ -93,10 +93,27 @@ history, not repeated here.
   discovery, execution, assembly teardown and process exit in independent
   children. Its ownership audit covers production/test/benchmark/tool owners,
   and Windows delay forensics captures process/thread state and managed stacks.
-- Formal local Verification passes all seven test assemblies for five
+- The historical schema 1 local Verification passed all seven test assemblies for five
   iterations: 211 phase results, zero failures, zero unknown owners, teardown
   at no more than 65 ms and process exit at no more than 170 ms on this Windows x64
   worktree. The report is deliberately marked dirty and is not release evidence.
+- Review of that schema 1 report found that marker-aware execution was excluded
+  from slow-phase capture and that process-exit used the collector observation
+  time. Schema 2 captures every phase at the unchanged five-second threshold,
+  fails unexplained missing evidence, separates execution/exit/timeout evidence
+  and measures process exit from the fixture marker to OS `Process.ExitTime`.
+- The first real execution stack identified a separate Windows delay:
+  protocol-relative `//host/path` artwork was passed to `File.Exists` as a UNC
+  path before HTTP classification. External image sources are now classified
+  first; the focused image tests run in 172 ms and a subsequent full
+  `DownKyi.Tests` execution completes in 1.893 seconds without crossing the
+  slow threshold.
+- Schema 2 formal local Verification now passes all seven assemblies for five
+  iterations with 211 phase results, zero failures, zero unowned mechanisms,
+  zero real slow phases and zero missing evidence. Teardown is at most 2 ms,
+  OS-measured process exit is at most 15 ms, and `DownKyi.Tests` execution is
+  1.685-1.716 seconds across the five runs. The 774.833 ms diagnostic capture
+  time belongs to the deliberate marker-aware forensics self-test.
 
 ## Gate 10 Checklist
 
@@ -132,6 +149,10 @@ history, not repeated here.
       automatic Windows timeout forensics and blocking PR/main/rehearsal jobs.
 - [x] Pass the formal local five-iteration lifecycle Verification with managed
       stack forensics validated and retain its machine-readable report.
+- [x] Correct schema 1 timing/evidence ambiguities and prove marker-aware
+      execution captures a managed stack at the unchanged slow threshold.
+- [x] Remove protocol-relative image UNC probing and add a bounded regression
+      test so `//host/path` reaches HTTPS without blocking local file lookup.
 - [ ] Repeat Windows assembly-info and Desktop/full-solution tests enough to
       make the original race observable if it remains.
 - [ ] Pass a new strict PR quality run and a complete manual release rehearsal

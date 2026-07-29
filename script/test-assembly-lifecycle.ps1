@@ -155,6 +155,7 @@ function Save-ManagedStack {
             -Value "dotnet-stack is unavailable. Install it in .tools to capture managed stacks."
         return [pscustomobject]@{
             available = $false
+            captured = $false
             exitCode = $null
             timedOut = $false
         }
@@ -193,6 +194,9 @@ function Save-ManagedStack {
             [System.Text.UTF8Encoding]::new($false))
         return [pscustomobject]@{
             available = $true
+            captured = -not $timedOut -and
+                $stackProcess.ExitCode -eq 0 -and
+                -not [string]::IsNullOrWhiteSpace($stdout)
             exitCode = $stackProcess.ExitCode
             timedOut = $timedOut
         }
@@ -253,6 +257,7 @@ function Save-ProcessEvidence {
     $stackResult = if ($Process.HasExited) {
         [pscustomobject]@{
             available = $false
+            captured = $false
             exitCode = $null
             timedOut = $false
         }
@@ -353,7 +358,15 @@ function Invoke-IsolatedProcess {
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     $timedOut = $false
     $evidence = @()
+    $slowEvidence = @()
+    $exitEvidence = @()
+    $timeoutEvidence = @()
+    $diagnosticCaptureDurationMs = 0.0
+    $slowThresholdExceeded = $false
+    $slowEvidenceAttempted = $false
     $slowEvidenceCaptured = $false
+    $slowEvidenceStatus = "not-triggered"
+    $slowEvidenceErrorType = $null
     $exitEvidenceCaptured = $false
     $teardownObservedAt = $null
     try {
@@ -366,16 +379,31 @@ function Invoke-IsolatedProcess {
         $stdoutTask = $process.StandardOutput.ReadToEndAsync()
         $stderrTask = $process.StandardError.ReadToEndAsync()
         while (-not $process.WaitForExit(25)) {
-            if (-not $slowEvidenceCaptured -and
-                [string]::IsNullOrWhiteSpace($LifecycleMarkerPath) -and
+            if (-not $slowEvidenceAttempted -and
                 $stopwatch.Elapsed.TotalSeconds -ge $EvidenceThresholdSeconds) {
-                $evidence += Save-ProcessEvidence `
-                    -Process $process `
-                    -AssemblyName $AssemblyName `
-                    -Iteration $Iteration `
-                    -Phase $Phase `
-                    -Reason "slow-phase"
-                $slowEvidenceCaptured = $true
+                $slowThresholdExceeded = $true
+                $slowEvidenceAttempted = $true
+                $captureStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+                try {
+                    $evidencePath = Save-ProcessEvidence `
+                        -Process $process `
+                        -AssemblyName $AssemblyName `
+                        -Iteration $Iteration `
+                        -Phase $Phase `
+                        -Reason "slow-phase"
+                    $evidence += $evidencePath
+                    $slowEvidence += $evidencePath
+                    $slowEvidenceCaptured = $true
+                    $slowEvidenceStatus = "captured"
+                }
+                catch {
+                    $slowEvidenceStatus = "capture-failed"
+                    $slowEvidenceErrorType = $_.Exception.GetType().Name
+                }
+                finally {
+                    $captureStopwatch.Stop()
+                    $diagnosticCaptureDurationMs += $captureStopwatch.Elapsed.TotalMilliseconds
+                }
             }
 
             if (-not [string]::IsNullOrWhiteSpace($LifecycleMarkerPath)) {
@@ -388,24 +416,42 @@ function Invoke-IsolatedProcess {
                     -not $exitEvidenceCaptured -and
                     ([DateTimeOffset]::UtcNow - $teardownObservedAt).TotalSeconds -ge
                         $ExitThresholdSeconds) {
-                    $evidence += Save-ProcessEvidence `
-                        -Process $process `
-                        -AssemblyName $AssemblyName `
-                        -Iteration $Iteration `
-                        -Phase $Phase `
-                        -Reason "slow-exit-after-teardown"
+                    $captureStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+                    try {
+                        $evidencePath = Save-ProcessEvidence `
+                            -Process $process `
+                            -AssemblyName $AssemblyName `
+                            -Iteration $Iteration `
+                            -Phase $Phase `
+                            -Reason "slow-exit-after-teardown"
+                        $evidence += $evidencePath
+                        $exitEvidence += $evidencePath
+                    }
+                    finally {
+                        $captureStopwatch.Stop()
+                        $diagnosticCaptureDurationMs += $captureStopwatch.Elapsed.TotalMilliseconds
+                    }
                     $exitEvidenceCaptured = $true
                 }
             }
 
             if ($stopwatch.Elapsed.TotalSeconds -ge $PhaseTimeoutSeconds) {
                 $timedOut = $true
-                $evidence += Save-ProcessEvidence `
-                    -Process $process `
-                    -AssemblyName $AssemblyName `
-                    -Iteration $Iteration `
-                    -Phase $Phase `
-                    -Reason "timeout"
+                $captureStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+                try {
+                    $evidencePath = Save-ProcessEvidence `
+                        -Process $process `
+                        -AssemblyName $AssemblyName `
+                        -Iteration $Iteration `
+                        -Phase $Phase `
+                        -Reason "timeout"
+                    $evidence += $evidencePath
+                    $timeoutEvidence += $evidencePath
+                }
+                finally {
+                    $captureStopwatch.Stop()
+                    $diagnosticCaptureDurationMs += $captureStopwatch.Elapsed.TotalMilliseconds
+                }
                 $process.Kill($true)
                 $process.WaitForExit()
                 break
@@ -413,6 +459,15 @@ function Invoke-IsolatedProcess {
         }
 
         $stopwatch.Stop()
+        if ($stopwatch.Elapsed.TotalSeconds -ge $EvidenceThresholdSeconds) {
+            $slowThresholdExceeded = $true
+            if (-not $slowEvidenceAttempted) {
+                $slowEvidenceStatus = "process-exited-before-capture"
+            }
+        }
+
+        $processExitedAtUnixMs = ([DateTimeOffset]$process.ExitTime.ToUniversalTime()).
+            ToUnixTimeMilliseconds()
         $stdout = $stdoutTask.GetAwaiter().GetResult()
         $stderr = $stderrTask.GetAwaiter().GetResult()
         [System.IO.File]::WriteAllText(
@@ -444,7 +499,15 @@ function Invoke-IsolatedProcess {
                 Replace([System.IO.Path]::DirectorySeparatorChar, '/')
             residualChildren = $residualChildren
             evidence = $evidence
-            endedAtUnixMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+            slowEvidence = $slowEvidence
+            exitEvidence = $exitEvidence
+            timeoutEvidence = $timeoutEvidence
+            diagnosticCaptureDurationMs = [Math]::Round($diagnosticCaptureDurationMs, 3)
+            slowThresholdExceeded = $slowThresholdExceeded
+            slowEvidenceStatus = $slowEvidenceStatus
+            slowEvidenceErrorType = $slowEvidenceErrorType
+            processExitedAtUnixMs = $processExitedAtUnixMs
+            observedAtUnixMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
         }
     }
     finally {
@@ -519,11 +582,14 @@ function New-ProcessPhaseResult {
         -Phase $ProcessResult.phase `
         -Content $ProcessResult.stdout
     $stderrClean = [string]::IsNullOrWhiteSpace($ProcessResult.stderr)
+    $slowEvidenceComplete = -not $ProcessResult.slowThresholdExceeded -or
+        $ProcessResult.slowEvidenceStatus -eq "captured"
     $success = $ProcessResult.exitCode -eq 0 -and
         -not $ProcessResult.timedOut -and
         $ProcessResult.residualChildren.Count -eq 0 -and
         $protocolValid -and
         $stderrClean -and
+        $slowEvidenceComplete -and
         $unexpectedText.Count -eq 0
     return [pscustomobject]@{
         assembly = $ProcessResult.assembly
@@ -541,6 +607,13 @@ function New-ProcessPhaseResult {
         stdoutPath = $ProcessResult.stdoutPath
         stderrPath = $ProcessResult.stderrPath
         evidence = $ProcessResult.evidence
+        slowEvidence = $ProcessResult.slowEvidence
+        exitEvidence = $ProcessResult.exitEvidence
+        timeoutEvidence = $ProcessResult.timeoutEvidence
+        diagnosticCaptureDurationMs = $ProcessResult.diagnosticCaptureDurationMs
+        slowThresholdExceeded = $ProcessResult.slowThresholdExceeded
+        slowEvidenceStatus = $ProcessResult.slowEvidenceStatus
+        slowEvidenceErrorType = $ProcessResult.slowEvidenceErrorType
     }
 }
 
@@ -577,12 +650,30 @@ function New-Statistics {
             ForEach-Object {
                 $durations = [double[]]@($_.Group | ForEach-Object { $_.durationMs })
                 $passed = @($_.Group | Where-Object success).Count
+                $slow = @($_.Group | Where-Object slowThresholdExceeded)
+                $slowCaptured = @(
+                    $slow |
+                        Where-Object slowEvidenceStatus -eq "captured"
+                ).Count
+                $diagnosticDurations = [double[]]@(
+                    $_.Group |
+                        ForEach-Object { $_.diagnosticCaptureDurationMs }
+                )
                 [pscustomobject]@{
                     assembly = $_.Group[0].assembly
                     phase = $_.Group[0].phase
                     runs = $_.Count
                     passed = $passed
                     successRate = [Math]::Round($passed / $_.Count, 6)
+                    slowRuns = $slow.Count
+                    slowEvidenceCaptured = $slowCaptured
+                    slowEvidenceMissing = $slow.Count - $slowCaptured
+                    diagnosticCaptureTotalMs = [Math]::Round(
+                        [double]($diagnosticDurations | Measure-Object -Sum).Sum,
+                        3)
+                    diagnosticCaptureMaxMs = [Math]::Round(
+                        [double]($diagnosticDurations | Measure-Object -Maximum).Maximum,
+                        3)
                     p50Ms = Get-Percentile -Values $durations -Percentile 0.50
                     p95Ms = Get-Percentile -Values $durations -Percentile 0.95
                     p99Ms = Get-Percentile -Values $durations -Percentile 0.99
@@ -649,10 +740,11 @@ if ($ValidateForensics) {
 
     $selfTestAssembly = Join-Path $testProjects[0].DirectoryName (
         "bin/$Configuration/net10.0/$($testProjects[0].BaseName).dll")
+    $selfTestMarker = Join-Path $rawRoot "Gate.Forensics/iteration-0001/execution.lifecycle"
     $selfTest = Invoke-IsolatedProcess `
         -AssemblyName "Gate.Forensics" `
         -Iteration 1 `
-        -Phase "load" `
+        -Phase "execution" `
         -FileName "dotnet" `
         -Arguments @(
             $probeAssembly,
@@ -661,6 +753,7 @@ if ($ValidateForensics) {
             "--hold-after-unload-ms",
             "5000"
         ) `
+        -LifecycleMarkerPath $selfTestMarker `
         -EvidenceThresholdSeconds 0.25
     $selfTestPhase = New-ProcessPhaseResult -ProcessResult $selfTest
     $evidenceReports = @(
@@ -673,7 +766,7 @@ if ($ValidateForensics) {
     )
     $forensicsValid = $selfTestPhase.success -and
         $evidenceReports.Count -gt 0 -and
-        @($evidenceReports | Where-Object { $_.managedStack.available -eq $true }).Count -gt 0
+        @($evidenceReports | Where-Object { $_.managedStack.captured -eq $true }).Count -gt 0
     $phaseResults += [pscustomobject]@{
         assembly = "Gate.Forensics"
         iteration = 1
@@ -690,6 +783,13 @@ if ($ValidateForensics) {
         stdoutPath = $selfTest.stdoutPath
         stderrPath = $selfTest.stderrPath
         evidence = $selfTest.evidence
+        slowEvidence = $selfTest.slowEvidence
+        exitEvidence = $selfTest.exitEvidence
+        timeoutEvidence = $selfTest.timeoutEvidence
+        diagnosticCaptureDurationMs = $selfTest.diagnosticCaptureDurationMs
+        slowThresholdExceeded = $false
+        slowEvidenceStatus = "not-applicable"
+        slowEvidenceErrorType = $null
     }
 }
 
@@ -774,7 +874,7 @@ foreach ($testProject in $testProjects) {
                 [double]($marker.disposed.timestamp - $marker.disposing.timestamp))
             $exitDuration = [Math]::Max(
                 0,
-                [double]($execution.endedAtUnixMs - $marker.disposed.timestamp))
+                [double]($execution.processExitedAtUnixMs - $marker.disposed.timestamp))
         }
 
         $phaseResults += [pscustomobject]@{
@@ -792,6 +892,13 @@ foreach ($testProject in $testProjects) {
             stdoutPath = $null
             stderrPath = $null
             evidence = @()
+            slowEvidence = @()
+            exitEvidence = @()
+            timeoutEvidence = @()
+            diagnosticCaptureDurationMs = 0.0
+            slowThresholdExceeded = $false
+            slowEvidenceStatus = "not-applicable"
+            slowEvidenceErrorType = $null
         }
         $exitSucceeded = $execution.exitCode -eq 0 -and
             -not $execution.timedOut -and
@@ -811,18 +918,37 @@ foreach ($testProject in $testProjects) {
             residualChildCount = $execution.residualChildren.Count
             stdoutPath = $execution.stdoutPath
             stderrPath = $execution.stderrPath
-            evidence = $execution.evidence
+            evidence = $execution.exitEvidence
+            slowEvidence = @()
+            exitEvidence = $execution.exitEvidence
+            timeoutEvidence = $execution.timeoutEvidence
+            diagnosticCaptureDurationMs = 0.0
+            slowThresholdExceeded = $false
+            slowEvidenceStatus = "not-applicable"
+            slowEvidenceErrorType = $null
         }
     }
 }
 
 $statistics = New-Statistics -Results $phaseResults
 $failedResults = @($phaseResults | Where-Object { -not $_.success })
+$slowResults = @($phaseResults | Where-Object slowThresholdExceeded)
+$slowEvidenceCapturedCount = @(
+    $slowResults |
+        Where-Object slowEvidenceStatus -eq "captured"
+).Count
+$slowEvidenceMissingCount = $slowResults.Count - $slowEvidenceCapturedCount
+$diagnosticCaptureTotalMs = [Math]::Round(
+    [double](
+        $phaseResults |
+            Measure-Object -Property diagnosticCaptureDurationMs -Sum
+    ).Sum,
+    3)
 $runtime = (& dotnet --version).Trim()
 $commitSha = (& git -C $repositoryRoot rev-parse HEAD).Trim()
 $workingTreeDirty = @(& git -C $repositoryRoot status --porcelain).Count -gt 0
 $report = [ordered]@{
-    schemaVersion = 1
+    schemaVersion = 2
     generatedAtUtc = [DateTimeOffset]::UtcNow.ToString("O")
     profile = $Profile
     iterations = $resolvedIterations
@@ -845,6 +971,10 @@ $report = [ordered]@{
     ownershipAuditErrorType = $ownershipError
     successful = $ownershipPassed -and $failedResults.Count -eq 0
     failedPhaseCount = $failedResults.Count
+    slowPhaseCount = $slowResults.Count
+    slowEvidenceCapturedCount = $slowEvidenceCapturedCount
+    slowEvidenceMissingCount = $slowEvidenceMissingCount
+    diagnosticCaptureTotalMs = $diagnosticCaptureTotalMs
     statistics = $statistics
     results = $phaseResults
 }
@@ -865,14 +995,42 @@ $markdown.Add("- Working tree dirty: ``$workingTreeDirty``")
 $markdown.Add("- Assemblies: $($testProjects.Count)")
 $markdown.Add("- Ownership audit: $(if ($ownershipPassed) { 'passed' } else { 'failed' })")
 $markdown.Add("- Failed phases: $($failedResults.Count)")
+$markdown.Add("- Slow phases: $($slowResults.Count)")
+$markdown.Add(
+    "- Slow phase evidence: $slowEvidenceCapturedCount captured, " +
+    "$slowEvidenceMissingCount missing")
+$markdown.Add("- Diagnostic capture wall time: $diagnosticCaptureTotalMs ms")
 $markdown.Add("")
-$markdown.Add("| Assembly | Phase | Pass / Runs | Success | P50 ms | P95 ms | P99 ms | Max ms |")
-$markdown.Add("| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |")
+$markdown.Add("| Assembly | Phase | Pass / Runs | Slow / captured | Success | P50 ms | P95 ms | P99 ms | Max ms |")
+$markdown.Add("| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
 foreach ($item in $statistics) {
     $markdown.Add(
         "| $($item.assembly) | $($item.phase) | $($item.passed) / $($item.runs) | " +
+        "$($item.slowRuns) / $($item.slowEvidenceCaptured) | " +
         "$([Math]::Round($item.successRate * 100, 2))% | $($item.p50Ms) | " +
         "$($item.p95Ms) | $($item.p99Ms) | $($item.maxMs) |")
+}
+$markdown.Add("")
+$markdown.Add("## Slow Phases")
+$markdown.Add("")
+if ($slowResults.Count -eq 0) {
+    $markdown.Add("None.")
+}
+else {
+    $markdown.Add("| Assembly | Iteration | Phase | Duration ms | Capture ms | Evidence status | Evidence |")
+    $markdown.Add("| --- | ---: | --- | ---: | ---: | --- | --- |")
+    foreach ($slow in $slowResults) {
+        $evidenceText = if ($slow.slowEvidence.Count -eq 0) {
+            ""
+        }
+        else {
+            $slow.slowEvidence -join "<br>"
+        }
+        $markdown.Add(
+            "| $($slow.assembly) | $($slow.iteration) | $($slow.phase) | " +
+            "$($slow.durationMs) | $($slow.diagnosticCaptureDurationMs) | " +
+            "$($slow.slowEvidenceStatus) | $evidenceText |")
+    }
 }
 $markdown.Add("")
 $markdown.Add("## Failures")
@@ -887,7 +1045,8 @@ else {
             "``$($failure.phase)``: exit=$($failure.exitCode), " +
             "timeout=$($failure.timedOut), stdoutPolluted=$($failure.stdoutPolluted), " +
             "stderrPolluted=$($failure.stderrPolluted), " +
-            "residualChildren=$($failure.residualChildCount)")
+            "residualChildren=$($failure.residualChildCount), " +
+            "slowEvidence=$($failure.slowEvidenceStatus)")
     }
 }
 $markdown | Set-Content -LiteralPath $markdownPath -Encoding utf8

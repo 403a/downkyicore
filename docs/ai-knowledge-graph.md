@@ -2314,10 +2314,12 @@ outbound:
 contracts:
   - URI scheme access is allowed only after absolute-URI validation.
   - Protocol-relative image addresses are normalized to HTTPS only at the image-loader boundary; raw Bilibili wire-model strings remain unchanged.
+  - External and protocol-relative sources are classified before local file probing so Windows never treats `//host/path` as a blocking UNC lookup.
   - Ordinary relative sources remain Avalonia asset candidates and are never sent as HTTP requests.
   - Malformed, unavailable, unauthorized, or missing image sources return `null` so the control can retain its fallback instead of faulting the binding task.
 hazards:
   - Treating `//host/path` as an Avalonia relative asset can throw before remote fallback begins.
+  - Calling `File.Exists` before classifying `//host/path` can block a test or UI image load on Windows UNC resolution.
   - Globally rewriting API address fields would alter external wire contracts and cache identity.
 tests:
   - test.image-loader
@@ -2380,7 +2382,10 @@ outbound:
 contracts:
   - Formal local Verification runs the ownership audit and five iterations per assembly with timeout forensics validated.
   - PR, main and release profiles run 3, 50 and 100 iterations per assembly; release evidence must never drop below 50.
-  - Every report identifies runtime, OS, architecture, commit SHA, dirty-worktree state, thresholds, phase exit codes and P50/P95/P99/max durations.
+  - Every report identifies runtime, OS, architecture, commit SHA, dirty-worktree state, thresholds, phase exit codes, slow-evidence status and P50/P95/P99/max durations.
+  - Execution duration includes runner startup through OS process exit; teardown uses fixture marker timestamps, while process-exit uses the child's OS ExitTime and excludes collector overhead.
+  - Marker-aware execution phases are sampled at the unchanged slow threshold; missing slow evidence is a gate failure rather than an unexplained empty array.
+  - Diagnostic capture wall time is reported separately because managed-stack collection perturbs the instrumented phase; slow execution evidence cannot be presented as post-teardown exit evidence.
   - Unexpected stdout/stderr, timeout, residual child process, missing teardown marker or failed process exit blocks the gate.
   - Slow and timed-out Windows processes preserve thread state, wait reason, process tree and a managed stack when `dotnet-stack` is available.
   - Every scanned lifecycle mechanism maps to a declared owner with explicit start, stop and teardown behavior.
