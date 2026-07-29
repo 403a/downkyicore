@@ -66,6 +66,22 @@
             ItemsSource="{ReflectionBinding ElementName=NameVideoSections, Path=SelectedItem.VideoPages, Mode=TwoWay}"
             SelectionMode="Extended"
             SelectedItem="{Binding UiState.SelectedVideoPage, Mode=TwoWay}">
+            <DataGrid.Styles>
+                <Style Selector="DataGridRow /template/ Rectangle#BackgroundRectangle">
+                    <Setter Property="IsVisible" Value="False" />
+                    <Setter Property="Fill" Value="{DynamicResource BrushDataGridHighlight}" />
+                </Style>
+
+                <Style Selector="DataGridRow:pointerover /template/ Rectangle#BackgroundRectangle">
+                    <Setter Property="IsVisible" Value="True" />
+                    <Setter Property="Opacity" Value="0.3" />
+                </Style>
+
+                <Style Selector="DataGridRow:selected /template/ Rectangle#BackgroundRectangle">
+                    <Setter Property="IsVisible" Value="True" />
+                    <Setter Property="Opacity" Value="1" />
+                </Style>
+            </DataGrid.Styles>
             <DataGrid.ColumnHeaderTheme>
                 <ControlTheme TargetType="{x:Type DataGridColumnHeader}">
                     <Setter Property="HorizontalContentAlignment" Value="Center" />
@@ -226,25 +242,6 @@
                 </DataGridTemplateColumn>
             </DataGrid.Columns>
 
-            <DataGrid.RowTheme>
-                <ControlTheme TargetType="DataGridRow"
-                              BasedOn="{StaticResource {x:Type DataGridRow}}">
-                    <Style Selector="^ /template/ Rectangle#BackgroundRectangle">
-                        <Setter Property="IsVisible" Value="False" />
-                        <Setter Property="Fill" Value="{DynamicResource BrushDataGridHighlight}" />
-                    </Style>
-
-                    <Style Selector="^:pointerover /template/ Rectangle#BackgroundRectangle">
-                        <Setter Property="IsVisible" Value="True" />
-                        <Setter Property="Opacity" Value="0.3" />
-                    </Style>
-
-                    <Style Selector="^:selected /template/ Rectangle#BackgroundRectangle">
-                        <Setter Property="IsVisible" Value="True" />
-                        <Setter Property="Opacity" Value="1" />
-                    </Style>
-                </ControlTheme>
-            </DataGrid.RowTheme>
         </DataGrid>
     </Grid>
 </UserControl>

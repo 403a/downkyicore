@@ -1,7 +1,7 @@
 # DownKyi Core Live Refactoring Plan
 
 Status: active
-Last updated: 2026-07-28
+Last updated: 2026-07-29
 Current group: Gate 9 large-owner convergence
 Current branch: `refactor/video-detail-view-owner`
 
@@ -55,9 +55,10 @@ Scope:
 
 Current owner progress, pending PR integration:
 
-- The 565-line view is now a 46-line ordered composition shell plus 74-line toolbar, 168-line summary, 250-line section/page selection, and 66-line action typed child views.
-- Structured comparison retains all 56 bindings, 12 named controls, 48 dynamic resources, 9 static resources, and 13 behaviors. Section selection and the page DataGrid remain in one namescope.
-- Strict `AnalysisMode=All` Release build has zero warnings/errors; all 710 tests pass, including 203 architecture tests and 13 Desktop/Host smoke tests. The smoke environment now loads production-equivalent Fluent and DataGrid theme prerequisites before constructing the complete child tree. Format, vulnerable/deprecated package audits, boundary audit, `git diff --check`, and 978-candidate Gitleaks checks pass. Remote gates remain before integration.
+- The 565-line view is now a 46-line ordered composition shell plus 74-line toolbar, 168-line summary, 247-line section/page selection, and 66-line action typed child views.
+- Structured comparison retains all 56 bindings, 12 named controls, 48 dynamic resources, 8 static resources, and 13 behaviors. Section selection and the page DataGrid remain in one namescope; row highlight styles layer on the application theme without replacing it.
+- The first remote round exposed child-construction-time DataGrid static-resource lookup on macOS and global smoke-theme mutation instability on Windows. The focused fix removes the child base-theme lookup, keeps the production App theme contract under architecture test, and removes test-global theme mutation. Full local and remote gates must be repeated before integration.
+- After the focused fix, strict `AnalysisMode=All` Release build has zero warnings/errors and all 711 tests pass, including 204 architecture tests and 13 Desktop/Host smoke tests. Format, vulnerable/deprecated package audits, boundary audit, `git diff --check`, and 978-candidate Gitleaks checks pass. Remote gates remain before integration.
 
 Verification:
 

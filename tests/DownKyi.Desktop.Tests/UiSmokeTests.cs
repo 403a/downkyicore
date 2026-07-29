@@ -4,7 +4,6 @@ using Avalonia.Headless;
 using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Media;
 using Avalonia.Styling;
-using Avalonia.Themes.Fluent;
 using Avalonia.Xaml.Interactivity;
 using DownKyi.Application.Desktop;
 using DownKyi.Application.Diagnostics;
@@ -501,22 +500,6 @@ public sealed class UiSmokeTests
     {
         var application = Avalonia.Application.Current
             ?? throw new InvalidOperationException("Avalonia application is not initialized.");
-        if (!application.Styles.OfType<FluentTheme>().Any())
-        {
-            application.Styles.Add(new FluentTheme());
-        }
-
-        var dataGridStyles = new Uri("avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml");
-        if (!application.Styles
-            .OfType<StyleInclude>()
-            .Any(style => style.Source == dataGridStyles))
-        {
-            application.Styles.Add(new StyleInclude(new Uri("avares://DownKyi.Desktop.Tests/"))
-            {
-                Source = dataGridStyles
-            });
-        }
-
         if (application.TryGetResource("ImageBtnStyle", ThemeVariant.Default, out _))
         {
             return application;

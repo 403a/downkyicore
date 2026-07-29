@@ -58,7 +58,7 @@ public sealed class VideoDetailViewArchitectureTests
         Assert.Equal(56, Count(source, @"\{(?:Reflection)?Binding\s+([^},]+)"));
         Assert.Equal(12, Count(source, @"(?:x:Name|Name)=""([^""]+)"""));
         Assert.Equal(48, Count(source, @"\{DynamicResource\s+([^}]+)\}"));
-        Assert.Equal(9, Count(source, @"\{StaticResource\s+([^}]+)\}"));
+        Assert.Equal(8, Count(source, @"\{StaticResource\s+([^}]+)\}"));
         Assert.Equal(
             13,
             Count(
@@ -79,6 +79,25 @@ public sealed class VideoDetailViewArchitectureTests
             StringComparison.Ordinal);
         Assert.Contains("VideoPageSelectionBehavior", source, StringComparison.Ordinal);
         Assert.Contains("ResetGridSplitterBehavior", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DataGridRowStylesLayerOnTheApplicationThemeWithoutBaseThemeLookup()
+    {
+        var selectionSource = Read("VideoDetailSelectionView.axaml");
+        var applicationSource = File.ReadAllText(Path.Combine(
+            RepositoryRoot,
+            "src",
+            "DownKyi.Desktop",
+            "App.axaml"));
+
+        Assert.Contains("<DataGrid.Styles>", selectionSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("<DataGrid.RowTheme>", selectionSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("BasedOn=", selectionSource, StringComparison.Ordinal);
+        Assert.Contains(
+            "avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml",
+            applicationSource,
+            StringComparison.Ordinal);
     }
 
     private static int Count(string source, string pattern)
