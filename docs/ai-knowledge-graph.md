@@ -2386,6 +2386,8 @@ contracts:
   - Every phase exposes general failure/error type; slow-evidence error type is reserved for the diagnostic capture path.
   - Execution duration includes runner startup through OS process exit; teardown uses fixture marker timestamps, while process-exit uses the child's OS ExitTime and excludes collector overhead.
   - Marker-aware execution phases are sampled at the unchanged slow threshold; missing slow evidence is a gate failure rather than an unexplained empty array.
+  - Forensics is armed 100 ms before the unchanged classification threshold to close the monitor-poll/child-exit race; reports disclose the lead and per-phase pre-threshold capture state.
+  - The held-child forensics self-test must report `forensicsSelfTestCaptureLeadValidated=true`, proving the proactive capture path executed.
   - Lifecycle marker reads tolerate bounded writer contention and report contention/retry-exhaustion counts; only Windows sharing/lock error codes are contention, while access and other I/O errors retain a separate count/type; the final marker contract remains blocking.
   - Diagnostic capture wall time is reported separately because managed-stack collection perturbs the instrumented phase; slow execution evidence cannot be presented as post-teardown exit evidence.
   - Unexpected stdout/stderr, timeout, residual child process, missing teardown marker or failed process exit blocks the gate.
@@ -2484,6 +2486,7 @@ paths:
   - Directory.Build.props
   - DownKyi.Core/DownKyi.Core.csproj
   - version.txt
+  - script/validate-release-version.ps1
   - script/validate-publish-output.ps1
   - script/assets/external-assets.json
   - script/aria2.ps1
@@ -2503,6 +2506,7 @@ contracts:
   - Windows, Linux, and macOS run strict Release build and all tests before changelog or package jobs can start.
   - Changelog and package jobs also require the Windows `Rehearsal` lifecycle profile to pass and upload evidence.
   - Manual dispatch builds and uploads the same packages without publishing a GitHub Release; tag execution alone may create the Release.
+  - `script/validate-release-version.ps1` requires stable `major.minor.patch` text and blocks a tag whose `refs/tags/v<version>` value differs from `version.txt`.
   - Each RID validates a fixed publish directory containing non-empty DownKyi, aria2, FFmpeg, ffprobe, and dependency-manifest files.
   - Publish validation checks the expected assembly version, requires Fluent, rejects Simple, and emits per-file SHA-256 values.
   - Every package uploads its own `.sha256` sidecar and publish manifest with the artifact.
@@ -2510,6 +2514,7 @@ contracts:
   - External archives use immutable release tags and are accepted only after TLS validation, a successful HTTP status and their manifest SHA-256 match.
   - `DownKyiAssetRuntimeIdentifier` selects packaged binary content without assigning the .NET SDK `RuntimeIdentifier`; only the executable derives it from the explicit publish target or local host fallback and directly includes the selected Core asset catalog files.
   - `version.txt` is the only project version source. Directory build metadata, application display, package names, publish manifests and tags must agree with it.
+  - Published tags are immutable. A withdrawn draft is replaced by a higher corrective version, never by moving, reusing or silently updating its tag.
 hazards:
   - Autobuild releases can be removed upstream. A checksum mismatch on a short error page is a hard package failure; refresh the immutable URL and publisher digest, never skip verification or switch to mutable `latest`.
   - Inferring the SDK `RuntimeIdentifier` from the runner host corrupts cross-target restore graphs, such as osx-x64 publication on an arm64 runner.

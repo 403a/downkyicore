@@ -21,9 +21,28 @@ public sealed class ReleaseWorkflowArchitectureTests
         Assert.Contains("macos-15", workflow, StringComparison.Ordinal);
         Assert.Contains("-p:AnalysisMode=All", workflow, StringComparison.Ordinal);
         Assert.Contains("./script/test-solution.ps1", workflow, StringComparison.Ordinal);
+        Assert.Contains("./script/validate-release-version.ps1", workflow, StringComparison.Ordinal);
         Assert.Equal(4, CountOccurrences(workflow, "fail-fast: false"));
         Assert.Equal(3, CountOccurrences(workflow, "validate-publish-output.ps1"));
         Assert.Equal(3, CountOccurrences(workflow, "Get-FileHash"));
+    }
+
+    [Fact]
+    public void ReleaseTagMustMatchTheSingleVersionSource()
+    {
+        var validator = File.ReadAllText(
+            Path.Combine(RepositoryRoot, "script", "validate-release-version.ps1"));
+
+        Assert.Contains("version.txt", validator, StringComparison.Ordinal);
+        Assert.Contains(@"^\d+\.\d+\.\d+$", validator, StringComparison.Ordinal);
+        Assert.Contains(
+            "$expectedTagRef = \"refs/tags/v$version\"",
+            validator,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "[StringComparison]::Ordinal",
+            validator,
+            StringComparison.Ordinal);
     }
 
     [Fact]
