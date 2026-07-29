@@ -2244,11 +2244,19 @@ id: external.aria2
 type: external
 paths:
   - DownKyi.Core/Aria2cNet
+  - DownKyi.Core/Aria2cNet/Client/AriaClient.cs
+  - DownKyi.Core/Aria2cNet/Client/AriaClient.Downloads.cs
+  - DownKyi.Core/Aria2cNet/Client/AriaClient.Status.cs
+  - DownKyi.Core/Aria2cNet/Client/AriaClient.Options.cs
+  - DownKyi.Core/Aria2cNet/Client/AriaClient.Lifecycle.cs
+  - DownKyi.Core/Aria2cNet/Client/AriaClient.System.cs
   - DownKyi.Core/Aria2cNet/Server/AriaProcessSupervisor.cs
   - DownKyi.Core/Aria2cNet/Server/WindowsProcessJob.cs
   - src/DownKyi.Desktop/Services/Download/AriaRuntimeClientRegistry.cs
   - tests/DownKyi.Core.Tests/AriaClientIsolationTests.cs
+  - tests/DownKyi.Core.Tests/AriaClientRpcContractTests.cs
   - tests/DownKyi.Tests/AriaRuntimeClientRegistryTests.cs
+  - docs/design-docs/aria2-rpc-client-ownership.md
   - script/aria2.ps1
   - script/aria2.sh
 responsibility: Provides optional aria2 RPC download backend and release-packaged aria2 binaries.
@@ -2265,6 +2273,8 @@ contracts:
   - RPC requests use iterative asynchronous retry and cannot occupy a worker thread with synchronous `HttpClient.Send` or recursive retry.
   - Each runtime owns an immutable RPC endpoint and secret; `AriaClient` has no mutable static host, port, or token configuration.
   - Local and custom clients can execute concurrently without endpoint or authentication-token cross-contamination.
+  - `AriaClient` is hand-maintained DownKyi protocol code, not generated output. Core transport, download control, status/URI, options, lifecycle and `system.*` methods have separate partial owners below 500 lines.
+  - Every public RPC method is covered by a deterministic wire-contract inventory. `aria2.*` calls keep the token first; `system.*` calls do not receive an implicit token; `ChangeUriAsync` maps to `aria2.changeUri`.
   - Packaged local RPC listens only on loopback; wildcard listening and allow-origin-all are prohibited for the App-owned child.
   - The child receives `--stop-with-process` on every platform. On Windows it also joins a kill-on-close Job Object, so abrupt parent termination cannot strand aria2.
   - Session input/output and `--continue=true` remain present when process-lifetime hardening is changed; crash cleanup cannot discard resumable state.

@@ -3,7 +3,7 @@
 Status: active
 Last updated: 2026-07-29
 Current group: Gate 9 large-owner convergence
-Current branch: `refactor/video-detail-view-owner`
+Current branch: `refactor/aria-client-provenance`
 
 This file contains only unfinished or not-yet-integrated work. Completed PR 02-32 items are not restored. Design rationale belongs in `design-docs`; product acceptance belongs in `product-specs`.
 
@@ -38,6 +38,7 @@ The previous `Status: complete` was incorrect.
 - Gate 9 search composition passed Windows/Linux/macOS quality run `30367302324` and CodeQL run `30367302508`; all seven check-runs had zero annotations and every platform retained seven assembly-named TRX artifacts. PR #107 was merged into `refactor/pr-30-32-release-hardening` as merge commit `dd9a81a`. MainWindow and Index now share the Host-owned `SearchService`, and an architecture ratchet rejects direct ViewModel construction.
 - Gate 9 pager ownership passed Windows/Linux/macOS quality run `30369076250` and CodeQL run `30369076284`; all seven check-runs had zero annotations and every platform retained seven assembly-named TRX artifacts. PR #108 was merged into `refactor/pr-30-32-release-hardening` as merge commit `59e7a1c`. The 506-line pager became focused state/command/layout owners, and parameterless XAML buttons plus constructor current-page behavior were repaired.
 - Gate 9 network-settings View ownership passed Windows/Linux/macOS quality run `30370919469` and CodeQL run `30370919558`; all seven check-runs had zero annotations and every platform retained seven assembly-named TRX artifacts. PR #109 was merged into `refactor/pr-30-32-release-hardening` as merge commit `e181659`. The 608-line XAML became a thin ordered composition plus four typed section owners while retaining every binding, named control, resource, and command parameter.
+- Gate 9 video-detail View ownership passed Windows/Linux/macOS quality run `30423173188` and CodeQL run `30423172978`; all seven check-runs had zero annotations and every platform retained seven assembly-named TRX artifacts. PR #110 was merged into `refactor/pr-30-32-release-hardening` as merge commit `bb082a7`. The 565-line XAML became a thin ordered composition plus toolbar, summary, same-namescope section/page selection and action owners. The first remote round exposed a macOS child-view static-resource lookup and Windows global smoke-theme mutation; the final design keeps the application-owned DataGrid theme and uses local row-highlight styles without replacing global test state.
 - `version.txt` remains `1.0.32`; v1.1.0 has not passed its release gate.
 
 No release tag may be created while any release blocker below remains.
@@ -51,14 +52,14 @@ Owner branches: separate responsibility-based large-owner PRs.
 Scope:
 
 - Split hand-written oversized owners by responsibility; do not split generated/protocol files only to satisfy LOC.
-- Current owner: separate the oversized video-detail XAML into ordered toolbar, summary, section/page selection, and action views without changing bindings, selection behavior, or layout.
+- Current owner: classify the source and synchronization contract of `AriaClient`, then converge the final oversized production file without changing its public API or aria2 JSON-RPC wire contract.
 
 Current owner progress, pending PR integration:
 
-- The 565-line view is now a 46-line ordered composition shell plus 74-line toolbar, 168-line summary, 247-line section/page selection, and 66-line action typed child views.
-- Structured comparison retains all 56 bindings, 12 named controls, 48 dynamic resources, 8 static resources, and 13 behaviors. Section selection and the page DataGrid remain in one namescope; row highlight styles layer on the application theme without replacing it.
-- The first remote round exposed child-construction-time DataGrid static-resource lookup on macOS and global smoke-theme mutation instability on Windows. The focused fix removes the child base-theme lookup, keeps the production App theme contract under architecture test, and removes test-global theme mutation. Full local and remote gates must be repeated before integration.
-- After the focused fix, strict `AnalysisMode=All` Release build has zero warnings/errors and all 711 tests pass, including 204 architecture tests and 13 Desktop/Host smoke tests. Format, vulnerable/deprecated package audits, boundary audit, `git diff --check`, and 978-candidate Gitleaks checks pass. Remote gates remain before integration.
+- Git history traces the source to DownKyi commit `587fcfb` (`add the aria2cNet sources`, 2020-12-26). No generator, external package, or separate upstream sync source exists; it is hand-maintained project protocol code.
+- The 1,119-line owner is split into transport core, download control, status/URI, options, lifecycle and `system.*` partials, all below 500 lines, without changing public signatures.
+- A deterministic contract inventory invokes every public RPC method and verifies JSON-RPC version, request ID, method name and token placement. It exposed and fixed the pre-existing `ChangeUriAsync` mapping to `aria2.changePosition`; the method now correctly emits `aria2.changeUri`.
+- Strict `AnalysisMode=All` Release build has zero warnings/errors and all 713 tests pass across seven test projects. Format changed 0/849 files; the boundary audit reports zero oversized production files; vulnerable/deprecated package audits, `git diff --check`, and the 985-candidate Gitleaks scan pass. Remote Windows/Linux/macOS quality and CodeQL gates remain before integration.
 
 Verification:
 
