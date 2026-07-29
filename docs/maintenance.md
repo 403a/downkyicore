@@ -35,6 +35,13 @@ diagnostic collection wall time, and fails a slow phase whose evidence is
 missing. Schema 1 exit values include collector overhead and are historical
 only; do not compare them directly with schema 2.
 
+Formal Windows PR, Main, Rehearsal and Flaky lifecycle profiles require
+`-ValidateForensics`. Their schema 2 report must show a detailed
+`markerReaderSelfTest` with `executed`, `passed`, `contentionObserved`,
+`recoveredAfterLockRelease` and `markerParsedAfterRecovery` all true. Missing,
+null, unknown or non-contending proofs fail closed; the top-level
+`markerReaderSelfTestPassed` value is only a summary.
+
 Pull requests are guarded by `.github/workflows/quality.yml`:
 
 - format check with `dotnet format --verify-no-changes --verbosity diagnostic`

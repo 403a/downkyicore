@@ -2385,9 +2385,11 @@ contracts:
   - Every report identifies runtime, OS, architecture, commit SHA, dirty-worktree state, thresholds, phase exit codes, slow-evidence status and P50/P95/P99/max durations.
   - Execution duration includes runner startup through OS process exit; teardown uses fixture marker timestamps, while process-exit uses the child's OS ExitTime and excludes collector overhead.
   - Marker-aware execution phases are sampled at the unchanged slow threshold; missing slow evidence is a gate failure rather than an unexplained empty array.
+  - Lifecycle marker reads tolerate bounded writer contention and report contention/retry-exhaustion counts; the final marker contract remains blocking.
   - Diagnostic capture wall time is reported separately because managed-stack collection perturbs the instrumented phase; slow execution evidence cannot be presented as post-teardown exit evidence.
   - Unexpected stdout/stderr, timeout, residual child process, missing teardown marker or failed process exit blocks the gate.
   - Slow and timed-out Windows processes preserve thread state, wait reason, process tree and a managed stack when `dotnet-stack` is available.
+  - `ValidateForensics` proves both marker-aware managed-stack capture and exclusive marker-lock recovery; formal Windows profiles fail closed unless the detailed self-test reports execution, observed contention, recovery, parsing and success.
   - Every scanned lifecycle mechanism maps to a declared owner with explicit start, stop and teardown behavior.
 hazards:
   - A green rerun can hide a race and does not replace owner identification or deterministic teardown.

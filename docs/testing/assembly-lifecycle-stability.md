@@ -76,6 +76,11 @@ P50, P95, P99 and maximum duration per assembly and phase.
 - Execution slow-phase, post-teardown slow-exit and timeout evidence have
   separate arrays. A process-exit row cannot inherit unrelated execution
   evidence.
+- Marker files are append-only fixture telemetry. The reader opens them with
+  read/write/delete sharing and bounded retries because it samples while the
+  fixture may be appending a state. Transient contention is counted; exhausted
+  reads return to the bounded monitor loop, while a missing final marker still
+  fails teardown and process-exit validation.
 
 Schema 1 reports used the collector observation timestamp for `process-exit`,
 so they include post-exit stdout/reporting overhead. In the
@@ -140,7 +145,30 @@ CI installs the pinned Microsoft `dotnet-stack` tool and runs
 `-ValidateForensics`. That self-test deliberately holds a marker-aware
 `execution` probe beyond the slow threshold. It fails unless the same code path
 used by test execution produces evidence and a non-empty managed stack.
+On Windows it also opens a valid marker with exclusive sharing and proves that
+the reader tolerates the temporary lock, then parses the marker after release.
 Timeout evidence is saved before the process tree is terminated.
+
+Schema 2 records the marker-reader proof as a fail-closed object:
+
+```json
+{
+  "markerReaderSelfTest": {
+    "required": true,
+    "executed": true,
+    "passed": true,
+    "contentionObserved": true,
+    "contentionCount": 2,
+    "recoveredAfterLockRelease": true,
+    "markerParsedAfterRecovery": true,
+    "errorType": null
+  }
+}
+```
+
+The top-level `markerReaderSelfTestPassed` field is only a summary. Windows PR,
+Main, Rehearsal and Flaky profiles require `-ValidateForensics`; missing,
+skipped, unknown, non-contending or failed self-tests block the gate.
 
 Raw stdout/stderr, JSON evidence, the machine report and Markdown summary are
 written below `artifacts/assembly-lifecycle/<run-id>/`. CI uploads the entire
