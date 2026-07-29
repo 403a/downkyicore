@@ -63,6 +63,18 @@ namespace DownKyi.Core.Aria2cNet.Client.Entity
         [JsonProperty("min-split-size")]
         public string MinSplitSize { get; set; } = string.Empty;
 
+        [JsonProperty("max-tries")]
+        public string MaxTries { get; set; } = string.Empty;
+
+        [JsonProperty("retry-wait")]
+        public string RetryWait { get; set; } = string.Empty;
+
+        [JsonProperty("always-resume")]
+        public string AlwaysResume { get; set; } = string.Empty;
+
+        [JsonProperty("max-resume-failure-tries")]
+        public string MaxResumeFailureTries { get; set; } = string.Empty;
+
         public override string ToString()
         {
             return JsonConvert.SerializeObject(this);

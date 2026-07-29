@@ -9,7 +9,7 @@
 
 </div>
 
-DownKyi Core 是基于哔哩下载姬 Windows 版与 Avalonia 的跨平台 B 站视频下载工具。当前项目已迁移到 .NET 10，并针对启动速度、下载续传、任务清理、日志诊断、SQLite 存储和 CI 发布流程做了维护。
+DownKyi Core 是基于哔哩下载姬 Windows 版与 Avalonia 的跨平台 B 站视频下载工具。v1.1.0 使用 .NET 10、Avalonia 12、Microsoft Generic Host、Microsoft DI 与 CommunityToolkit MVVM，并重构了导航、下载状态、SQLite、HTTP、日志、aria2、FFmpeg 和应用生命周期。
 
 ## 下载
 
@@ -64,33 +64,36 @@ FFmpeg 合并策略遵循“效能优先，但成功率更重要”：优先无�
 flowchart TD
     A["用户输入 BV/AV/番剧/收藏/历史入口"] --> B["SearchService 判断入口类型"]
     B --> C["VideoInfoService / BangumiInfoService / CheeseInfoService"]
-    C --> D["BiliApi 请求视频详情、分 P、合集章节"]
-    D --> E["ViewModel 批次更新列表"]
-    E --> F{"解析范围"}
-    F -->|选中项| G["解析选中视频流"]
-    F -->|当前章节| H["解析当前章节"]
-    F -->|全部| I["顺序解析全部视频"]
-    G --> J["VideoStream.GetVideoPlayUrl"]
-    H --> J
-    I --> J
-    J --> K["选择画质、音质、编码"]
-    K --> L["AddToDownloadService 建立下载任务"]
-    L --> M["DownloadStorageService 写入 SQLite"]
-    M --> N["DownloadService 背景执行任务"]
+    C --> D["IWbiKeyProvider 按需取得签名密钥"]
+    D --> E["BiliApi 请求视频详情、分 P、合集章节"]
+    E --> F["ViewModel 批次更新列表"]
+    F --> G{"解析范围"}
+    G -->|选中项| H["解析选中视频流"]
+    G -->|当前章节| I["解析当前章节"]
+    G -->|全部| J["顺序解析全部视频"]
+    H --> K["VideoStreamApi.GetVideoPlayUrl"]
+    I --> K
+    J --> K
+    K --> L["选择画质、音质、编码"]
+    L --> M["AddToDownloadService 建立下载任务"]
+    M --> N["DownloadTaskAdmissionService 建立 Domain task"]
+    N --> O["IDownloadTaskApplicationService 写入 SQLite"]
+    O --> P["DownloadTaskQueueGateway 直接排入 task id"]
+    P --> Q["DownloadOrchestrator 背景执行任务"]
 ```
 
 ```mermaid
 flowchart TD
-    A["下载任务"] --> B["解析播放地址"]
-    B --> C{"下载器"}
-    C -->|aria2| D["AriaDownloadService / CustomAriaDownloadService"]
-    C -->|内置| E["BuiltinDownloadService"]
-    D --> F["保存 gid、临时文件、进度状态"]
+    A["DownloadOrchestrator 有界队列"] --> B["DownloadPipeline 解析播放地址"]
+    B --> C{"ITransferBackend"}
+    C -->|aria2 / 自定义 aria2| D["Aria2TransferBackend"]
+    C -->|内置| E["BuiltinTransferBackend"]
+    D --> F["DownloadTaskStateWriter 保存 gid、临时文件、进度"]
     E --> F
-    F --> G["下载音频 / 视频 / 封面 / 弹幕 / 字幕"]
+    F --> G["DownloadArtifactWriter 处理封面 / 弹幕 / 字幕 / NFO"]
     G --> H["字幕 JSON 转 SRT"]
     G --> I["弹幕 protobuf 转 ASS"]
-    G --> J["FFmpeg 合并音视频：优先 copy，必要时 GPU/CPU fallback"]
+    G --> J["FFmpeg 合并：一般媒体可 copy，多段 DURL 重编码并 GPU/CPU fallback"]
     H --> K["输出 Media 文件"]
     I --> K
     J --> K
@@ -99,7 +102,7 @@ flowchart TD
 ## 使用说明
 - 软件自带.NET10、ffmpeg、aria2运行环境、无需自行安装
 - 默认下载路径:
-  - Windows: 软件运行目录下的Media文件夹
+  - Windows: `%APPDATA%\DownKyi\Media`
   - macOS: ~/Library/Application Support/DownKyi/Media
   - linux: ~/.config/DownKyi/Media
 
@@ -118,6 +121,14 @@ flowchart TD
 
 需要 .NET 10 SDK。
 
+开始修改前先阅读：
+
+- `AGENTS.md`：Agent 与贡献者入口、禁止事项和常用命令。
+- `ARCHITECTURE.md`：目前可执行拓扑与目标拓扑；两者尚未完全一致。
+- `docs/ai-knowledge-graph.md`：模块、调用关系、稳定契约与测试锚点。
+- `docs/refactoring-live-plan.md`：只包含尚未完成的工作和发布阻塞项。
+- `docs/design-docs/module-boundary-naming-audit.md`：可重现的模块边界与命名审查。
+
 ```powershell
 dotnet restore
 dotnet build .\DownKyi.sln -c Release --no-restore --no-incremental
@@ -133,29 +144,38 @@ dotnet run --project .\DownKyi\DownKyi.csproj
 开发时建议同时跑：
 
 ```powershell
+pwsh .\script\audit-module-boundaries.ps1 `
+  -OutputPath artifacts\architecture\module-boundary-audit.json
 dotnet format .\DownKyi.sln --verify-no-changes --no-restore
-dotnet package list --project .\DownKyi.sln --vulnerable
+dotnet package list --project .\DownKyi.sln --vulnerable --include-transitive
+dotnet package list --project .\DownKyi.sln --deprecated
 git diff --check
 ```
 
 项目结构：
 
-- `DownKyi`: Avalonia UI、ViewModel、下载调度、日志导出和平台集成。
-- `DownKyi.Core`: B 站 API、存储、设置、FFmpeg/aria2 包装、字幕和弹幕处理。
+- `DownKyi`: 只保留最小程序启动入口。
+- `src/DownKyi.Desktop`: Avalonia App、Views、ViewModels、UI projections、平台服务、Host composition 与下载 runtime。
+- `src/DownKyi.Application`: 下载 commands/queries、coordinators、desktop/lifecycle/logging contracts。
+- `src/DownKyi.Domain`: `DownloadTask` aggregate、合法状态转换、value objects 与 typed results。
+- `src/DownKyi.Infrastructure`: SQLite task store、Bilibili HTTP/buvid、clock、logging sink/retention/export。
+- `DownKyi.Core`: headless Bilibili API、设置、aria2/FFmpeg/filesystem compatibility、字幕与弹幕处理。
 - `tests/DownKyi.Core.Tests`: Core 层网络与工具逻辑测试。
 - `tests/DownKyi.Tests`: UI 外围可抽取逻辑、下载流程与文件完整性测试。
 - `script`: release workflow 使用的 aria2、FFmpeg、PupNet 和平台打包脚本。
 - `docs/maintenance.md`: 依赖更新、外部 binary checksum、release tag 和回归 checklist。
 - `docs/ai-knowledge-graph.md`: 给 AI/维护者使用的代码结构、模块职责和调用关系索引。
 
+注意：Desktop/UI、Bilibili HTTP、SQLite 与 logging ownership 已实际迁移，不是空壳专案。aria2、FFmpeg、filesystem compatibility 仍主要位于 `DownKyi.Core`；剩余边界与风险以 `ARCHITECTURE.md` 和 `docs/refactoring-live-plan.md` 为准。
+
 主要数据流：
 
 1. `SearchService` 识别输入入口。
 2. 对应 `*InfoService` 读取 B 站详情、分 P、番剧或课程信息。
 3. `VideoStream` 解析音视频、字幕和弹幕资源。
-4. `AddToDownloadService` 建立任务并写入 `DownloadStorageService`。
-5. `DownloadService` 选择 aria2 或内置下载器执行。
-6. FFmpeg 优先 stream copy，必要时尝试 GPU encoder，失败时回退 CPU。
+4. `AddToDownloadService` 经 admission service 建立 Domain task，由 Application service 写入 SQLite。
+5. task id 直接进入 queue gateway；`DownloadOrchestrator` 以有界 worker 调用 typed stages 和选定的 transfer backend。
+6. FFmpeg 对一般兼容媒体可使用 stream copy；多段 DURL 会重编码并验证 seek，GPU 失败时回退 CPU。
 
 发布由 GitHub Actions 触发 tag 完成：
 
@@ -165,16 +185,16 @@ git push origin main
 git push origin v1.0.x
 ```
 
-当前 Windows 发布包使用正常 self-contained zip。由于 Avalonia / Prism / Xaml.Behaviors / Newtonsoft.Json 组合并不适合 full trim，项目暂不发布 Windows `-trimmed` 包。
+当前 Windows 发布包使用正常 self-contained zip。由于 Avalonia、Xaml.Behaviors、反射序列化与原生媒体/SQLite 组件仍需完整保留，项目暂不发布 Windows `-trimmed` 包。
 
 外部 binary 由 `script/aria2.*` 与 `script/ffmpeg.*` 固定来源、版本和 checksum。更新时请同步维护脚本与 `docs/maintenance.md`，并确认发布包仍包含跨平台 fallback。
 
-历史注意事项：资源目录 `Languanges` 暂时保留旧拼写，避免破坏 Avalonia 资源路径与打包脚本；后续若要更名，应单独做 UI 资源整理 PR。
+Avalonia 的默认语言资源位于 `src/DownKyi.Desktop/Languages/Default.axaml`。资源 URI、XAML smoke test 与发布构建共同验证该路径，禁止恢复历史误拼 `Languanges`。
 
 ## 免责申明
 
 1. 本软件只提供视频解析，不提供任何资源上传、存储到服务器的功能。
-2. 本软件仅解析来自 B 站的内容，不会对解析到的音视频进行二次编码，部分视频会进行有限的格式转换、拼接等操作。
+2. 本软件仅解析来自 B 站的内容；一般媒体尽量避免不必要的重编码，但多段影片、格式修复或硬体加速流程可能进行转码、拼接与索引重建。
 3. 本软件解析得到的所有内容均来自 B 站 UP 主上传、分享，其版权均归原作者所有。内容提供者、上传者应对其提供、上传的内容承担全部责任。
 4. 本软件提供的所有内容，仅可用作学习交流使用，未经原作者授权，禁止用于其他用途。请在下载 24 小时内删除。为尊重作者版权，请前往资源的原始发布网站观看，支持原创。
 5. 因使用本软件产生的版权问题，软件作者概不负责。

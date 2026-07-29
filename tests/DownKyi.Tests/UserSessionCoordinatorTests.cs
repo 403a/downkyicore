@@ -1,0 +1,153 @@
+using DownKyi.Application.Desktop;
+using DownKyi.Core.BiliApi.Users.Models;
+using DownKyi.Services;
+using DownKyi.Services.Account;
+using DownKyi.ViewModels;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace DownKyi.Tests;
+
+public sealed class UserSessionCoordinatorTests
+{
+    [Fact]
+    public void ConstructingIndexViewModelDoesNotStartAccountWork()
+    {
+        using var settings = new TestSettingsStore();
+        var coordinator = new RecordingUserSessionCoordinator();
+        var navigation = new StubNavigationService();
+        var searchService = new SearchService(settings.Store, navigation);
+        using var viewModel = new ViewIndexViewModel(
+            new TestDesktopInteractionContext(navigation),
+            coordinator,
+            settings.Store,
+            searchService,
+            NullLogger<ViewIndexViewModel>.Instance);
+
+        Assert.Equal(0, coordinator.RefreshCount);
+    }
+
+    [Fact]
+    public async Task RefreshPreservesCancellationBeforeNetworkWork()
+    {
+        using var settings = new TestSettingsStore();
+        var coordinator = new UserSessionCoordinator(
+            settings.Store,
+            new TestBilibiliApiClient());
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => coordinator.RefreshAsync(cancellation.Token));
+    }
+
+    [Fact]
+    public void MissingUserMapsToLoggedOutSettings()
+    {
+        var settings = UserSessionCoordinator.MapSettings(null);
+
+        Assert.Equal(-1, settings.Mid);
+        Assert.Equal(string.Empty, settings.Name);
+        Assert.False(settings.IsLogin);
+        Assert.False(settings.IsVip);
+    }
+
+    [Fact]
+    public void NavigationUserMapsStableWbiKeys()
+    {
+        var settings = UserSessionCoordinator.MapSettings(new UserInfoForNavigation
+        {
+            Mid = 42,
+            Name = "test-user",
+            IsLogin = true,
+            VipStatus = 1,
+            Wbi = new Wbi
+            {
+                ImageAddress = "https://i.example.test/path/image-key.png?query=ignored",
+                SubAddress = "//i.example.test/path/sub-key.jpg"
+            }
+        });
+
+        Assert.Equal(42, settings.Mid);
+        Assert.Equal("test-user", settings.Name);
+        Assert.True(settings.IsLogin);
+        Assert.True(settings.IsVip);
+        Assert.Equal("image-key", settings.ImgKey);
+        Assert.Equal("sub-key", settings.SubKey);
+    }
+
+    [Fact]
+    public async Task RefreshWithoutValidWbiMetadataPreservesExistingKeys()
+    {
+        const string imgKey = "7cd084941338484aae1ad9425b84077c";
+        const string subKey = "4932caff0ff746eab6f01bf08b70ac45";
+        using var settings = new TestSettingsStore();
+        settings.Store.Update(current => current with
+        {
+            User = current.User with { ImgKey = imgKey, SubKey = subKey }
+        });
+        var coordinator = new UserSessionCoordinator(
+            settings.Store,
+            _ => Task.FromResult<UserInfoForNavigation?>(new UserInfoForNavigation
+            {
+                Mid = 42,
+                Name = "updated-user",
+                IsLogin = true,
+                Wbi = null
+            }));
+
+        await coordinator.RefreshAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal("updated-user", settings.Store.Current.User.Name);
+        Assert.Equal(imgKey, settings.Store.Current.User.ImgKey);
+        Assert.Equal(subKey, settings.Store.Current.User.SubKey);
+    }
+
+    private sealed class RecordingUserSessionCoordinator : IUserSessionCoordinator
+    {
+        public int RefreshCount { get; private set; }
+
+        public Task<UserSessionSnapshot> RefreshAsync(CancellationToken cancellationToken)
+        {
+            RefreshCount++;
+            return Task.FromResult(new UserSessionSnapshot(null, false));
+        }
+    }
+
+    private sealed class StubNavigationService : IAppNavigationService
+    {
+        public event EventHandler<AppNavigationChangedEventArgs>? NavigationChanged
+        {
+            add { }
+            remove { }
+        }
+
+        public void Navigate(AppNavigationRequest request)
+        {
+        }
+
+        public void NavigateRegion(
+            AppNavigationRegion region,
+            AppRoute route,
+            IReadOnlyDictionary<string, object?>? parameters = null)
+        {
+        }
+
+        public void ClearRegion(AppNavigationRegion region)
+        {
+        }
+
+        public object? GetActiveView(AppNavigationRegion region)
+        {
+            return null;
+        }
+
+        public bool CanGoBack(AppNavigationRegion region)
+        {
+            return false;
+        }
+
+        public void GoBack(AppNavigationRegion region)
+        {
+        }
+    }
+}

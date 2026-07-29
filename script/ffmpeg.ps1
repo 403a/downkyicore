@@ -21,7 +21,9 @@ function Verify-Asset($path, $expectedSha256) {
     }
 }
 
-Create-Dir ".\downloads"
+$downloadDir = Join-Path $PSScriptRoot "downloads"
+$binaryRoot = Join-Path $PSScriptRoot "..\DownKyi.Core\Binary"
+Create-Dir $downloadDir
 
 $rid = "win-$arch"
 $asset = Get-Asset "ffmpeg" $rid
@@ -29,18 +31,18 @@ if ($null -eq $asset) {
     throw "Unsupported ffmpeg architecture: $arch"
 }
 
-$archive = ".\downloads\ffmpeg-$arch.zip"
+$archive = Join-Path $downloadDir "ffmpeg-$arch.zip"
 if (Test-Path -LiteralPath $archive) {
     Remove-Item -LiteralPath $archive -Force
 }
 Start-BitsTransfer -Source $asset.url -Destination $archive
 Verify-Asset $archive $asset.sha256
 
-$destDir = "..\DownKyi.Core\Binary\$rid\ffmpeg\"
+$destDir = Join-Path $binaryRoot "$rid\ffmpeg"
 Create-Dir $destDir
 Get-ChildItem -LiteralPath $destDir -File | Remove-Item -Force
 
-$extractDir = ".\downloads\ffmpeg-$arch-extract"
+$extractDir = Join-Path $downloadDir "ffmpeg-$arch-extract"
 if (Test-Path -LiteralPath $extractDir) {
     Remove-Item -LiteralPath $extractDir -Recurse -Force
 }
@@ -51,8 +53,13 @@ $ffmpeg = Get-ChildItem -LiteralPath $extractDir -Recurse -File -Filter "ffmpeg.
 if ($null -eq $ffmpeg) {
     throw "ffmpeg.exe not found in $archive"
 }
+$ffprobe = Get-ChildItem -LiteralPath $extractDir -Recurse -File -Filter "ffprobe.exe" | Select-Object -First 1
+if ($null -eq $ffprobe) {
+    throw "ffprobe.exe not found in $archive"
+}
 
 Copy-Item -LiteralPath $ffmpeg.FullName -Destination (Join-Path $destDir "ffmpeg.exe") -Force
+Copy-Item -LiteralPath $ffprobe.FullName -Destination (Join-Path $destDir "ffprobe.exe") -Force
 
 $extractRoot = (Resolve-Path -LiteralPath $extractDir).Path
 $current = $ffmpeg.Directory

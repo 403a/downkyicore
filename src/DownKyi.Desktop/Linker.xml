@@ -1,0 +1,22 @@
+﻿<linker>
+    <assembly fullname="Avalonia.Controls">
+        <type fullname="*" />
+    </assembly>
+
+    <assembly fullname="Avalonia.Controls.DataGrid">
+        <type fullname="*" />
+    </assembly>
+
+    <assembly fullname="DownKyi.Core">
+        <type fullname="*" />
+    </assembly>
+
+    <assembly fullname="DownKyi.Desktop">
+        <type fullname="*" />
+    </assembly>
+
+    <assembly fullname="System.Net.Primitives">
+        <type fullname="System.Net.Cookie" />
+    </assembly>
+    
+</linker>

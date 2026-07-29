@@ -1,5 +1,34 @@
 # 更新日志
 
+## [1.1.0] - 2026-07-29
+
+### Architecture
+
+- 移除 Prism、DryIoc、EventAggregator、RegionManager、ContainerLocator 与字串 ViewName navigation，改用 Microsoft Generic Host、Microsoft DI、CommunityToolkit MVVM 与 typed navigation history。
+- 建立可执行的 Domain、Application、Infrastructure、Desktop 边界；`DownKyi` 只保留最小启动入口，Core 不再拥有 Avalonia/XAML/logging 实作。
+- 让 Domain `DownloadTask` 成为 durable 状态权威，新增、续传及启动恢复直接以 `DownloadTaskId` 进入 bounded channel，不再轮询 UI collection。
+
+### Download And Media
+
+- 下载流程拆成播放地址解析、媒体下载、附属档案、混流、验证与完成阶段，并统一 retry policy、取消和错误分类。
+- 修复删除任务残留大型临时档、重启从零下载、多段 DURL 暂存 key 冲突、错误排序及不可 seek MP4 被误判成功。
+- 多段 DURL 使用 FFmpeg 重建时间戳与索引，并由 ffprobe 验证中段/尾段 seek；GPU encoder 失败时自动回退 CPU。
+- aria2 与内建下载器支持可配置分片与高速模式，诊断同时显示 MB/s 与 Mbps，避免把单位显示误当成带宽限制。
+
+### Bilibili And User Workflows
+
+- 建立 WBI key provider、single-flight 刷新与一次性失效重试，修复启动后立即解析、旧 key 及并发解析失败。
+- 修复普通影片、番剧、课程播放流 envelope、AI 字幕空档、SRT 毫秒时间码与可选 JSON payload 被默认空物件遮蔽。
+- 支持 `bilibili.com/list/数字`、收藏夹/投稿内搜索、复选与清空选择，并在 typed back navigation 中保留页码、查询和列表状态。
+- 修复多层返回建立重复页面、返回箭头无效、关闭后无法退出/重开及启动操作覆盖输入等生命周期问题。
+
+### Diagnostics, Quality And Compatibility
+
+- 日志改为脱敏、bounded async rolling sink、retention 与 diagnostic bundle，不记录完整本机路径、Cookie、敏感 URL 或账号识别资料。
+- 默认启用 .NET `AnalysisMode=All`、warnings as errors、严格跨平台 PR CI、CodeQL、依赖稽核、秘密扫描、Host/XAML smoke 与 deterministic API/下载回归测试。
+- 保留既有 settings JSON、legacy SQLCipher SQLite、未完成任务、GID、partial file map、completed segment keys 与 resume state 相容性。
+- Windows x64/x86、Linux x64/arm64 与 macOS x64/arm64 发布流程验证 .NET、aria2、FFmpeg、ffprobe、Fluent theme、版本和 SHA-256 manifest。
+
 ## [1.0.31] - 2026-07-08
 
 ### Bug Fixes

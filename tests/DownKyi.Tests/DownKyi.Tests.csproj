@@ -16,7 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\DownKyi\DownKyi.csproj" />
+    <ProjectReference Include="..\..\src\DownKyi.Desktop\DownKyi.Desktop.csproj" />
   </ItemGroup>
 
   <ItemGroup>

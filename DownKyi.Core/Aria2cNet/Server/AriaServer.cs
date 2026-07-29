@@ -1,18 +1,27 @@
-using System.ComponentModel;
 using System.Diagnostics;
 using System.Net.Http;
 using System.Text;
+using DownKyi.Application.Diagnostics;
 using DownKyi.Core.Aria2cNet.Client;
-using DownKyi.Core.Logging;
 using DownKyi.Core.Storage;
-using Console = DownKyi.Core.Utils.Debugging.Console;
+using Microsoft.Extensions.Logging;
 
 namespace DownKyi.Core.Aria2cNet.Server
 {
-    public static class AriaServer
+    public sealed class AriaServer
     {
-        public static int ListenPort { get; private set; } // 服务器端口
-        private static Process? Server;
+        private readonly ILogger<AriaServer> _logger;
+        private readonly AriaProcessSupervisor _processSupervisor;
+
+        public AriaServer(ILoggerFactory loggerFactory)
+        {
+            ArgumentNullException.ThrowIfNull(loggerFactory);
+            _logger = loggerFactory.CreateLogger<AriaServer>();
+            _processSupervisor = new AriaProcessSupervisor(
+                loggerFactory.CreateLogger<AriaProcessSupervisor>());
+        }
+
+        public int ListenPort { get; private set; } // 服务器端口
 
         /// <summary>
         /// 启动aria2c服务器
@@ -20,7 +29,7 @@ namespace DownKyi.Core.Aria2cNet.Server
         /// <param name="config"></param>
         /// <param name="action"></param>
         /// <returns></returns>
-        public static async Task<bool> StartServerAsync(AriaConfig config, Action<string> action)
+        public async Task<bool> StartServerAsync(AriaConfig config, Action<string> action)
         {
             ArgumentNullException.ThrowIfNull(config);
             ArgumentNullException.ThrowIfNull(action);
@@ -28,8 +37,7 @@ namespace DownKyi.Core.Aria2cNet.Server
             // aria端口
             ListenPort = config.ListenPort;
             // aria目录
-            // var ariaDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "aria");
-            var ariaDir = StorageManager.GetAriaDir();
+            var ariaDir = ApplicationStorage.GetAriaDir();
             // 会话文件
 #if DEBUG
             var sessionFile = Path.Combine(ariaDir, "aira.session");
@@ -42,7 +50,7 @@ namespace DownKyi.Core.Aria2cNet.Server
             // 自动保存会话文件的时间间隔
             var saveSessionInterval = 120;
 
-            // --enable-rpc --rpc-listen-all=true --rpc-allow-origin-all=true --continue=true
+            // The packaged runtime is process-local; custom remote aria2 endpoints are not started here.
             await Task.Run(() =>
             {
                 // 创建目录和文件
@@ -73,27 +81,16 @@ namespace DownKyi.Core.Aria2cNet.Server
                     }
                     catch (IOException e)
                     {
-                        Console.PrintLine("StartServerAsync()发生IO异常: {0}", e);
-                        LogManager.Error("AriaServer", e);
+                        _logger.LogErrorMessage("aria2 log rotation failed.", e);
                     }
                     catch (UnauthorizedAccessException e)
                     {
-                        Console.PrintLine("StartServerAsync()没有文件权限: {0}", e);
-                        LogManager.Error("AriaServer", e);
+                        _logger.LogErrorMessage("aria2 log rotation was denied.", e);
                     }
                     catch (InvalidOperationException e)
                     {
-                        Console.PrintLine("StartServerAsync()进程状态无效: {0}", e);
-                        LogManager.Error("AriaServer", e);
+                        _logger.LogErrorMessage("aria2 log rotation encountered an invalid stream state.", e);
                     }
-                }
-
-                // header 解析
-                var headers = string.Empty;
-                if (config.Headers != null)
-                {
-                    headers = config.Headers.Aggregate(headers,
-                        (current, header) => current + $"--header=\"{header}\" ");
                 }
 
                 var executeName = "aria2c";
@@ -102,28 +99,13 @@ namespace DownKyi.Core.Aria2cNet.Server
                 {
                     executeName += ".exe";
                 }
-
                 ExecuteProcess($"aria2/{executeName}",
-                    $"--enable-rpc --rpc-listen-all=true --rpc-allow-origin-all=true " +
-                    $"--check-certificate=false " + // 解决问题 SSL/TLS handshake failure
-                    $"--rpc-listen-port={config.ListenPort} " +
-                    $"--rpc-secret={config.Token} " +
-                    $"--input-file=\"{sessionFile}\" --save-session=\"{sessionFile}\" " +
-                    $"--save-session-interval={saveSessionInterval} " +
-                    $"--log=\"{logFile}\" --log-level={GetLogLevelArgument(config.LogLevel)} " + // log-level: 'debug' 'info' 'notice' 'warn' 'error'
-                    $"--max-concurrent-downloads={config.MaxConcurrentDownloads} " + // 最大同时下载数(任务数)
-                    $"--max-connection-per-server={config.MaxConnectionPerServer} " + // 同服务器连接数
-                    $"--split={config.Split} " + // 单文件最大线程数
-                                                 //$"--max-tries={config.MaxTries} retry-wait=3 " + // 尝试重连次数
-                    $"--min-split-size={config.MinSplitSize}M " + // 最小文件分片大小, 下载线程数上限取决于能分出多少片, 对于小文件重要
-                    $"--max-overall-download-limit={config.MaxOverallDownloadLimit} " + // 下载速度限制
-                    $"--max-download-limit={config.MaxDownloadLimit} " + // 下载单文件速度限制
-                    $"--continue={(config.ContinueDownload ? "true" : "false")} " + // 断点续传
-                    $"--allow-overwrite=true " + // 允许复写文件
-                    $"--auto-file-renaming=false " +
-                    $"--file-allocation={GetFileAllocationArgument(config.FileAllocation)} " + // 文件预分配, none prealloc
-                    $"{headers}" + // header
-                    "",
+                    BuildArguments(
+                        config,
+                        sessionFile,
+                        logFile,
+                        saveSessionInterval,
+                        Environment.ProcessId),
                     null, (s, e) =>
                     {
                         if (string.IsNullOrWhiteSpace(e.Data))
@@ -131,8 +113,7 @@ namespace DownKyi.Core.Aria2cNet.Server
                             return;
                         }
 
-                        Console.PrintLine(e.Data);
-                        LogManager.Debug("AriaServer", e.Data);
+                        _logger.LogDebugMessage(e.Data);
 
                         action.Invoke(e.Data);
                     });
@@ -145,12 +126,13 @@ namespace DownKyi.Core.Aria2cNet.Server
         /// 关闭aria2c服务器，异步方法
         /// </summary>
         /// <returns></returns>
-        public static async Task<bool> CloseServerAsync(TimeSpan? timeout = null)
+        public async Task<bool> CloseServerAsync(AriaClient ariaClient, TimeSpan? timeout = null)
         {
+            ArgumentNullException.ThrowIfNull(ariaClient);
             var waitTimeout = timeout ?? TimeSpan.FromSeconds(5);
             try
             {
-                var shutdown = AriaClient.ShutdownAsync();
+                var shutdown = ariaClient.ShutdownAsync();
                 var completed = await Task.WhenAny(shutdown, Task.Delay(waitTimeout)).ConfigureAwait(false);
                 if (completed != shutdown)
                 {
@@ -169,71 +151,40 @@ namespace DownKyi.Core.Aria2cNet.Server
             }
             catch (HttpRequestException e)
             {
-                Console.PrintLine("CloseServerAsync()发生异常: {0}", e);
-                LogManager.Error("AriaServer", e);
+                _logger.LogErrorMessage("aria2 shutdown request failed.", e);
                 KillTrackedServer("aria2 shutdown failed.");
                 return false;
             }
             catch (InvalidOperationException e)
             {
-                Console.PrintLine("CloseServerAsync()进程状态无效: {0}", e);
-                LogManager.Error("AriaServer", e);
+                _logger.LogErrorMessage("aria2 shutdown encountered an invalid process state.", e);
                 KillTrackedServer("aria2 shutdown failed.");
                 return false;
             }
             catch (Newtonsoft.Json.JsonException e)
             {
-                Console.PrintLine("CloseServerAsync()响应格式无效: {0}", e);
-                LogManager.Error("AriaServer", e);
+                _logger.LogErrorMessage("aria2 shutdown returned an invalid response.", e);
                 KillTrackedServer("aria2 shutdown response was invalid.");
                 return false;
             }
         }
 
-        private static async Task<bool> WaitForExitOrKillAsync(TimeSpan timeout)
+        private async Task<bool> WaitForExitOrKillAsync(TimeSpan timeout)
         {
-            var server = Server;
-            if (server == null)
-            {
-                return true;
-            }
-
-            try
-            {
-                if (!server.HasExited)
-                {
-                    await server.WaitForExitAsync().WaitAsync(timeout).ConfigureAwait(false);
-                }
-
-                Server = null;
-                return true;
-            }
-            catch (TimeoutException)
-            {
-                KillProcess(server, "aria2c did not exit before timeout.");
-                Server = null;
-                return false;
-            }
+            return await _processSupervisor.WaitForExitOrKillAsync(timeout).ConfigureAwait(false);
         }
 
         /// <summary>
         /// 强制关闭aria2c服务器，异步方法
         /// </summary>
         /// <returns></returns>
-        public static async Task<bool> ForceCloseServerAsync(TimeSpan? timeout = null)
+        public async Task<bool> ForceCloseServerAsync(AriaClient ariaClient, TimeSpan? timeout = null)
         {
-            //await Task.Run(() =>
-            //{
-            //    if (Server == null) { return; }
-
-            //    Server.Kill();
-            //    Server = null; // 将Server指向null
-            //});
-            //return true;
+            ArgumentNullException.ThrowIfNull(ariaClient);
             try
             {
                 var waitTimeout = timeout ?? TimeSpan.FromSeconds(3);
-                var shutdown = AriaClient.ForceShutdownAsync();
+                var shutdown = ariaClient.ForceShutdownAsync();
                 var completed = await Task.WhenAny(shutdown, Task.Delay(waitTimeout)).ConfigureAwait(false);
                 if (completed != shutdown)
                 {
@@ -252,155 +203,37 @@ namespace DownKyi.Core.Aria2cNet.Server
             }
             catch (HttpRequestException e)
             {
-                Console.PrintLine("ForceCloseServerAsync()发生异常: {0}", e);
-                LogManager.Error("AriaServer", e);
+                _logger.LogErrorMessage("aria2 force-shutdown request failed.", e);
                 KillTrackedServer("aria2 force shutdown failed.");
                 return false;
             }
             catch (InvalidOperationException e)
             {
-                Console.PrintLine("ForceCloseServerAsync()进程状态无效: {0}", e);
-                LogManager.Error("AriaServer", e);
+                _logger.LogErrorMessage("aria2 force shutdown encountered an invalid process state.", e);
                 KillTrackedServer("aria2 force shutdown failed.");
                 return false;
             }
             catch (Newtonsoft.Json.JsonException e)
             {
-                Console.PrintLine("ForceCloseServerAsync()响应格式无效: {0}", e);
-                LogManager.Error("AriaServer", e);
+                _logger.LogErrorMessage("aria2 force shutdown returned an invalid response.", e);
                 KillTrackedServer("aria2 force shutdown response was invalid.");
                 return false;
             }
         }
 
-        /// <summary>
-        /// 关闭aria2c服务器
-        /// </summary>
-        /// <returns></returns>
-        public static bool CloseServer()
+        public bool KillTrackedServer(string reason)
         {
-            try
-            {
-                var result = AriaClient.ShutdownAsync().GetAwaiter().GetResult();
-                if (result?.Result != "OK")
-                {
-                    return false;
-                }
-
-                WaitForExitOrKillAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult();
-                return true;
-            }
-            catch (InvalidOperationException e)
-            {
-                Console.PrintLine("CloseServer()发生异常: {0}", e);
-                LogManager.Error("AriaServer", e);
-                return false;
-            }
-            catch (Newtonsoft.Json.JsonException e)
-            {
-                Console.PrintLine("CloseServer()响应格式无效: {0}", e);
-                LogManager.Error("AriaServer", e);
-                return false;
-            }
+            return _processSupervisor.Kill(reason);
         }
 
-        /// <summary>
-        /// 强制关闭aria2c服务器
-        /// </summary>
-        /// <returns></returns>
-        public static bool ForceCloseServer()
+        internal void SetTrackedServerForTests(Process? process)
         {
-            try
-            {
-                var result = AriaClient.ForceShutdownAsync().GetAwaiter().GetResult();
-                return result?.Result == "OK";
-            }
-            catch (InvalidOperationException e)
-            {
-                Console.PrintLine("ForceCloseServer()发生异常: {0}", e);
-                LogManager.Error("AriaServer", e);
-                return false;
-            }
-            catch (Newtonsoft.Json.JsonException e)
-            {
-                Console.PrintLine("ForceCloseServer()响应格式无效: {0}", e);
-                LogManager.Error("AriaServer", e);
-                return false;
-            }
+            _processSupervisor.SetTrackedProcessForTests(process);
         }
 
-        /// <summary>
-        /// 杀死Aria进程
-        /// </summary>
-        /// <param name="processName"></param>
-        /// <returns></returns>
-        public static bool KillServer(string processName = "aria2c")
+        internal bool HasTrackedServerForTests()
         {
-            Process[] processes = Process.GetProcessesByName(processName);
-            foreach (var process in processes)
-            {
-                try
-                {
-                    process.Kill();
-                }
-                catch (InvalidOperationException e)
-                {
-                    Console.PrintLine("KillServer()发生异常: {0}", e);
-                    LogManager.Error("AriaServer", e);
-                }
-                catch (Win32Exception e)
-                {
-                    Console.PrintLine("KillServer()进程终止失败: {0}", e);
-                    LogManager.Error("AriaServer", e);
-                }
-            }
-
-            return true;
-        }
-
-        private static void KillProcess(Process process, string reason)
-        {
-            try
-            {
-                LogManager.Error("AriaServer", new TimeoutException(reason));
-                if (!process.HasExited)
-                {
-                    process.Kill();
-                }
-            }
-            catch (InvalidOperationException e)
-            {
-                Console.PrintLine("KillProcess()发生异常: {0}", e);
-                LogManager.Error("AriaServer", e);
-            }
-            catch (Win32Exception e)
-            {
-                Console.PrintLine("KillProcess()进程终止失败: {0}", e);
-                LogManager.Error("AriaServer", e);
-            }
-        }
-
-        public static bool KillTrackedServer(string reason)
-        {
-            var server = Server;
-            if (server == null)
-            {
-                return true;
-            }
-
-            KillProcess(server, reason);
-            Server = null;
-            return true;
-        }
-
-        internal static void SetTrackedServerForTests(Process? process)
-        {
-            Server = process;
-        }
-
-        internal static bool HasTrackedServerForTests()
-        {
-            return Server != null;
+            return _processSupervisor.HasTrackedProcess;
         }
 
         internal static string GetLogLevelArgument(AriaConfigLogLevel logLevel)
@@ -429,11 +262,48 @@ namespace DownKyi.Core.Aria2cNet.Server
             };
         }
 
-        private static void ExecuteProcess(string exe, string arg, string? workingDirectory,
+        internal static string BuildArguments(
+            AriaConfig config,
+            string sessionFile,
+            string logFile,
+            int saveSessionInterval,
+            int parentProcessId)
+        {
+            ArgumentNullException.ThrowIfNull(config);
+            ArgumentException.ThrowIfNullOrWhiteSpace(sessionFile);
+            ArgumentException.ThrowIfNullOrWhiteSpace(logFile);
+            ArgumentOutOfRangeException.ThrowIfNegative(saveSessionInterval);
+            ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(parentProcessId, 0);
+
+            var headers = config.Headers.Aggregate(
+                string.Empty,
+                (current, header) => current + $"--header=\"{header}\" ");
+            return $"--enable-rpc --rpc-listen-all=false --rpc-allow-origin-all=false " +
+                   $"--check-certificate=false " +
+                   $"--stop-with-process={parentProcessId} " +
+                   $"--rpc-listen-port={config.ListenPort} " +
+                   $"--rpc-secret={config.Token} " +
+                   $"--input-file=\"{sessionFile}\" --save-session=\"{sessionFile}\" " +
+                   $"--save-session-interval={saveSessionInterval} " +
+                   $"--log=\"{logFile}\" --log-level={GetLogLevelArgument(config.LogLevel)} " +
+                   $"--max-concurrent-downloads={config.MaxConcurrentDownloads} " +
+                   $"--max-connection-per-server={config.MaxConnectionPerServer} " +
+                   $"--split={config.Split} " +
+                   $"--min-split-size={config.MinSplitSize}M " +
+                   $"--max-overall-download-limit={config.MaxOverallDownloadLimit} " +
+                   $"--max-download-limit={config.MaxDownloadLimit} " +
+                   $"--continue={(config.ContinueDownload ? "true" : "false")} " +
+                   $"--allow-overwrite=true " +
+                   $"--auto-file-renaming=false " +
+                   $"--file-allocation={GetFileAllocationArgument(config.FileAllocation)} " +
+                   headers;
+        }
+
+        private void ExecuteProcess(string exe, string arg, string? workingDirectory,
             DataReceivedEventHandler output)
         {
             var p = new Process();
-            Server = p;
+            _processSupervisor.Track(p);
 
             p.StartInfo.FileName = exe;
             p.StartInfo.Arguments = arg;
@@ -457,8 +327,18 @@ namespace DownKyi.Core.Aria2cNet.Server
             p.OutputDataReceived += output;
             p.ErrorDataReceived += output;
 
-            // 启动线程
-            p.Start();
+            try
+            {
+                p.Start();
+                _processSupervisor.BindToParentLifetime(p);
+            }
+            catch
+            {
+                _processSupervisor.SetTrackedProcessForTests(null);
+                p.Dispose();
+                throw;
+            }
+
             p.BeginOutputReadLine();
             p.BeginErrorReadLine();
         }

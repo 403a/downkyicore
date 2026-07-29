@@ -1,8 +1,8 @@
 using Bilibili.Community.Service.Dm.V1;
+using DownKyi.Application.Bilibili;
 using DownKyi.Core.BiliApi.DanmakuApi.Models;
 using DownKyi.Core.Storage;
 using Google.Protobuf;
-using Console = DownKyi.Core.Utils.Debugging.Console;
 
 namespace DownKyi.Core.BiliApi.DanmakuApi;
 
@@ -15,7 +15,12 @@ public static class DanmakuProtobuf
     /// <param name="cid">视频CID</param>
     /// <param name="segmentIndex">分包，每6分钟一包</param>
     /// <returns></returns>
-    private static List<BiliDanmaku>? GetDanmakuProto(long avid, long cid, int segmentIndex, CancellationToken cancellationToken = default)
+    private static async Task<List<BiliDanmaku>?> GetDanmakuProtoAsync(
+        IBilibiliApiClient client,
+        long avid,
+        long cid,
+        int segmentIndex,
+        CancellationToken cancellationToken = default)
     {
         var url = $"https://api.bilibili.com/x/v2/dm/web/seg.so?type=1&oid={cid}&pid={avid}&segment_index={segmentIndex}";
         const string referer = "https://www.bilibili.com";
@@ -23,46 +28,48 @@ public static class DanmakuProtobuf
         var danmakuList = new List<BiliDanmaku>();
         try
         {
-            using var input = WebClient.RequestStream(url, referer, cancellationToken: cancellationToken);
-            var danmakus = DmSegMobileReply.Parser.ParseFrom(input);
-            if (danmakus?.Elems == null)
+            var request = new BilibiliHttpRequest(url, referer);
+            var input = await client.OpenReadAsync(request, cancellationToken).ConfigureAwait(false);
+            await using (input.ConfigureAwait(false))
             {
-                return danmakuList;
-            }
+                using var buffered = new MemoryStream();
+                await input.CopyToAsync(buffered, cancellationToken).ConfigureAwait(false);
+                buffered.Position = 0;
+                var danmakus = DmSegMobileReply.Parser.ParseFrom(buffered);
+                if (danmakus?.Elems == null)
+                {
+                    return danmakuList;
+                }
 
-            danmakuList.AddRange(danmakus.Elems.Select(dm => new BiliDanmaku
-            {
-                Id = dm.Id,
-                Progress = dm.Progress,
-                Mode = dm.Mode,
-                Fontsize = dm.Fontsize,
-                Color = dm.Color,
-                MidHash = dm.MidHash,
-                Content = dm.Content,
-                Ctime = dm.Ctime,
-                Weight = dm.Weight,
-                //Action = dm.Action,
-                Pool = dm.Pool
-            }));
+                danmakuList.AddRange(danmakus.Elems.Select(dm => new BiliDanmaku
+                {
+                    Id = dm.Id,
+                    Progress = dm.Progress,
+                    Mode = dm.Mode,
+                    Fontsize = dm.Fontsize,
+                    Color = dm.Color,
+                    MidHash = dm.MidHash,
+                    Content = dm.Content,
+                    Ctime = dm.Ctime,
+                    Weight = dm.Weight,
+                    Pool = dm.Pool
+                }));
+            }
         }
         catch (OperationCanceledException)
         {
             throw;
         }
-        catch (InvalidProtocolBufferException e)
+        catch (InvalidProtocolBufferException)
         {
-            Console.PrintLine("GetDanmakuProto()发生异常: {0}", e);
-            //Logging.LogManager.Error(e);
             return null;
         }
-        catch (HttpRequestException e)
+        catch (HttpRequestException)
         {
-            Console.PrintLine("GetDanmakuProto()发生HTTP异常: {0}", e);
             return null;
         }
-        catch (IOException e)
+        catch (IOException)
         {
-            Console.PrintLine("GetDanmakuProto()发生IO异常: {0}", e);
             return null;
         }
 
@@ -75,8 +82,13 @@ public static class DanmakuProtobuf
     /// <param name="avid">稿件avID</param>
     /// <param name="cid">视频CID</param>
     /// <returns></returns>
-    public static IReadOnlyList<BiliDanmaku> GetAllDanmakuProto(long avid, long cid, CancellationToken cancellationToken = default)
+    public static async Task<IReadOnlyList<BiliDanmaku>> GetAllDanmakuProtoAsync(
+        this IBilibiliApiClient client,
+        long avid,
+        long cid,
+        CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(client);
         var danmakuList = new List<BiliDanmaku>();
 
         var segmentIndex = 0;
@@ -84,7 +96,12 @@ public static class DanmakuProtobuf
         {
             cancellationToken.ThrowIfCancellationRequested();
             segmentIndex += 1;
-            var danmakus = GetDanmakuProto(avid, cid, segmentIndex, cancellationToken);
+            var danmakus = await GetDanmakuProtoAsync(
+                client,
+                avid,
+                cid,
+                segmentIndex,
+                cancellationToken).ConfigureAwait(false);
             if (danmakus == null)
             {
                 break;

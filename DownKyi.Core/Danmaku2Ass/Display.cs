@@ -1,5 +1,3 @@
-using System.Reflection;
-
 namespace DownKyi.Core.Danmaku2Ass;
 
 /// <summary>
@@ -74,12 +72,7 @@ public abstract class Display
     /// <returns></returns>
     protected int SetFontSize()
     {
-        if (IsScaled)
-        {
-            Console.WriteLine($"{Danmaku.SizeRatio}");
-        }
-
-        return Utils.IntCeiling(Config.BaseFontSize * Danmaku.SizeRatio);
+        return DanmakuAssFormatting.IntCeiling(Config.BaseFontSize * Danmaku.SizeRatio);
     }
 
     /// <summary>
@@ -89,7 +82,6 @@ public abstract class Display
     protected bool SetIsScaled()
     {
         return !Math.Round(Danmaku.SizeRatio, 2).Equals(1.0);
-        //return Danmaku.SizeRatio.Equals(1.0f);
     }
 
     /// <summary>
@@ -100,7 +92,7 @@ public abstract class Display
     {
         var lines = Danmaku.Content.Split('\n');
 
-        return lines.Select(Utils.DisplayLength).Prepend(0).Max();
+        return lines.Select(DanmakuAssFormatting.DisplayLength).Prepend(0).Max();
     }
 
     /// <summary>
@@ -110,7 +102,7 @@ public abstract class Display
     protected int SetWidth()
     {
         float charCount = MaxLength; // / 2;
-        return Utils.IntCeiling(FontSize * charCount);
+        return DanmakuAssFormatting.IntCeiling(FontSize * charCount);
     }
 
     /// <summary>
@@ -315,7 +307,7 @@ public class ScrollDisplay : Display
             baseDuration = 1;
         }
 
-        return Utils.IntCeiling(Config.ScreenWidth / baseDuration);
+        return DanmakuAssFormatting.IntCeiling(Config.ScreenWidth / baseDuration);
     }
 
     /// <summary>
@@ -370,17 +362,12 @@ public class ScrollDisplay : Display
     /// <returns></returns>
     protected override int SetDuration()
     {
-        var methodName = string.Concat(
-            Config.LayoutAlgorithm.AsSpan(0, 1).ToString().ToUpperInvariant(),
-            Config.LayoutAlgorithm.AsSpan(1),
-            "Duration");
-        var method = typeof(ScrollDisplay).GetMethod(methodName);
-        if (method != null)
+        return Config.LayoutAlgorithm switch
         {
-            return method.Invoke(this, null) is int duration ? duration : 0;
-        }
-
-        return 0;
+            "sync" => SyncDuration(),
+            "async" => AsyncDuration(),
+            _ => 0
+        };
     }
 
     /// <summary>

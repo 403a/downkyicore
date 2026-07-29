@@ -1,7 +1,7 @@
 using System.Text.Json;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
-using BiliWebClient = DownKyi.Core.BiliApi.WebClient;
+using DownKyi.Application.Bilibili;
 
 namespace DownKyi.Benchmarks;
 
@@ -21,23 +21,17 @@ public class RequestPreparationBenchmarks
         }
         """;
 
-    private readonly Dictionary<string, object?> _parameters = new()
-    {
-        ["bvid"] = "BV1xx411c7mD",
-        ["cid"] = 171776208,
-        ["qn"] = 120,
-        ["fnval"] = 4048,
-        ["fourk"] = 1
-    };
     private readonly JsonSerializerOptions _jsonOptions = new();
+    private readonly string _requestAddress =
+        "https://api.bilibili.com/x/player/wbi/playurl"
+        + "?platform=html5&bvid=BV1xx411c7mD&cid=171776208&qn=120&fnval=4048&fourk=1";
 
     [Benchmark]
-    public string BuildRequestAddress()
+    public BilibiliHttpRequest BuildRequestContract()
     {
-        return BiliWebClient.BuildRequestUrlForTests(
-            "https://api.bilibili.com/x/player/wbi/playurl?platform=html5",
-            "GET",
-            _parameters);
+        return new BilibiliHttpRequest(
+            _requestAddress,
+            "https://www.bilibili.com/video/BV1xx411c7mD");
     }
 
     [Benchmark]

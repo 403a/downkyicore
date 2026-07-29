@@ -1,0 +1,163 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="DownKyi.Views.Settings.ViewAbout"
+             xmlns:vms="clr-namespace:DownKyi.ViewModels.Settings"
+             x:DataType="vms:ViewAboutViewModel">
+    <UserControl.Styles>
+        <Style Selector="Button.link">
+            <Setter Property="Foreground" Value="Blue" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <ContentPresenter Content="{TemplateBinding Content}">
+                        <ContentPresenter.Styles>
+                            <Style Selector="TextBlock">
+                                <Setter Property="Foreground" Value="{TemplateBinding Foreground}" />
+                                <Setter Property="FontSize" Value="{TemplateBinding FontSize}" />
+                                <Setter Property="TextDecorations" Value="Underline" />
+                            </Style>
+                        </ContentPresenter.Styles>
+                    </ContentPresenter>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="50,0" Orientation="Vertical">
+            <StackPanel Margin="0,20,0,0" Orientation="Horizontal">
+                <TextBlock
+                    FontSize="18"
+                    Foreground="{DynamicResource BrushTextDark}"
+                    Text="{DynamicResource About}" />
+                <TextBlock
+                    Cursor="Hand"
+                    FontSize="18"
+                    Foreground="{DynamicResource BrushPrimary}"
+                    Text="{Binding AppName}">
+                    <Interaction.Behaviors>
+                        <EventTriggerBehavior EventName="PointerReleased">
+                            <InvokeCommandAction Command="{Binding AppNameCommand}" />
+                        </EventTriggerBehavior>
+                    </Interaction.Behaviors>
+                </TextBlock>
+            </StackPanel>
+            <StackPanel Margin="0,20,0,0" Orientation="Horizontal">
+                <TextBlock
+                    VerticalAlignment="Center"
+                    FontSize="12"
+                    Foreground="{DynamicResource BrushTextDark}"
+                    Text="{DynamicResource CurrentAppVersion}" />
+                <TextBlock
+                    VerticalAlignment="Center"
+                    FontSize="12"
+                    Foreground="{DynamicResource BrushTextDark}"
+                    Text="{Binding AppVersion}" />
+                <Button
+                    Width="75"
+                    Margin="30,0,0,0"
+                    Command="{Binding CheckUpdateCommand}"
+                    Content="{DynamicResource CheckUpdate}"
+                    FontSize="12"
+                    Theme="{StaticResource BtnBorderStyle}" />
+                <Button
+                    Width="75"
+                    Margin="20,0,0,0"
+                    Command="{Binding FeedbackCommand}"
+                    Content="{DynamicResource Feedback}"
+                    FontSize="12"
+                    Theme="{StaticResource BtnBorderStyle}" />
+            </StackPanel>
+            <StackPanel Margin="0,20,0,0" Orientation="Vertical">
+                <TextBlock
+                    Margin="0,0,0,8"
+                    FontSize="14"
+                    FontWeight="Bold"
+                    Foreground="{DynamicResource BrushTextDark}"
+                    Text="{DynamicResource Diagnostics}" />
+                <StackPanel Orientation="Horizontal">
+                    <Button
+                        Width="100"
+                        Command="{Binding OpenLogsCommand}"
+                        Content="{DynamicResource OpenLogs}"
+                        FontSize="12"
+                        Theme="{StaticResource BtnBorderStyle}" />
+                    <Button
+                        Width="120"
+                        Margin="20,0,0,0"
+                        Command="{Binding ExportDiagnosticLogCommand}"
+                        Content="{DynamicResource ExportDiagnosticLog}"
+                        FontSize="12"
+                        Theme="{StaticResource BtnBorderStyle}" />
+                </StackPanel>
+                <TextBlock
+                    Margin="0,8,0,0"
+                    FontSize="12"
+                    Foreground="{DynamicResource BrushTextDark}"
+                    Text="{DynamicResource DiagnosticLogTip}"
+                    TextWrapping="WrapWithOverflow" />
+            </StackPanel>
+            <CheckBox
+                Grid.Column="0"
+                Margin="0,20,0,0"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                Command="{Binding ReceiveBetaVersionCommand}"
+                Content="{DynamicResource ReceiveBetaVersion}"
+                Foreground="{DynamicResource BrushTextDark}"
+                IsChecked="{Binding IsReceiveBetaVersion, Mode=TwoWay}" />
+            <CheckBox
+                Margin="0,20,0,0"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                Command="{Binding AutoUpdateWhenLaunchCommand}"
+                Content="{DynamicResource AutoUpdateWhenLaunch}"
+                Foreground="{DynamicResource BrushTextDark}"
+                IsChecked="{Binding AutoUpdateWhenLaunch, Mode=TwoWay}" />
+            <!--  免责申明  -->
+            <StackPanel Margin="0,20,0,0" Orientation="Vertical">
+                <TextBlock
+                    Margin="0,0,0,10"
+                    FontSize="14"
+                    FontWeight="Bold"
+                    Foreground="{DynamicResource BrushTextDark}"
+                    Text="{DynamicResource Disclaimer}" />
+                <TextBlock
+                    FontSize="12"
+                    Foreground="{DynamicResource BrushTextDark}"
+                    Text="{DynamicResource Disclaimer1}"
+                    TextWrapping="WrapWithOverflow" />
+                <TextBlock
+                    FontSize="12"
+                    Foreground="{DynamicResource BrushTextDark}"
+                    Text="{DynamicResource Disclaimer2}"
+                    TextWrapping="WrapWithOverflow" />
+                <TextBlock
+                    FontSize="12"
+                    Foreground="{DynamicResource BrushTextDark}"
+                    Text="{DynamicResource Disclaimer3}"
+                    TextWrapping="WrapWithOverflow" />
+                <TextBlock
+                    FontSize="12"
+                    Foreground="{DynamicResource BrushTextDark}"
+                    Text="{DynamicResource Disclaimer4}"
+                    TextWrapping="WrapWithOverflow" />
+                <TextBlock
+                    FontSize="12"
+                    Foreground="{DynamicResource BrushTextDark}"
+                    Text="{DynamicResource Disclaimer5}"
+                    TextWrapping="WrapWithOverflow" />
+                <TextBlock
+                    FontSize="12"
+                    Foreground="{DynamicResource BrushTextDark}"
+                    Text="{DynamicResource Disclaimer6}"
+                    TextWrapping="WrapWithOverflow" />
+            </StackPanel>
+            <StackPanel Margin="10" />
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
