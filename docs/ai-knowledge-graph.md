@@ -2383,6 +2383,7 @@ contracts:
   - Formal local Verification runs the ownership audit and five iterations per assembly with timeout forensics validated.
   - PR, main and release profiles run 3, 50 and 100 iterations per assembly; release evidence must never drop below 50.
   - Every report identifies runtime, OS, architecture, commit SHA, dirty-worktree state, thresholds, phase exit codes, slow-evidence status and P50/P95/P99/max durations.
+  - Every phase exposes general failure/error type; slow-evidence error type is reserved for the diagnostic capture path.
   - Execution duration includes runner startup through OS process exit; teardown uses fixture marker timestamps, while process-exit uses the child's OS ExitTime and excludes collector overhead.
   - Marker-aware execution phases are sampled at the unchanged slow threshold; missing slow evidence is a gate failure rather than an unexplained empty array.
   - Lifecycle marker reads tolerate bounded writer contention and report contention/retry-exhaustion counts; only Windows sharing/lock error codes are contention, while access and other I/O errors retain a separate count/type; the final marker contract remains blocking.
@@ -2390,6 +2391,7 @@ contracts:
   - Unexpected stdout/stderr, timeout, residual child process, missing teardown marker or failed process exit blocks the gate.
   - Slow and timed-out Windows processes preserve thread state, wait reason, process tree and a managed stack when `dotnet-stack` is available.
   - `ValidateForensics` proves both marker-aware managed-stack capture and exclusive marker-lock recovery; formal Windows profiles fail closed unless the detailed self-test reports execution, positive contention count, recovery, parsing, null error and success, and mutation checks reject inconsistent nominally-passed states.
+  - Marker self-test phase status, report summary and formal gate consume one complete proof result rather than re-expanding equivalent predicates.
   - Every scanned lifecycle mechanism maps to a declared owner with explicit start, stop and teardown behavior.
 hazards:
   - A green rerun can hide a race and does not replace owner identification or deterministic teardown.

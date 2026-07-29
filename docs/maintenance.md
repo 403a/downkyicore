@@ -43,6 +43,10 @@ Formal Windows PR, Main, Rehearsal and Flaky lifecycle profiles require
 mutation checks must also pass. Missing, null, unknown or non-contending proofs
 fail closed; the top-level
 `markerReaderSelfTestPassed` value is only a summary.
+The marker self-test phase, summary and final formal contract must consume the
+single `markerReaderSelfTestComplete` result; do not re-expand the predicate.
+General lifecycle failures belong in phase `failureType` / `errorType`, while
+`slowEvidenceErrorType` is only for slow-evidence collection.
 
 Only Windows sharing/lock error codes count as marker contention.
 `UnauthorizedAccessException` and other I/O errors remain separately visible

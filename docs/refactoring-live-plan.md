@@ -132,6 +132,10 @@ history, not repeated here.
   error-bearing, zero-contention and incomplete nominally-passed states.
   Unauthorized access and non-sharing I/O now remain marker read errors instead
   of being mislabeled as contention.
+- The final consistency review removed the duplicate formal predicate: marker
+  phase, summary and gate now consume one complete proof result. Phase schema
+  now has general `failureType` / `errorType`, so marker contract failures no
+  longer masquerade as slow-evidence capture errors.
 
 ## Gate 10 Checklist
 

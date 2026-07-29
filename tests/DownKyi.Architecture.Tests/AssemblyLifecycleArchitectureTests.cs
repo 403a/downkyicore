@@ -50,6 +50,8 @@ public sealed class AssemblyLifecycleArchitectureTests
             "stdoutPolluted",
             "stderrPolluted",
             "residualChildCount",
+            "failureType",
+            "errorType",
             "workingTreeDirty",
             "slowEvidenceStatus",
             "slowEvidenceComplete",
@@ -94,9 +96,10 @@ public sealed class AssemblyLifecycleArchitectureTests
             "markerParsedAfterRecovery = $false",
             "errorType = $null",
             "$markerReaderSelfTestContractPassed",
-            "$markerReaderSelfTest.contentionCount -gt 0",
-            "$null -eq $markerReaderSelfTest.errorType",
+            "$SelfTest.contentionCount -gt 0",
+            "$null -eq $SelfTest.errorType",
             "success = $markerReaderSelfTestComplete",
+            "errorType = $markerReaderSelfTestFailureType",
             "validProofAccepted",
             "errorTypeRejected",
             "zeroContentionRejected",
@@ -111,6 +114,18 @@ public sealed class AssemblyLifecycleArchitectureTests
         {
             Assert.Contains(token, source, StringComparison.Ordinal);
         }
+
+        Assert.Contains(
+            "-not $markerReaderSelfTest.required -or",
+            source,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "($markerReaderSelfTest.executed -and",
+            source,
+            StringComparison.Ordinal);
+        Assert.True(
+            source.Split("failureType =", StringSplitOptions.None).Length - 1 >= 5,
+            "Every synthetic and process phase family must expose failureType.");
     }
 
     [Fact]
