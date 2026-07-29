@@ -114,6 +114,18 @@ history, not repeated here.
   OS-measured process exit is at most 15 ms, and `DownKyi.Tests` execution is
   1.685-1.716 seconds across the five runs. The 774.833 ms diagnostic capture
   time belongs to the deliberate marker-aware forensics self-test.
+- The first main-profile 50-iteration run exposed a gate-side Windows sharing
+  race at `DownKyi.Architecture.Tests` iteration 42: the fixture was appending
+  its marker while `ReadAllLines` requested an incompatible handle. The marker
+  reader now uses shared access, bounded retries and contention counters; a
+  deterministic exclusive-lock self-test guards this path without weakening
+  the final-marker contract.
+- The fail-closed marker proof is now a detailed schema object rather than only
+  a green summary bit. A Windows Main-profile five-iteration verification
+  passed 212 phases and all 729 tests: the self-test executed, observed two
+  contentions, recovered, parsed all marker states and reported no error. One
+  5220.745 ms Architecture execution crossed the unchanged five-second
+  threshold and retained evidence; no slow evidence was missing.
 
 ## Gate 10 Checklist
 
@@ -153,6 +165,8 @@ history, not repeated here.
       execution captures a managed stack at the unchanged slow threshold.
 - [x] Remove protocol-relative image UNC probing and add a bounded regression
       test so `//host/path` reaches HTTPS without blocking local file lookup.
+- [x] Make lifecycle marker sampling tolerate concurrent fixture writes and add
+      an exclusive-lock recovery self-test.
 - [ ] Repeat Windows assembly-info and Desktop/full-solution tests enough to
       make the original race observable if it remains.
 - [ ] Pass a new strict PR quality run and a complete manual release rehearsal

@@ -43,9 +43,27 @@ $runRoot = Join-Path $outputRoot $runId
 $rawRoot = Join-Path $runRoot "raw"
 $evidenceRoot = Join-Path $runRoot "evidence"
 $ownershipRoot = Join-Path $runRoot "ownership"
+$script:markerReadContentionCount = 0
+$script:markerReadRetriesExhaustedCount = 0
+$markerReaderSelfTestRequired = $IsWindows -and
+    @("PR", "Main", "Rehearsal", "Flaky").Contains($Profile)
+$markerReaderSelfTest = [ordered]@{
+    required = $markerReaderSelfTestRequired
+    executed = $false
+    passed = $false
+    contentionObserved = $false
+    contentionCount = 0
+    recoveredAfterLockRelease = $false
+    markerParsedAfterRecovery = $false
+    errorType = $null
+}
 
 New-Item -ItemType Directory -Force -Path $rawRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $evidenceRoot | Out-Null
+
+if ($markerReaderSelfTestRequired -and -not $ValidateForensics) {
+    throw "Formal Windows lifecycle profiles require -ValidateForensics."
+}
 
 function Resolve-DiagnosticsTool {
     if (-not [string]::IsNullOrWhiteSpace($DiagnosticsToolPath)) {
@@ -287,15 +305,60 @@ function Save-ProcessEvidence {
 function Read-TeardownMarker {
     param(
         [Parameter(Mandatory)]
-        [string]$Path
+        [string]$Path,
+        [ValidateRange(1, 20)]
+        [int]$Attempts = 4,
+        [ValidateRange(0, 1000)]
+        [int]$RetryDelayMilliseconds = 5
     )
 
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
         return $null
     }
 
+    $lines = $null
+    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        try {
+            $share = [System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete
+            $stream = [System.IO.FileStream]::new(
+                $Path,
+                [System.IO.FileMode]::Open,
+                [System.IO.FileAccess]::Read,
+                $share)
+            try {
+                $reader = [System.IO.StreamReader]::new($stream)
+                try {
+                    $lines = @($reader.ReadToEnd() -split '\r?\n')
+                }
+                finally {
+                    $reader.Dispose()
+                }
+            }
+            finally {
+                $stream.Dispose()
+            }
+
+            break
+        }
+        catch [System.IO.IOException] {
+            $script:markerReadContentionCount++
+        }
+        catch [System.UnauthorizedAccessException] {
+            $script:markerReadContentionCount++
+        }
+
+        if ($attempt -lt $Attempts -and $RetryDelayMilliseconds -gt 0) {
+            Start-Sleep -Milliseconds $RetryDelayMilliseconds
+        }
+    }
+
+    if ($null -eq $lines) {
+        $script:markerReadRetriesExhaustedCount++
+        return $null
+    }
+
     $states = @()
-    foreach ($line in [System.IO.File]::ReadAllLines($Path)) {
+    foreach ($line in $lines) {
         if ($line -match '^(started|disposing|disposed)\|(\d+)\|(\d+)$') {
             $states += [pscustomobject]@{
                 state = $Matches[1]
@@ -791,6 +854,102 @@ if ($ValidateForensics) {
         slowEvidenceStatus = "not-applicable"
         slowEvidenceErrorType = $null
     }
+
+    if ($IsWindows) {
+        $markerReaderSelfTestStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+        $markerReaderSelfTest.executed = $true
+        $markerReaderTestPath = Join-Path $rawRoot "Gate.MarkerReader/read-race.lifecycle"
+        $contentionBaseline = $script:markerReadContentionCount
+        $lockedMarker = $null
+        $exclusiveStream = $null
+        try {
+            New-Item -ItemType Directory -Force `
+                -Path ([System.IO.Path]::GetDirectoryName($markerReaderTestPath)) |
+                Out-Null
+            @(
+                "started|123|1000"
+                "disposing|123|1001"
+                "disposed|123|1002"
+            ) | Set-Content -LiteralPath $markerReaderTestPath -Encoding utf8
+            $exclusiveStream = [System.IO.FileStream]::new(
+                $markerReaderTestPath,
+                [System.IO.FileMode]::Open,
+                [System.IO.FileAccess]::ReadWrite,
+                [System.IO.FileShare]::None)
+            try {
+                $lockedMarker = Read-TeardownMarker `
+                    -Path $markerReaderTestPath `
+                    -Attempts 2 `
+                    -RetryDelayMilliseconds 1
+            }
+            finally {
+                $exclusiveStream.Dispose()
+                $exclusiveStream = $null
+            }
+
+            $markerReaderSelfTest.contentionCount =
+                $script:markerReadContentionCount - $contentionBaseline
+            $markerReaderSelfTest.contentionObserved =
+                $markerReaderSelfTest.contentionCount -gt 0
+            $unlockedMarker = Read-TeardownMarker -Path $markerReaderTestPath
+            $markerReaderSelfTest.recoveredAfterLockRelease = $null -ne $unlockedMarker
+            $markerReaderSelfTest.markerParsedAfterRecovery =
+                $null -ne $unlockedMarker -and
+                $null -ne $unlockedMarker.started -and
+                $null -ne $unlockedMarker.disposing -and
+                $null -ne $unlockedMarker.disposed
+            $markerReaderSelfTest.passed =
+                $null -eq $lockedMarker -and
+                $markerReaderSelfTest.contentionObserved -and
+                $markerReaderSelfTest.recoveredAfterLockRelease -and
+                $markerReaderSelfTest.markerParsedAfterRecovery
+        }
+        catch {
+            $markerReaderSelfTest.errorType = $_.Exception.GetType().Name
+        }
+        finally {
+            if ($null -ne $exclusiveStream) {
+                $exclusiveStream.Dispose()
+            }
+
+            $markerReaderSelfTestStopwatch.Stop()
+        }
+
+        if (-not $markerReaderSelfTest.passed -and
+            $null -eq $markerReaderSelfTest.errorType) {
+            $markerReaderSelfTest.errorType = "ContractNotSatisfied"
+        }
+
+        $phaseResults += [pscustomobject]@{
+            assembly = "Gate.MarkerReader"
+            iteration = 1
+            phase = "marker-reader-self-test"
+            processId = $PID
+            success = $markerReaderSelfTest.passed
+            exitCode = if ($markerReaderSelfTest.passed) { 0 } else { 1 }
+            durationMs = [Math]::Round(
+                $markerReaderSelfTestStopwatch.Elapsed.TotalMilliseconds,
+                3)
+            timedOut = $false
+            stdoutPolluted = $false
+            stderrPolluted = $false
+            unexpectedOutput = @()
+            residualChildCount = 0
+            stdoutPath = $null
+            stderrPath = $null
+            evidence = @()
+            slowEvidence = @()
+            exitEvidence = @()
+            timeoutEvidence = @()
+            diagnosticCaptureDurationMs = 0.0
+            slowThresholdExceeded = $false
+            slowEvidenceStatus = "not-applicable"
+            slowEvidenceErrorType = $markerReaderSelfTest.errorType
+        }
+
+        $script:markerReadContentionCount = 0
+        $script:markerReadRetriesExhaustedCount = 0
+    }
 }
 
 foreach ($testProject in $testProjects) {
@@ -938,6 +1097,13 @@ $slowEvidenceCapturedCount = @(
         Where-Object slowEvidenceStatus -eq "captured"
 ).Count
 $slowEvidenceMissingCount = $slowResults.Count - $slowEvidenceCapturedCount
+$markerReaderSelfTestContractPassed =
+    -not $markerReaderSelfTest.required -or
+    ($markerReaderSelfTest.executed -and
+        $markerReaderSelfTest.passed -and
+        $markerReaderSelfTest.contentionObserved -and
+        $markerReaderSelfTest.recoveredAfterLockRelease -and
+        $markerReaderSelfTest.markerParsedAfterRecovery)
 $diagnosticCaptureTotalMs = [Math]::Round(
     [double](
         $phaseResults |
@@ -969,12 +1135,23 @@ $report = [ordered]@{
     }
     ownershipAuditPassed = $ownershipPassed
     ownershipAuditErrorType = $ownershipError
-    successful = $ownershipPassed -and $failedResults.Count -eq 0
+    successful = $ownershipPassed -and
+        $failedResults.Count -eq 0 -and
+        $markerReaderSelfTestContractPassed
     failedPhaseCount = $failedResults.Count
     slowPhaseCount = $slowResults.Count
     slowEvidenceCapturedCount = $slowEvidenceCapturedCount
     slowEvidenceMissingCount = $slowEvidenceMissingCount
     diagnosticCaptureTotalMs = $diagnosticCaptureTotalMs
+    markerReadContentionCount = $script:markerReadContentionCount
+    markerReadRetriesExhaustedCount = $script:markerReadRetriesExhaustedCount
+    markerReaderSelfTestPassed = if ($markerReaderSelfTest.executed) {
+        $markerReaderSelfTest.passed
+    }
+    else {
+        $null
+    }
+    markerReaderSelfTest = $markerReaderSelfTest
     statistics = $statistics
     results = $phaseResults
 }
@@ -1000,6 +1177,16 @@ $markdown.Add(
     "- Slow phase evidence: $slowEvidenceCapturedCount captured, " +
     "$slowEvidenceMissingCount missing")
 $markdown.Add("- Diagnostic capture wall time: $diagnosticCaptureTotalMs ms")
+$markdown.Add("- Marker read contentions: $script:markerReadContentionCount")
+$markdown.Add("- Marker read retry exhaustion: $script:markerReadRetriesExhaustedCount")
+$markdown.Add(
+    "- Marker reader self-test: executed=$($markerReaderSelfTest.executed), " +
+    "passed=$($markerReaderSelfTest.passed), " +
+    "contentionObserved=$($markerReaderSelfTest.contentionObserved), " +
+    "contentionCount=$($markerReaderSelfTest.contentionCount), " +
+    "recovered=$($markerReaderSelfTest.recoveredAfterLockRelease), " +
+    "parsed=$($markerReaderSelfTest.markerParsedAfterRecovery), " +
+    "error=$($markerReaderSelfTest.errorType)")
 $markdown.Add("")
 $markdown.Add("| Assembly | Phase | Pass / Runs | Slow / captured | Success | P50 ms | P95 ms | P99 ms | Max ms |")
 $markdown.Add("| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")

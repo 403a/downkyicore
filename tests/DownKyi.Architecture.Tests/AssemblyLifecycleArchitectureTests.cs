@@ -56,6 +56,11 @@ public sealed class AssemblyLifecycleArchitectureTests
             "slowEvidenceMissingCount",
             "diagnosticCaptureDurationMs",
             "processExitedAtUnixMs",
+            "markerReadContentionCount",
+            "markerReadRetriesExhaustedCount",
+            "markerReaderSelfTestPassed",
+            "markerReaderSelfTest",
+            "[System.IO.FileShare]::ReadWrite",
             "ValidateForensics"
         ];
 
@@ -70,6 +75,31 @@ public sealed class AssemblyLifecycleArchitectureTests
             "[string]::IsNullOrWhiteSpace($LifecycleMarkerPath) -and",
             source,
             StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WindowsMarkerReaderSelfTestIsDetailedAndFailsClosed()
+    {
+        var source = Read("script/test-assembly-lifecycle.ps1");
+        string[] requiredContract =
+        [
+            "required = $markerReaderSelfTestRequired",
+            "executed = $false",
+            "passed = $false",
+            "contentionObserved = $false",
+            "contentionCount = 0",
+            "recoveredAfterLockRelease = $false",
+            "markerParsedAfterRecovery = $false",
+            "errorType = $null",
+            "$markerReaderSelfTestContractPassed",
+            "Formal Windows lifecycle profiles require -ValidateForensics.",
+            "marker-reader-self-test"
+        ];
+
+        foreach (var token in requiredContract)
+        {
+            Assert.Contains(token, source, StringComparison.Ordinal);
+        }
     }
 
     [Fact]
