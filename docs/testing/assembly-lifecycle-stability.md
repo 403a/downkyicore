@@ -52,6 +52,9 @@ each phase in an independent child process:
 Every phase records its exit code, duration, timeout state, stdout/stderr
 protocol state, residual child count and evidence paths. The report aggregates
 P50, P95, P99 and maximum duration per assembly and phase.
+Every phase result also has general `failureType` and `errorType` fields.
+`slowEvidenceErrorType` is reserved for failures inside slow-evidence capture
+and must not carry unrelated self-test or lifecycle contract failures.
 
 ### Measurement Definitions
 
@@ -183,7 +186,8 @@ Schema 2 records the marker-reader proof as a fail-closed object:
 The top-level `markerReaderSelfTestPassed` field is only a summary. Windows PR,
 Main, Rehearsal and Flaky profiles require `-ValidateForensics`; missing,
 skipped, unknown, non-contending or failed self-tests block the gate.
-The self-test phase and final report use the same complete proof predicate,
+The self-test phase, top-level summary and final report use the same
+`markerReaderSelfTestComplete` result,
 including `contentionCount > 0` and `errorType == null`. Mutation checks prove
 that a nominal `passed = true` cannot override an error, zero contention or an
 incomplete proof.

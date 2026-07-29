@@ -705,12 +705,32 @@ function New-ProcessPhaseResult {
         $stderrClean -and
         $slowEvidenceComplete -and
         $unexpectedText.Count -eq 0
+    $failureType = if ($success) {
+        $null
+    }
+    elseif ($ProcessResult.timedOut) {
+        "Timeout"
+    }
+    elseif (-not $slowEvidenceComplete) {
+        "SlowEvidenceMissing"
+    }
+    elseif ($ProcessResult.residualChildren.Count -gt 0) {
+        "ResidualChildProcess"
+    }
+    elseif (-not $protocolValid -or -not $stderrClean -or $unexpectedText.Count -gt 0) {
+        "OutputContractViolation"
+    }
+    else {
+        "ProcessPhaseFailed"
+    }
     return [pscustomobject]@{
         assembly = $ProcessResult.assembly
         iteration = $ProcessResult.iteration
         phase = $ProcessResult.phase
         processId = $ProcessResult.processId
         success = $success
+        failureType = $failureType
+        errorType = $ProcessResult.slowEvidenceErrorType
         exitCode = $ProcessResult.exitCode
         durationMs = $ProcessResult.durationMs
         timedOut = $ProcessResult.timedOut
@@ -887,6 +907,8 @@ if ($ValidateForensics) {
         phase = "forensics-self-test"
         processId = $selfTest.processId
         success = $forensicsValid
+        failureType = if ($forensicsValid) { $null } else { "ForensicsSelfTestFailed" }
+        errorType = $selfTestPhase.errorType
         exitCode = if ($forensicsValid) { 0 } else { 1 }
         durationMs = $selfTest.durationMs
         timedOut = $selfTest.timedOut
@@ -1046,6 +1068,13 @@ if ($ValidateForensics) {
             phase = "marker-reader-self-test"
             processId = $PID
             success = $markerReaderSelfTestComplete
+            failureType = if ($markerReaderSelfTestComplete) {
+                $null
+            }
+            else {
+                "MarkerReaderSelfTestFailed"
+            }
+            errorType = $markerReaderSelfTestFailureType
             exitCode = if ($markerReaderSelfTestComplete) { 0 } else { 1 }
             durationMs = [Math]::Round(
                 $markerReaderSelfTestStopwatch.Elapsed.TotalMilliseconds,
@@ -1064,7 +1093,7 @@ if ($ValidateForensics) {
             diagnosticCaptureDurationMs = 0.0
             slowThresholdExceeded = $false
             slowEvidenceStatus = "not-applicable"
-            slowEvidenceErrorType = $markerReaderSelfTestFailureType
+            slowEvidenceErrorType = $null
         }
 
         $script:markerReadContentionCount = 0
@@ -1163,6 +1192,16 @@ foreach ($testProject in $testProjects) {
             iteration = $iteration
             phase = "assembly-teardown"
             success = $markerValid -and $testRootRemoved
+            failureType = if ($markerValid -and $testRootRemoved) {
+                $null
+            }
+            elseif (-not $markerValid) {
+                "TeardownMarkerInvalid"
+            }
+            else {
+                "TestDataCleanupFailed"
+            }
+            errorType = $null
             exitCode = if ($markerValid -and $testRootRemoved) { 0 } else { 1 }
             durationMs = $teardownDuration
             timedOut = $false
@@ -1190,6 +1229,8 @@ foreach ($testProject in $testProjects) {
             iteration = $iteration
             phase = "process-exit"
             success = $exitSucceeded
+            failureType = if ($exitSucceeded) { $null } else { "ProcessExitFailed" }
+            errorType = $null
             exitCode = if ($exitSucceeded) { 0 } else { 1 }
             durationMs = [Math]::Round($exitDuration, 3)
             timedOut = $execution.timedOut
@@ -1221,15 +1262,7 @@ $slowEvidenceCapturedCount = @(
 $slowEvidenceMissingCount = $slowResults.Count - $slowEvidenceCapturedCount
 $markerReaderSelfTestContractPassed =
     -not $markerReaderSelfTest.required -or
-    ($markerReaderSelfTest.executed -and
-        $markerReaderSelfTest.passed -and
-        $markerReaderSelfTest.contentionObserved -and
-        $markerReaderSelfTest.contentionCount -gt 0 -and
-        $markerReaderSelfTest.recoveredAfterLockRelease -and
-        $markerReaderSelfTest.markerParsedAfterRecovery -and
-        $null -eq $markerReaderSelfTest.errorType -and
-        $markerReaderSelfTest.contractChecks.executed -and
-        $markerReaderSelfTest.contractChecks.passed)
+    $markerReaderSelfTestComplete
 $diagnosticCaptureTotalMs = [Math]::Round(
     [double](
         $phaseResults |
@@ -1365,6 +1398,7 @@ else {
             "timeout=$($failure.timedOut), stdoutPolluted=$($failure.stdoutPolluted), " +
             "stderrPolluted=$($failure.stderrPolluted), " +
             "residualChildren=$($failure.residualChildCount), " +
+            "failureType=$($failure.failureType), errorType=$($failure.errorType), " +
             "slowEvidence=$($failure.slowEvidenceStatus)")
     }
 }
