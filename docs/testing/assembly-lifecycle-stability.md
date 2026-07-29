@@ -81,6 +81,11 @@ P50, P95, P99 and maximum duration per assembly and phase.
   fixture may be appending a state. Transient contention is counted; exhausted
   reads return to the bounded monitor loop, while a missing final marker still
   fails teardown and process-exit validation.
+- On Windows, only native sharing and lock violations (`32` and `33`) count as
+  contention. Other `IOException` values and `UnauthorizedAccessException` are
+  retried as marker read errors and reported through `markerReadErrorCount` and
+  `markerReadErrorType`; ACL or policy failures are never mislabeled as writer
+  contention.
 
 Schema 1 reports used the collector observation timestamp for `process-exit`,
 so they include post-exit stdout/reporting overhead. In the
@@ -161,7 +166,16 @@ Schema 2 records the marker-reader proof as a fail-closed object:
     "contentionCount": 2,
     "recoveredAfterLockRelease": true,
     "markerParsedAfterRecovery": true,
-    "errorType": null
+    "errorType": null,
+    "contractChecks": {
+      "executed": true,
+      "passed": true,
+      "validProofAccepted": true,
+      "errorTypeRejected": true,
+      "zeroContentionRejected": true,
+      "incompleteProofRejected": true,
+      "errorClassificationPassed": true
+    }
   }
 }
 ```
@@ -169,6 +183,10 @@ Schema 2 records the marker-reader proof as a fail-closed object:
 The top-level `markerReaderSelfTestPassed` field is only a summary. Windows PR,
 Main, Rehearsal and Flaky profiles require `-ValidateForensics`; missing,
 skipped, unknown, non-contending or failed self-tests block the gate.
+The self-test phase and final report use the same complete proof predicate,
+including `contentionCount > 0` and `errorType == null`. Mutation checks prove
+that a nominal `passed = true` cannot override an error, zero contention or an
+incomplete proof.
 
 Raw stdout/stderr, JSON evidence, the machine report and Markdown summary are
 written below `artifacts/assembly-lifecycle/<run-id>/`. CI uploads the entire

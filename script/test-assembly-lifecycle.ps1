@@ -45,8 +45,11 @@ $evidenceRoot = Join-Path $runRoot "evidence"
 $ownershipRoot = Join-Path $runRoot "ownership"
 $script:markerReadContentionCount = 0
 $script:markerReadRetriesExhaustedCount = 0
+$script:markerReadErrorCount = 0
+$script:markerReadErrorType = $null
 $markerReaderSelfTestRequired = $IsWindows -and
     @("PR", "Main", "Rehearsal", "Flaky").Contains($Profile)
+$markerReaderSelfTestComplete = $false
 $markerReaderSelfTest = [ordered]@{
     required = $markerReaderSelfTestRequired
     executed = $false
@@ -56,6 +59,15 @@ $markerReaderSelfTest = [ordered]@{
     recoveredAfterLockRelease = $false
     markerParsedAfterRecovery = $false
     errorType = $null
+    contractChecks = [ordered]@{
+        executed = $false
+        passed = $false
+        validProofAccepted = $false
+        errorTypeRejected = $false
+        zeroContentionRejected = $false
+        incompleteProofRejected = $false
+        errorClassificationPassed = $false
+    }
 }
 
 New-Item -ItemType Directory -Force -Path $rawRoot | Out-Null
@@ -302,6 +314,37 @@ function Save-ProcessEvidence {
         Replace([System.IO.Path]::DirectorySeparatorChar, '/')
 }
 
+function Get-LifecycleMarkerReadFailureCategory {
+    param(
+        [Parameter(Mandatory)]
+        [System.Exception]$Exception
+    )
+
+    if ($IsWindows -and $Exception -is [System.IO.IOException]) {
+        $nativeErrorCode = $Exception.HResult -band 0xFFFF
+        if ($nativeErrorCode -in @(32, 33)) {
+            return "contention"
+        }
+    }
+
+    return "error"
+}
+
+function Test-MarkerReaderSelfTestProof {
+    param(
+        [Parameter(Mandatory)]
+        [System.Collections.IDictionary]$SelfTest
+    )
+
+    return $SelfTest.executed -eq $true -and
+        $SelfTest.passed -eq $true -and
+        $SelfTest.contentionObserved -eq $true -and
+        $SelfTest.contentionCount -gt 0 -and
+        $SelfTest.recoveredAfterLockRelease -eq $true -and
+        $SelfTest.markerParsedAfterRecovery -eq $true -and
+        $null -eq $SelfTest.errorType
+}
+
 function Read-TeardownMarker {
     param(
         [Parameter(Mandatory)]
@@ -341,10 +384,18 @@ function Read-TeardownMarker {
             break
         }
         catch [System.IO.IOException] {
-            $script:markerReadContentionCount++
+            if ((Get-LifecycleMarkerReadFailureCategory -Exception $_.Exception) -eq
+                "contention") {
+                $script:markerReadContentionCount++
+            }
+            else {
+                $script:markerReadErrorCount++
+                $script:markerReadErrorType = $_.Exception.GetType().Name
+            }
         }
         catch [System.UnauthorizedAccessException] {
-            $script:markerReadContentionCount++
+            $script:markerReadErrorCount++
+            $script:markerReadErrorType = $_.Exception.GetType().Name
         }
 
         if ($attempt -lt $Attempts -and $RetryDelayMilliseconds -gt 0) {
@@ -920,13 +971,82 @@ if ($ValidateForensics) {
             $markerReaderSelfTest.errorType = "ContractNotSatisfied"
         }
 
+        $validProof = [ordered]@{
+            executed = $true
+            passed = $true
+            contentionObserved = $true
+            contentionCount = 1
+            recoveredAfterLockRelease = $true
+            markerParsedAfterRecovery = $true
+            errorType = $null
+        }
+        $proofWithError = [ordered]@{
+            executed = $true
+            passed = $true
+            contentionObserved = $true
+            contentionCount = 1
+            recoveredAfterLockRelease = $true
+            markerParsedAfterRecovery = $true
+            errorType = "UnauthorizedAccessException"
+        }
+        $proofWithoutContention = [ordered]@{
+            executed = $true
+            passed = $true
+            contentionObserved = $true
+            contentionCount = 0
+            recoveredAfterLockRelease = $true
+            markerParsedAfterRecovery = $true
+            errorType = $null
+        }
+        $incompleteProof = [ordered]@{
+            executed = $true
+            passed = $true
+            contentionObserved = $true
+            contentionCount = 1
+            recoveredAfterLockRelease = $true
+            markerParsedAfterRecovery = $false
+            errorType = $null
+        }
+        $markerReaderSelfTest.contractChecks.executed = $true
+        $markerReaderSelfTest.contractChecks.validProofAccepted =
+            Test-MarkerReaderSelfTestProof -SelfTest $validProof
+        $markerReaderSelfTest.contractChecks.errorTypeRejected =
+            -not (Test-MarkerReaderSelfTestProof -SelfTest $proofWithError)
+        $markerReaderSelfTest.contractChecks.zeroContentionRejected =
+            -not (Test-MarkerReaderSelfTestProof -SelfTest $proofWithoutContention)
+        $markerReaderSelfTest.contractChecks.incompleteProofRejected =
+            -not (Test-MarkerReaderSelfTestProof -SelfTest $incompleteProof)
+        $markerReaderSelfTest.contractChecks.errorClassificationPassed =
+            (Get-LifecycleMarkerReadFailureCategory `
+                -Exception ([System.IO.IOException]::new("generic"))) -eq "error" -and
+            (Get-LifecycleMarkerReadFailureCategory `
+                -Exception ([System.UnauthorizedAccessException]::new("denied"))) -eq "error"
+        $markerReaderSelfTest.contractChecks.passed =
+            $markerReaderSelfTest.contractChecks.validProofAccepted -and
+            $markerReaderSelfTest.contractChecks.errorTypeRejected -and
+            $markerReaderSelfTest.contractChecks.zeroContentionRejected -and
+            $markerReaderSelfTest.contractChecks.incompleteProofRejected -and
+            $markerReaderSelfTest.contractChecks.errorClassificationPassed
+        $markerReaderSelfTestComplete =
+            (Test-MarkerReaderSelfTestProof -SelfTest $markerReaderSelfTest) -and
+            $markerReaderSelfTest.contractChecks.passed
+        $markerReaderSelfTestFailureType = if ($markerReaderSelfTestComplete) {
+            $null
+        }
+        elseif ($null -ne $markerReaderSelfTest.errorType) {
+            $markerReaderSelfTest.errorType
+        }
+        else {
+            "ContractChecksFailed"
+        }
+
         $phaseResults += [pscustomobject]@{
             assembly = "Gate.MarkerReader"
             iteration = 1
             phase = "marker-reader-self-test"
             processId = $PID
-            success = $markerReaderSelfTest.passed
-            exitCode = if ($markerReaderSelfTest.passed) { 0 } else { 1 }
+            success = $markerReaderSelfTestComplete
+            exitCode = if ($markerReaderSelfTestComplete) { 0 } else { 1 }
             durationMs = [Math]::Round(
                 $markerReaderSelfTestStopwatch.Elapsed.TotalMilliseconds,
                 3)
@@ -944,11 +1064,13 @@ if ($ValidateForensics) {
             diagnosticCaptureDurationMs = 0.0
             slowThresholdExceeded = $false
             slowEvidenceStatus = "not-applicable"
-            slowEvidenceErrorType = $markerReaderSelfTest.errorType
+            slowEvidenceErrorType = $markerReaderSelfTestFailureType
         }
 
         $script:markerReadContentionCount = 0
         $script:markerReadRetriesExhaustedCount = 0
+        $script:markerReadErrorCount = 0
+        $script:markerReadErrorType = $null
     }
 }
 
@@ -1102,8 +1224,12 @@ $markerReaderSelfTestContractPassed =
     ($markerReaderSelfTest.executed -and
         $markerReaderSelfTest.passed -and
         $markerReaderSelfTest.contentionObserved -and
+        $markerReaderSelfTest.contentionCount -gt 0 -and
         $markerReaderSelfTest.recoveredAfterLockRelease -and
-        $markerReaderSelfTest.markerParsedAfterRecovery)
+        $markerReaderSelfTest.markerParsedAfterRecovery -and
+        $null -eq $markerReaderSelfTest.errorType -and
+        $markerReaderSelfTest.contractChecks.executed -and
+        $markerReaderSelfTest.contractChecks.passed)
 $diagnosticCaptureTotalMs = [Math]::Round(
     [double](
         $phaseResults |
@@ -1145,8 +1271,10 @@ $report = [ordered]@{
     diagnosticCaptureTotalMs = $diagnosticCaptureTotalMs
     markerReadContentionCount = $script:markerReadContentionCount
     markerReadRetriesExhaustedCount = $script:markerReadRetriesExhaustedCount
+    markerReadErrorCount = $script:markerReadErrorCount
+    markerReadErrorType = $script:markerReadErrorType
     markerReaderSelfTestPassed = if ($markerReaderSelfTest.executed) {
-        $markerReaderSelfTest.passed
+        $markerReaderSelfTestComplete
     }
     else {
         $null
@@ -1180,13 +1308,17 @@ $markdown.Add("- Diagnostic capture wall time: $diagnosticCaptureTotalMs ms")
 $markdown.Add("- Marker read contentions: $script:markerReadContentionCount")
 $markdown.Add("- Marker read retry exhaustion: $script:markerReadRetriesExhaustedCount")
 $markdown.Add(
+    "- Marker read errors: $script:markerReadErrorCount; " +
+    "last type=$script:markerReadErrorType")
+$markdown.Add(
     "- Marker reader self-test: executed=$($markerReaderSelfTest.executed), " +
     "passed=$($markerReaderSelfTest.passed), " +
     "contentionObserved=$($markerReaderSelfTest.contentionObserved), " +
     "contentionCount=$($markerReaderSelfTest.contentionCount), " +
     "recovered=$($markerReaderSelfTest.recoveredAfterLockRelease), " +
     "parsed=$($markerReaderSelfTest.markerParsedAfterRecovery), " +
-    "error=$($markerReaderSelfTest.errorType)")
+    "error=$($markerReaderSelfTest.errorType), " +
+    "contractChecks=$($markerReaderSelfTest.contractChecks.passed)")
 $markdown.Add("")
 $markdown.Add("| Assembly | Phase | Pass / Runs | Slow / captured | Success | P50 ms | P95 ms | P99 ms | Max ms |")
 $markdown.Add("| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
