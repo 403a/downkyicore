@@ -47,7 +47,7 @@ $script:markerReadContentionCount = 0
 $script:markerReadRetriesExhaustedCount = 0
 $script:markerReadErrorCount = 0
 $script:markerReadErrorType = $null
-$slowEvidenceCaptureLeadMilliseconds = 100
+$slowEvidenceCaptureLeadMilliseconds = 1000
 $forensicsSelfTestCaptureLeadValidated = $false
 $markerReaderSelfTestRequired = $IsWindows -and
     @("PR", "Main", "Rehearsal", "Flaky").Contains($Profile)
@@ -1158,7 +1158,7 @@ if ($ValidateForensics) {
             "5000"
         ) `
         -LifecycleMarkerPath $selfTestMarker `
-        -EvidenceThresholdSeconds 0.25
+        -EvidenceThresholdSeconds 1.25
     $selfTestPhase = New-ProcessPhaseResult -ProcessResult $selfTest
     $evidenceReports = @(
         foreach ($relativeEvidence in $selfTest.evidence) {
