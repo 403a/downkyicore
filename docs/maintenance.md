@@ -24,6 +24,17 @@ Pull requests are guarded by `.github/workflows/quality.yml`:
 - transitive vulnerable package audit
 - deprecated package report
 
+Gate 10 v1.1.0 integration candidate `355ef7cb` passed the local strict
+`AnalysisMode=All` Release build with zero warnings/errors, all 714 tests,
+format verification, module-boundary audit, vulnerable/deprecated dependency
+audits and `git diff --check`. Its explicitly authorized authenticated
+read-only Bilibili audit passed the `/nav` login gate and all 14 allowlisted
+contracts with zero drift. The resulting machine-readable artifact contains
+only sanitized contract metadata; Gitleaks 8.30.1 inspected all 986 tracked and
+non-ignored untracked candidate files and reported zero findings. Remote PR
+quality, CodeQL and the cross-platform package rehearsal remain release
+requirements and are recorded in `docs/refactoring-live-plan.md`.
+
 The repository always uses the supported `AnalysisMode=All` value. The pre-fix baseline is 1,654 unique diagnostics across 71 CA rules; see `docs/analyzer-baseline.md` and `docs/analyzer-baseline.csv`. `CodeAnalysisTreatWarningsAsErrors=true` is the repository default. Every cleaned rule is also pinned to `error` in `.editorconfig`, preventing a future SDK severity change from reopening the baseline. The before/after inventory and retained exceptions are recorded in `docs/analyzer-cleanup-report.md`.
 
 Current analyzer result: zero unhandled CA diagnostics. All 77 cleaned rules are enforced as errors, and the full solution defaults to `CodeAnalysisTreatWarningsAsErrors=true`. Public fields were converted only after checking JSON names, Avalonia bindings, inheritance, and download lifecycle ownership. Indexable collections now use direct indexing without changing empty-list behavior, and property/JSON names use compile-time `nameof` where the wire value is identical. Executable-only application, UI, service, model, and helper types are internal; clean Release compilation verifies Avalonia XAML can still construct its backing types. Public NFO XML contracts remain in Core because `XmlSerializer` requires public root/member types; namespace, XML names, collections, and serialized shape are covered by round-trip tests. Raw Bilibili/aria2 addresses retain string storage and exact JSON keys; login QR and redirect consumers validate absolute `Uri` values at the boundary, while protocol-relative media addresses remain supported. Benchmark cases live in the public, non-sealed `DownKyi.BenchmarkCases` assembly because BenchmarkDotNet generates derived types through reflection; the runner remains internal and validation confirms a result row exists. Async commands use the protected can-execute raiser, dialogs complete typed results, and user-space tab payloads travel through `AppNavigationRequest.Parameter`. Diagnostic hashes use uppercase SHA-256 fragments, NFO booleans use lowercase literals, and FFmpeg cleanup failures use the shared injected logger without duplicate terminal output. JSON/XML/SQLite contracts, enum numeric values, ordinal protocol comparisons, and DURL `Order` identity are all guarded by tests.

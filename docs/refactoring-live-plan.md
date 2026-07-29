@@ -26,6 +26,10 @@ history, not repeated here.
 - The local version candidate passes strict build with zero warnings/errors,
   all 714 tests, format, module audit, vulnerable/deprecated package audits,
   `git diff --check`, and Gitleaks across 986 candidate files.
+- The final candidate authenticated read-only audit passed its navigation gate
+  and all 14 allowlisted contracts with HTTP 200, Bilibili code 0, required
+  fields present and zero contract drift. Gitleaks 8.30.1 then reported zero
+  findings across all 986 candidate files.
 - Final remote and package validation is not complete, so no tag may be
   created.
 
@@ -36,7 +40,7 @@ history, not repeated here.
 - [x] Pass strict build and all tests before changing the version.
 - [x] Verify version-derived assembly, file and informational metadata for
       `1.1.0`; UI and package validation remains part of the publish rehearsal.
-- [ ] Repeat the sanitized authenticated read-only Bilibili contract audit on
+- [x] Repeat the sanitized authenticated read-only Bilibili contract audit on
       the final candidate and run Gitleaks.
 - [ ] Pass strict PR CI and CodeQL on Windows, Linux and macOS for the final
       candidate SHA.
@@ -47,8 +51,9 @@ history, not repeated here.
       DownKyi, aria2, FFmpeg, ffprobe, Fluent theme and version.
 - [x] Confirm settings JSON, legacy SQLite, unfinished tasks, GID, partial file
       map, completed segment keys and resume fixtures remain green.
-- [ ] Confirm the candidate contains no Cookie, Config, Logs, Cache, Storage or
-      user download data.
+- [x] Confirm the source candidate contains no credential or account data.
+      Package-specific Config, Logs, Cache, Storage and user-data inspection
+      remains part of the cross-platform publish rehearsal.
 - [ ] Merge the integration PR into `main`.
 - [ ] Verify clean `main` points at the tested integration tree.
 - [ ] Create tag `v1.1.0` once, wait for the tag workflow, inspect its release
