@@ -54,10 +54,13 @@ publisher release API 交叉核對 immutable tag、asset name、size 與 digest�
 `ffmpeg`、`ffprobe`、aria2 非空，並檢查目標平台需要的硬體 encoder。
 
 交叉發布必須明確 restore 同一個目標 RID，再以 `--no-restore` publish。
-Core 只能用 `DownKyiAssetRuntimeIdentifier` 選擇內容，不得設定 SDK
-`RuntimeIdentifier`。推 tag 前手動執行 `build.yml`，下載每個 artifact，
-重算 package sidecar，並檢查 manifest、版本、必要 binary、Fluent theme
-與使用者資料排除。
+Core 只保存外部 binary catalog，不得選擇平台內容或設定 SDK
+`RuntimeIdentifier`。exe 專案必須從明確的 publish RID 建立 asset RID，
+沒有 publish RID 時才可依本機 host 提供開發 fallback，並直接把對應
+catalog 檔案加入 output/publish；自訂 RID 不得跨 ProjectReference。
+推 tag 前手動執行 `build.yml`，下載每個 artifact，重算 package
+sidecar，並檢查 manifest、版本、必要 binary、Fluent theme 與使用者
+資料排除。
 
 登入態 API audit 只能由明確授權的 operator 執行：
 

@@ -2452,7 +2452,7 @@ contracts:
   - Every package uploads its own `.sha256` sidecar and publish manifest with the artifact.
   - External archive URLs and SHA-256 values have one owner in `script/assets/external-assets.json`; every PowerShell and Bash downloader resolves that manifest relative to its own file.
   - External archives use immutable release tags and are accepted only after TLS validation, a successful HTTP status and their manifest SHA-256 match.
-  - `DownKyiAssetRuntimeIdentifier` selects packaged binary content without assigning the .NET SDK `RuntimeIdentifier`; package restore and publish explicitly own the target RID.
+  - `DownKyiAssetRuntimeIdentifier` selects packaged binary content without assigning the .NET SDK `RuntimeIdentifier`; only the executable derives it from the explicit publish target or local host fallback and directly includes the selected Core asset catalog files.
   - `version.txt` is the only project version source. Directory build metadata, application display, package names, publish manifests and tags must agree with it.
 hazards:
   - Autobuild releases can be removed upstream. A checksum mismatch on a short error page is a hard package failure; refresh the immutable URL and publisher digest, never skip verification or switch to mutable `latest`.

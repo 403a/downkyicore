@@ -40,7 +40,7 @@ public sealed class ReleaseWorkflowArchitectureTests
     }
 
     [Fact]
-    public void CoreSelectsExternalAssetsWithoutSettingTheSdkRuntimeIdentifier()
+    public void CoreDoesNotOwnRuntimeSpecificPackageAssets()
     {
         var projectPath = Path.Combine(RepositoryRoot, "DownKyi.Core", "DownKyi.Core.csproj");
         var project = XDocument.Load(projectPath);
@@ -50,14 +50,47 @@ public sealed class ReleaseWorkflowArchitectureTests
             element => element.Name.LocalName == "RuntimeIdentifier");
 
         var source = File.ReadAllText(projectPath);
-        Assert.Contains("DownKyiAssetRuntimeIdentifier", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("DownKyiAssetRuntimeIdentifier", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("RuntimeInformation", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("Binary/$(", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ExecutableOwnsTargetRuntimeAssetSelection()
+    {
+        var executable = File.ReadAllText(
+            Path.Combine(RepositoryRoot, "DownKyi", "DownKyi.csproj"));
+        var desktop = File.ReadAllText(
+            Path.Combine(
+                RepositoryRoot,
+                "src",
+                "DownKyi.Desktop",
+                "DownKyi.Desktop.csproj"));
+
         Assert.Contains(
-            "Binary/$(DownKyiAssetRuntimeIdentifier)/aria2/*",
-            source,
+            "<DownKyiAssetRuntimeIdentifier Condition=\"'$(DownKyiAssetRuntimeIdentifier)' == '' And '$(RuntimeIdentifier)' != ''\">$(RuntimeIdentifier)</DownKyiAssetRuntimeIdentifier>",
+            executable,
+            StringComparison.Ordinal);
+        Assert.Contains("RuntimeInformation", executable, StringComparison.Ordinal);
+        Assert.Contains(
+            @"..\DownKyi.Core\Binary\$(DownKyiAssetRuntimeIdentifier)\aria2\*",
+            executable,
             StringComparison.Ordinal);
         Assert.Contains(
-            "Binary/$(DownKyiAssetRuntimeIdentifier)/ffmpeg/*",
-            source,
+            @"..\DownKyi.Core\Binary\$(DownKyiAssetRuntimeIdentifier)\ffmpeg\*",
+            executable,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "CopyToPublishDirectory=\"PreserveNewest\"",
+            executable,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "AdditionalProperties=\"DownKyiAssetRuntimeIdentifier=",
+            executable,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "DownKyiAssetRuntimeIdentifier",
+            desktop,
             StringComparison.Ordinal);
     }
 

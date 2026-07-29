@@ -106,7 +106,7 @@ Dynamic media dependencies are not fixed API endpoints: subtitle JSON addresses 
 
 ## Authenticated Read-Only Snapshot
 
-The latest 2026-07-29 operator run completed at `2026-07-29T13:44:02.6946357+08:00` against v1.1.0 integration candidate `355ef7cb773b3dff67cf5adc56fba942ba77fcf5`. It reloaded `BILIBILI_TEST_COOKIE` from `~/.codex/.env` inside an isolated PowerShell process. The value was never printed, persisted, hashed, copied into a fixture, or passed through command-line arguments.
+The latest 2026-07-29 operator run completed at `2026-07-29T14:54:07.3957098+08:00` against v1.1.0 integration candidate `8aa4382024aa0af15b472956bbb3ee51de73622a`. It reloaded `BILIBILI_TEST_COOKIE` from `~/.codex/.env` inside an isolated PowerShell process. The value was never printed, persisted, hashed, copied into a fixture, or passed through command-line arguments.
 
 - Navigation hard gate: HTTP 200, Bilibili code 0, `data.isLogin=true`.
 - Contract probes: 14 passed, 0 failed, 0 blocked, 0 indeterminate.

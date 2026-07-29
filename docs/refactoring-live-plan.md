@@ -26,10 +26,10 @@ history, not repeated here.
 - The local version candidate passes strict build with zero warnings/errors,
   all 714 tests, format, module audit, vulnerable/deprecated package audits,
   `git diff --check`, and Gitleaks across 986 candidate files.
-- The final candidate authenticated read-only audit passed its navigation gate
+- The latest committed candidate authenticated read-only audit passed its navigation gate
   and all 14 allowlisted contracts with HTTP 200, Bilibili code 0, required
-  fields present and zero contract drift. Gitleaks 8.30.1 then reported zero
-  findings across all 986 candidate files.
+  fields present and zero contract drift at `8aa4382`. Gitleaks 8.30.1 then
+  reported zero findings across all 986 candidate files.
 - PR #112 first-head quality run `30426137294`, protobuf run `30426137279`
   and CodeQL run `30426137276` passed. Each platform uploaded seven distinct
   TRX files; 713 tests executed successfully and the FFmpeg-dependent seek
@@ -37,10 +37,23 @@ history, not repeated here.
 - Manual package rehearsal `30426554087` then exposed two release-only
   defects: expired BtbN autobuild URLs on Windows x64/Linux and host-derived
   `RuntimeIdentifier` contamination during x64 publication on arm64 macOS.
-  The candidate now pins existing immutable FFmpeg releases, resolves all
+  Candidate `8aa4382` pins existing immutable FFmpeg releases, resolves all
   asset scripts from their own directory, uses one manifest on every OS, and
-  separates asset selection from the SDK runtime identifier. Local strict
-  build, all 718 tests, Windows x86 cross-publish and package validation pass.
+  separates asset selection from the SDK runtime identifier.
+- Second rehearsal `30428876552` proved those two defects fixed: all release
+  gates passed, along with macOS arm64, Windows x64 and every Linux x64
+  package. macOS x64, Windows x86 and Linux arm64 then exposed one remaining
+  contract: a target asset RID was not propagated through project references,
+  so Core selected host binaries. The executable is now the sole asset-RID and
+  package-content owner and directly includes the selected Core catalog files;
+  no custom RID crosses a project-reference boundary. A clean Windows x86
+  self-contained publish passes the common validator, and its aria2, FFmpeg
+  and ffprobe SHA-256 values exactly match the x86 source assets. Full local
+  validation passes with zero strict build warnings/errors, all 719 tests,
+  format, module boundary, dependency, secret and diff gates. A project
+  reference property-propagation attempt was rejected because a solution build
+  created competing project instances that wrote the same `obj/bin` paths.
+  Only the third remote rehearsal remains pending.
 - Final remote and package validation is not complete, so no tag may be
   created.
 

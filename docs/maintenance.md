@@ -28,12 +28,13 @@ Gate 10 v1.1.0 integration candidate `355ef7cb` passed the local strict
 `AnalysisMode=All` Release build with zero warnings/errors, all 714 tests,
 format verification, module-boundary audit, vulnerable/deprecated dependency
 audits and `git diff --check`. Its explicitly authorized authenticated
-read-only Bilibili audit passed the `/nav` login gate and all 14 allowlisted
-contracts with zero drift. The resulting machine-readable artifact contains
-only sanitized contract metadata; Gitleaks 8.30.1 inspected all 986 tracked and
-non-ignored untracked candidate files and reported zero findings. Remote PR
-quality, CodeQL and the cross-platform package rehearsal remain release
-requirements and are recorded in `docs/refactoring-live-plan.md`.
+read-only Bilibili audit was repeated at committed candidate `8aa4382`; the
+`/nav` login gate and all 14 allowlisted contracts passed with zero drift. The
+resulting machine-readable artifact contains only sanitized contract metadata;
+Gitleaks 8.30.1 inspected all 986 tracked and non-ignored untracked candidate
+files and reported zero findings. Final PR quality, CodeQL and the
+cross-platform package rehearsal remain release requirements and are recorded
+in `docs/refactoring-live-plan.md`.
 
 PR #112 first-head quality run `30426137294`, protobuf run `30426137279`
 and CodeQL run `30426137276` passed. Manual release rehearsal `30426554087`
@@ -44,11 +45,25 @@ The repaired candidate pins the existing 2026-07-28 FFmpeg release assets and
 their upstream SHA-256 digests, makes all four asset scripts independent of the
 caller's working directory, and makes the Bash aria2 script consume the shared
 manifest. `DownKyiAssetRuntimeIdentifier` now selects package content without
-setting the SDK `RuntimeIdentifier`; package jobs explicitly restore their
-target RID. Local strict build has zero warnings/errors, all 718 tests pass,
+  setting the SDK `RuntimeIdentifier`; package jobs explicitly restore their
+  target RID. Local strict build has zero warnings/errors, all 718 tests pass,
 and an actual Windows x86 self-contained publish passes the common package
 validator with non-empty DownKyi, aria2, FFmpeg and ffprobe files. The complete
-remote rehearsal must still be repeated on the repaired SHA.
+remote rehearsal `30428876552` proved that the expired-asset and SDK RID fixes
+worked, but exposed a narrower cross-target content issue on macOS x64,
+Windows x86 and Linux arm64: MSBuild did not automatically propagate the
+target asset RID through project references. The executable is now the only
+owner of target or local-host fallback selection and directly includes the
+matching external assets in output and publish; the custom property never
+crosses a project-reference boundary, and Core is a runtime-neutral library.
+A fresh Windows x86 self-contained publish passes the common package
+validator, and its aria2, FFmpeg and ffprobe hashes exactly match the x86
+source assets. Passing a custom RID through project-reference metadata was
+explicitly rejected because it creates multiple project instances that race on
+the same `obj/bin` paths during a solution build. The final ownership model
+passes the strict Release build with zero warnings/errors, all 719 tests,
+format, module-boundary, dependency, secret and diff gates. A third remote
+rehearsal is still required.
 
 The repository always uses the supported `AnalysisMode=All` value. The pre-fix baseline is 1,654 unique diagnostics across 71 CA rules; see `docs/analyzer-baseline.md` and `docs/analyzer-baseline.csv`. `CodeAnalysisTreatWarningsAsErrors=true` is the repository default. Every cleaned rule is also pinned to `error` in `.editorconfig`, preventing a future SDK severity change from reopening the baseline. The before/after inventory and retained exceptions are recorded in `docs/analyzer-cleanup-report.md`.
 
@@ -215,9 +230,13 @@ Release packaging downloads aria2 and FFmpeg from the scripts in `script/`.
   immutable release tag, never a mutable `latest` asset. The scripts accept an
   archive only after TLS validation, a successful HTTP status and its SHA-256
   matching the manifest.
-- `DownKyi.Core` uses `DownKyiAssetRuntimeIdentifier` only to select content.
-  It must not infer or assign the .NET SDK `RuntimeIdentifier` from the current
-  build host; cross-target restore and publish own that property.
+- `DownKyi.Core` stores the checked-in external asset catalog but does not
+  select or copy runtime-specific content. The executable is the sole package
+  content owner: it uses the explicit publish target first, otherwise the host
+  for local development, then directly includes the selected catalog files.
+  `DownKyiAssetRuntimeIdentifier` must never cross a project-reference
+  boundary or assign the .NET SDK `RuntimeIdentifier`; cross-target restore
+  and publish remain the SDK RID owners.
 - Packaged local aria2 RPC listens only on loopback. It receives `--stop-with-process` on every OS and also joins a kill-on-close Windows Job Object, so an abrupt App termination cannot leave a local child running. Custom remote aria2 endpoints are not started or terminated by this owner.
 
 When updating an external binary:
