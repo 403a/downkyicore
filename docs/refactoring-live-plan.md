@@ -1,102 +1,104 @@
 # DownKyi Core Live Refactoring Plan
 
 Status: active
-Last updated: 2026-07-12
-Current group: PR 03-06
-Next branch: `refactor/pr-03-06-download-domain-store`
+Last updated: 2026-07-29
+Current group: Gate 9 large-owner convergence
+Current branch: `refactor/aria-client-provenance`
 
-This file contains only unfinished work. Completed items are removed in the same PR that finishes them; newly discovered debt is added immediately with an owning PR or phase.
+This file contains only unfinished or not-yet-integrated work. Completed PR 02-32 items are not restored. Design rationale belongs in `design-docs`; product acceptance belongs in `product-specs`.
 
-## Branch And Pull Request Policy
+## State Correction
 
-- PR 02 uses only `refactor/pr-02-host-composition` and one Pull Request.
-- PR 03-06 uses only `refactor/pr-03-06-download-domain-store` and one Pull Request.
-- PR 07-15 uses only `refactor/pr-07-15-download-runtime` and one Pull Request.
-- PR 16-24 uses only `refactor/pr-16-24-media-ui-lifecycle` and one Pull Request.
-- PR 25-29 uses only `refactor/pr-25-29-remove-legacy` and one Pull Request.
-- PR 30-32 uses only `refactor/pr-30-32-release-hardening` and one Pull Request.
-- A group may contain multiple ordered commits, but it must not be split into smaller public PRs or combined with another numbered range.
-- The next group starts only after the previous group has completed its full scope and passed build, tests, data compatibility checks, documentation updates, and `git diff --check`.
+The previous `Status: complete` was incorrect.
 
-## Active Next: PR 03-06 - Download Domain And SQLite Store
+- `origin/refactor/pr-30-32-release-hardening` is not an ancestor of `origin/main`.
+- PR #78 was merged into the stacked base `refactor/pr-25-29-remove-legacy`, not into `main`.
+- PR #75 and PR #77 are closed after their replacement was validated in PR #82.
+- PR #79 and PR #80 were superseded by green PR #83, closed, and their typed replacement was merged into the stacked release-hardening base.
+- Gate 4 passed Windows/Linux/macOS quality CI and CodeQL, then PR #87 was merged into `refactor/pr-30-32-release-hardening` as merge commit `d8342abc`.
+- Gate 5 and the authenticated read-only Bilibili audit passed Windows/Linux/macOS quality CI and CodeQL, then PR #88 was merged into `refactor/pr-30-32-release-hardening` as merge commit `fadd7eb3`.
+- The authenticated audit was repeated on 2026-07-28: its `/nav` login gate and all 14 contract probes passed with zero drift. Only the allowlisted sanitized diagnostics artifact is retained; Gitleaks scanned 934 candidate files and reported zero findings.
+- Gate 6 stage extraction passed two complete Windows/Linux/macOS quality and CodeQL rounds, then PR #89 was merged into `refactor/pr-30-32-release-hardening` as merge commit `e288913f`.
+- Gate 6 retry policy passed three complete remote rounds. Final Windows/Linux/macOS quality run `30187455431` and CodeQL run `30187455441` had zero check annotations, then PR #90 was merged into `refactor/pr-30-32-release-hardening` as merge commit `ba0a928e`.
+- Gate 7 async Bilibili Infrastructure ownership passed Windows/Linux/macOS quality run `30189537538`, protobuf run `30189537553`, and CodeQL run `30189537541`, then PR #91 was merged into `refactor/pr-30-32-release-hardening` as merge commit `55070903`.
+- Gate 8 passed Windows/Linux/macOS quality run `30191251004`, protobuf run `30191250997`, and CodeQL run `30191250992`; PR #92 was merged into `refactor/pr-30-32-release-hardening` as `f8e78c9a`. CodeQL reported no alert, but GitHub emitted one platform annotation because the single required ownership PR changed 396 files and its diff API is capped at 300 files.
+- Gate 9 logging ownership passed Windows/Linux/macOS quality run `30345373830`, protobuf run `30345371405`, and CodeQL run `30345371181`, with zero check annotations. PR #94 was merged into `refactor/pr-30-32-release-hardening` as merge commit `b290b204`.
+- Gate 9 naming convergence passed Windows/Linux/macOS quality run `30347937643` and CodeQL run `30347937639`; all seven check-runs had zero annotations. PR #95 was merged into `refactor/pr-30-32-release-hardening` as merge commit `e29ecc8`. Generic-name and file/type-mismatch baselines are zero; the four remaining duplicate-name sets are endpoint/role-scoped contracts.
+- Gate 9 SQLite store ownership passed Windows/Linux/macOS quality run `30349573925` and CodeQL run `30349573991`; all seven check-runs had zero annotations. PR #96 was merged into `refactor/pr-30-32-release-hardening` as merge commit `9f570f4`. The Store fell from 928 to 447 lines with byte-content-equivalent SQL literals and unchanged schema/resume contracts.
+- The authenticated read-only API audit was refreshed against `9f570f4`; all 14 probes passed with zero drift, Gitleaks found zero secrets, and all seven remote checks had zero annotations. PR #97 was merged into `refactor/pr-30-32-release-hardening` as merge commit `3394ff5`.
+- Gate 9 Settings network/aria ownership passed Windows/Linux/macOS quality run `30351528461` and CodeQL run `30351528583`; all seven check-runs had zero annotations. PR #98 was merged into `refactor/pr-30-32-release-hardening` as merge commit `ffa5674`. The 671-line mixed partial became 319-line general network and 355-line aria runtime owners with all 44 public compatibility methods unchanged.
+- Gate 9 network-settings ViewModel ownership passed Windows/Linux/macOS quality run `30352739481` and Analyze/CodeQL run `30352739315`; all seven check-runs had zero annotations. PR #99 was merged into `refactor/pr-30-32-release-hardening` as merge commit `660d223`. The 649-line mixed owner became 384-line navigation/general-command, 275-line aria-command, and 292-line binding-state owners with XAML binding names unchanged.
+- Gate 9 video-settings ViewModel ownership passed Windows/Linux/macOS quality run `30354918725` and CodeQL run `30354918709`; all seven check-runs had zero annotations. PR #100 was merged into `refactor/pr-30-32-release-hardening` as merge commit `e663281`. The 1,020-line mixed owner became 451-line navigation/playback/transcoding, 353-line content/naming-command, and 248-line binding-state owners. The first Windows run exposed a declaration-regex timeout; line-scoped non-backtracking matching and an adversarial regression test fixed it before merge.
+- Gate 9 my-space ViewModel ownership passed Windows/Linux/macOS quality run `30356078414` and CodeQL run `30356078409`; all seven check-runs had zero annotations. PR #101 was merged into `refactor/pr-30-32-release-hardening` as merge commit `11ee968`. The 669-line owner became a 408-line navigation/profile workflow owner and a 265-line service-free binding-state owner without changing typed navigation, cancellation or XAML binding contracts.
+- The authenticated read-only API audit was repeated against `11ee968`; the isolated process reloaded the credential from `~/.codex/.env`, the `/nav` hard gate passed, and all 14 allowlisted probes passed with zero contract drift. Gitleaks inspected 939 candidate files and reported zero findings. Strict PR CI run `30357290660` and CodeQL run `30357290313` completed seven successful checks with zero annotations; PR #102 was merged into `refactor/pr-30-32-release-hardening` as merge commit `cc8a9ca`.
+- Gate 9 add-to-download ownership passed Windows/Linux/macOS quality run `30359317685` and CodeQL run `30359317951`; all seven check-runs had zero annotations. PR #103 was merged into `refactor/pr-30-32-release-hardening` as merge commit `a00812e`. The 663-line mixed owner became a 275-line session coordinator plus dedicated duplicate, stateless draft and optional metadata owners without changing settings snapshots, task shape, cancellation or admission.
+- Gate 9 user-space ViewModel ownership passed Windows/Linux/macOS quality run `30360515743` and CodeQL run `30360513188`; all seven check-runs had zero annotations. PR #104 was merged into `refactor/pr-30-32-release-hardening` as merge commit `a946242`. The 569-line mixed owner became a 412-line typed-navigation/load/projection workflow owner, a 161-line service-free binding-state owner and the unchanged 27-line favorite-folder owner.
+- Gate 9 bangumi-follow ViewModel ownership passed Windows/Linux/macOS quality run `30364267364` and CodeQL run `30364266723`; all seven check-runs had zero annotations and every platform retained seven assembly-named TRX artifacts. PR #105 was merged into `refactor/pr-30-32-release-hardening` as merge commit `1e265d1`. The 531-line mixed owner became a 435-line pager/navigation/load/download workflow owner and a 103-line service-free binding-state owner. CI also exposed and fixed NLog target-batch rotation overshoot plus solution-level xUnit host/TRX contention before merge.
+- Gate 9 input-parser ownership passed Windows/Linux/macOS quality run `30366101959` and CodeQL run `30366101939`; all seven check-runs had zero annotations and every platform retained seven assembly-named TRX artifacts. PR #106 was merged into `refactor/pr-30-32-release-hardening` as merge commit `152e4a4`. The 586-line mixed parser became eight responsibility partials below 120 lines, with deterministic canonical, sentinel, null and exact-host contracts.
+- Gate 9 search composition passed Windows/Linux/macOS quality run `30367302324` and CodeQL run `30367302508`; all seven check-runs had zero annotations and every platform retained seven assembly-named TRX artifacts. PR #107 was merged into `refactor/pr-30-32-release-hardening` as merge commit `dd9a81a`. MainWindow and Index now share the Host-owned `SearchService`, and an architecture ratchet rejects direct ViewModel construction.
+- Gate 9 pager ownership passed Windows/Linux/macOS quality run `30369076250` and CodeQL run `30369076284`; all seven check-runs had zero annotations and every platform retained seven assembly-named TRX artifacts. PR #108 was merged into `refactor/pr-30-32-release-hardening` as merge commit `59e7a1c`. The 506-line pager became focused state/command/layout owners, and parameterless XAML buttons plus constructor current-page behavior were repaired.
+- Gate 9 network-settings View ownership passed Windows/Linux/macOS quality run `30370919469` and CodeQL run `30370919558`; all seven check-runs had zero annotations and every platform retained seven assembly-named TRX artifacts. PR #109 was merged into `refactor/pr-30-32-release-hardening` as merge commit `e181659`. The 608-line XAML became a thin ordered composition plus four typed section owners while retaining every binding, named control, resource, and command parameter.
+- Gate 9 video-detail View ownership passed Windows/Linux/macOS quality run `30423173188` and CodeQL run `30423172978`; all seven check-runs had zero annotations and every platform retained seven assembly-named TRX artifacts. PR #110 was merged into `refactor/pr-30-32-release-hardening` as merge commit `bb082a7`. The 565-line XAML became a thin ordered composition plus toolbar, summary, same-namescope section/page selection and action owners. The first remote round exposed a macOS child-view static-resource lookup and Windows global smoke-theme mutation; the final design keeps the application-owned DataGrid theme and uses local row-highlight styles without replacing global test state.
+- `version.txt` remains `1.0.32`; v1.1.0 has not passed its release gate.
 
-Branch: `refactor/pr-03-06-download-domain-store`
+No release tag may be created while any release blocker below remains.
 
-- Introduce immutable download IDs, media identity, plan, output, progress, failure, phase, and legal state transitions.
-- Separate pause, cancel, delete, failure, and retry semantics.
-- Build `IDownloadTaskStore`, short pooled connections, real async APIs, migrations, transaction rollback, pre-migration backup, and corrupt-row quarantine.
-- Replace the deprecated `SQLitePCLRaw.bundle_e_sqlcipher` only after encrypted legacy database migration and rollback tests prove user data compatibility.
-- Stop mapping SQLite rows directly into `DownloadingItem`; current mapping requires Avalonia resources and blocks storage-only round-trip tests.
-- Preserve legacy `gid`, partial file maps, downloaded assets, status, progress, and settings snapshots during migration.
-- Add keyset history pagination, startup loading of unfinished tasks plus one recent page, and delayed full history.
-- Add a bounded write-behind channel that coalesces progress while persisting state transitions immediately.
-- Stop converting malformed stored JSON into silent empty collections; report record ID, field, and reason through sanitized diagnostics.
+## Execution Order
 
-## PR 07-15 - Download, FFmpeg, Aria2, And HTTP Runtime
+### Gate 9: Large-Owner Convergence
 
-Branch: `refactor/pr-07-15-download-runtime`
+Owner branches: separate responsibility-based large-owner PRs.
 
-- Build a bounded download orchestrator, fixed workers, per-task cancellation, global shutdown, staged pipeline, and atomic finalize.
-- Unify built-in, local aria2, and custom aria2 behind transfer backends; remove duplicate custom aria2 flow after takeover.
-- Preserve resume files on pause and remove media plus `.aria2` / `.download` sidecars on delete.
-- Replace static aria2 process state with a process supervisor and bounded shutdown.
-- Separate FFmpeg command generation from execution; add capability caching, timeout/cancellation, structured stderr, and bounded transcode concurrency.
-- Keep the enforced processing order: stream copy, available hardware encoder, CPU fallback.
-- Replace static WebClient with one typed Bilibili client based on `IHttpClientFactory`.
-- Make 401/403/schema failures non-retryable, honor `Retry-After` for 429, and keep cancellation non-retryable.
-- Replace `BiliApiRequest` catch-and-return-null behavior with typed failures visible to UI and diagnostics.
-- Add source-generated JSON contexts and fixed API contract samples for success, missing data, rejected code, HTML, and malformed JSON.
-- Make incomplete stream cleanup atomic; a Content-Length failure must not leave a file that can be mistaken for completed media.
+Scope:
 
-- Sort all DURL inputs by `Order` before queueing or merging.
-- For multi-segment DURL output, skip stream copy and rebuild timestamps, keyframes, and MP4 indexes through hardware encoding with CPU `libx264 + aac` fallback.
-- Make concat return an explicit success result and validate output with ffprobe: video stream exists, duration is positive and close to summed segments, and middle/tail seeks decode successfully.
-- Delete invalid concat output and mark the download failed; callers must not accept `File.Exists(output)` as completion.
-- Add regression fixtures proving multi-segment temporary files are unique and merged MP4 output can seek near the middle and tail.
+- Split hand-written oversized owners by responsibility; do not split generated/protocol files only to satisfy LOC.
+- Current owner: classify the source and synchronization contract of `AriaClient`, then converge the final oversized production file without changing its public API or aria2 JSON-RPC wire contract.
 
-## PR 16-24 - Media Use Cases, ViewModels, And App Lifecycle
+Current owner progress, pending PR integration:
 
-Branch: `refactor/pr-16-24-media-ui-lifecycle`
+- Git history traces the source to DownKyi commit `587fcfb` (`add the aria2cNet sources`, 2020-12-26). No generator, external package, or separate upstream sync source exists; it is hand-maintained project protocol code.
+- The 1,119-line owner is split into transport core, download control, status/URI, options, lifecycle and `system.*` partials, all below 500 lines, without changing public signatures.
+- A deterministic contract inventory invokes every public RPC method and verifies JSON-RPC version, request ID, method name and token placement. It exposed and fixed the pre-existing `ChangeUriAsync` mapping to `aria2.changePosition`; the method now correctly emits `aria2.changeUri`.
+- Strict `AnalysisMode=All` Release build has zero warnings/errors and all 713 tests pass across seven test projects. Format changed 0/849 files; the boundary audit reports zero oversized production files; vulnerable/deprecated package audits, `git diff --check`, and the 985-candidate Gitleaks scan pass.
+- PR #111 implementation head passed Windows/Linux/macOS quality run `30424513258` and CodeQL run `30424513284`; all seven checks had zero annotations and every platform retained seven distinct assembly-named TRX artifacts. The final documentation head must repeat the remote gates before integration.
 
-- Move BV/AV/bangumi/course/collection resolution, parsing, selection, plan building, duplicate policy, and queueing into Application use cases.
-- Keep directory-picker cancellation as a normal no-op result with no database write or background task.
-- Replace ViewModel `Task.Run` calls with cancellable use cases; 47 active call sites remain, excluding comments.
-- Introduce CommunityToolkit.Mvvm and keep ViewModels limited to binding state, commands, navigation, and result projection.
-- Fix collection and video-detail item toggle selection, reliable multi-select, and clear-selection beside select-all.
-- Fix user-space back navigation, startup URL input being overwritten, and delayed reopen caused by lingering shutdown work.
-- Replace conflicting loading booleans with one UI state model.
-- Move clipboard, file picker, notifications, dialogs, and navigation behind Desktop interfaces.
-- Reduce `App.axaml.cs` to XAML, Host, shell, start, and stop; remove static download collections and service locator calls.
-- Replace `OnExitAsync().Wait(15s)` with bounded asynchronous Host shutdown and explicit settings/log flush.
+Verification:
 
-## PR 25-29 - Remove Prism And Legacy Architecture
+- owner-specific contract and behavior tests pass before the full solution gate.
+- oversized-file ratchet entries decrease and no new entries are added.
 
-Branch: `refactor/pr-25-29-remove-legacy`
+Completion:
 
-- Replace Prism/DryIoc with Microsoft DI, a thin typed router, dialog coordinator, and explicit event streams.
-- Delete `LegacyDesktopComposition`, `MainWindow.AttachLegacyRegion`, and the deferred Prism region attachment after typed navigation owns the shell.
-- Remove string navigation tags, EventAggregator, Prism commands, region navigation, and global container lookup.
-- Delete old download inheritance, `DownloadStorageService`, custom aria2 duplication, SettingsManager singleton, static App collections, console wrapper, dead utilities, old comments, and obsolete packages immediately after new owners pass migration tests.
-- Add CI rules that reject new `App.Current`, `Container.Resolve`, `Thread.Sleep`, synchronous async waits, empty catches, `new HttpClient`, mutable static collections, and ViewModel `Task.Run` in the new architecture.
+- knowledge graph and architecture docs match final ownership.
 
-## PR 30-32 - Profiling, UI, And Release Hardening
+Rollback:
 
-Branch: `refactor/pr-30-32-release-hardening`
+- Revert each rename or owner extraction as an atomic commit.
 
-- Add deterministic cold/warm shell startup time baselines.
-- Measure peak working set while restoring unfinished tasks.
-- Measure SQLite progress writes per task-minute.
-- Measure aggregate transfer throughput with 1, 4, and 8 concurrent tasks.
-- Measure UI progress notifications per second.
-- Measure FFmpeg CPU/GPU concurrency and peak memory.
-- Every system baseline must record runtime, OS, architecture, dataset size, downloader backend, and commit SHA; never compare ad-hoc stopwatch values from different machines.
-- Investigate the current 1,488 B/request URL-building allocation only if traces show it is hot.
-- Optimize startup history loading, progress batching, worker limits, caches, and controlled collection parsing with benchmark or trace evidence.
-- Apply FluentUI/design tokens only after core ownership and lifecycle are stable; retain virtualization, high-DPI, keyboard, theme, and cross-platform checks.
-- Run full Windows/Linux/macOS package smoke tests, binary checksum verification, data migration rehearsal, pause/resume/delete regression, and release artifact validation.
+### Gate 10: Integrate Main And Release v1.1.0
 
-## Execution Rules
+Owner branch: release branch from latest `main` only after Gates 1-9.
 
-- Build and test sequentially; parallel build/test can contend for the same PDB and create a false local failure.
-- Every PR must build, test, run, preserve user data, update this plan, update the AI knowledge graph, and pass `git diff --check`.
-- PR CI blocks definite failures; benchmarks and noisy system profiling report regressions until stable thresholds exist.
+Scope and acceptance are defined in `product-specs/v1.1.0-release-gate.md`.
+
+Completion:
+
+- all required branches are integrated into latest `main`.
+- Windows/Linux/macOS package validation is green for the same SHA.
+- user data and resume fixtures pass.
+- `version.txt` is changed once to `1.1.0` and all version consumers derive from it.
+- clean `main` is tagged `v1.1.0` and the GitHub Release is published with verified artifacts/checksums.
+
+Rollback:
+
+- Never retag a different commit. If the release is invalid, publish a corrective version and document artifact withdrawal.
+
+## Every-PR Checklist
+
+- Read `AGENTS.md`, `ARCHITECTURE.md`, knowledge graph and this plan.
+- State goal, scope, stable contracts, tests, completion and rollback in the PR.
+- Add a test that fails on the old behavior when behavior changes.
+- Preserve settings, SQLite, unfinished tasks and resume state.
+- Update knowledge graph and live plan when ownership or dependencies change.
+- Run strict build, full tests, format, diff and package audits sequentially.
+- Do not add broad suppressions, restore legacy composition, or hide failure with null/empty sentinels.

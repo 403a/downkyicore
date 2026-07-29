@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
-using DownKyi.Core.Settings;
 
 namespace DownKyi.Core.BiliApi.Sign;
 
@@ -50,21 +49,10 @@ public static class WbiSign
     /// Wbi签名，返回所有参数字典
     /// </summary>
     /// <param name="parameters"></param>
-    /// <returns></returns>
-    public static Dictionary<string, string> EncodeWbi(Dictionary<string, object?> parameters)
-    {
-        var (imgKey, subKey) = GetKey();
-        return EncodeWbi(parameters, imgKey, subKey, DateTimeOffset.Now.ToUnixTimeSeconds());
-    }
-
-    /// <summary>
-    /// Wbi签名，返回所有参数字典
-    /// </summary>
-    /// <param name="parameters"></param>
     /// <param name="imgKey"></param>
     /// <param name="subKey"></param>
     /// <returns></returns>
-    internal static Dictionary<string, string> EncodeWbi(
+    public static Dictionary<string, string> EncodeWbi(
         Dictionary<string, object?> parameters,
         string imgKey,
         string subKey,
@@ -73,6 +61,10 @@ public static class WbiSign
         ArgumentNullException.ThrowIfNull(parameters);
         ArgumentException.ThrowIfNullOrEmpty(imgKey);
         ArgumentException.ThrowIfNullOrEmpty(subKey);
+        if (!new WbiKeys(imgKey, subKey).IsValid)
+        {
+            throw new ArgumentException("WBI keys must each contain 32 ASCII letters or digits.");
+        }
 
         var paraStr = new Dictionary<string, string>();
         foreach (var (key, value) in parameters)
@@ -110,12 +102,5 @@ public static class WbiSign
     private static string EncodeFormComponent(string value)
     {
         return Uri.EscapeDataString(value).Replace("%20", "+", StringComparison.Ordinal);
-    }
-
-    private static (string ImgKey, string SubKey) GetKey()
-    {
-        var user = SettingsManager.Instance.GetUserInfo();
-
-        return (user.ImgKey, user.SubKey);
     }
 }

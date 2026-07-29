@@ -1,21 +1,21 @@
+using System.Collections.Immutable;
 using System.Web;
-using DownKyi.Core.Logging;
 using DownKyi.Core.Settings;
 using DownKyi.Core.Settings.Models;
 using DownKyi.Core.Storage;
 using DownKyi.Core.Utils;
-using Console = DownKyi.Core.Utils.Debugging.Console;
 
 namespace DownKyi.Core.BiliApi.Login;
 
 public static class LoginHelper
 {
     // 本地位置
-    private static readonly string LocalLoginInfo = StorageManager.GetLogin();
+    private static readonly string LocalLoginInfo = ApplicationStorage.GetLogin();
 
     // 内存缓存：读多写少，使用 ReaderWriterLockSlim 保证线程安全
     private static readonly ReaderWriterLockSlim CacheLock = new();
-    private static List<DownKyiCookie>? _cachedCookies;
+    private static ImmutableArray<DownKyiCookie> _cachedCookies = [];
+    private static bool _isCookieCacheInitialized;
     private static string? _cachedCookieString;
 
     private static DownKyiCookie CloneCookie(DownKyiCookie cookie)
@@ -66,7 +66,8 @@ public static class LoginHelper
         CacheLock.EnterWriteLock();
         try
         {
-            _cachedCookies = null;
+            _cachedCookies = [];
+            _isCookieCacheInitialized = false;
             _cachedCookieString = null;
         }
         finally
@@ -102,26 +103,18 @@ public static class LoginHelper
             try
             {
                 File.Copy(tempFile, LocalLoginInfo, true);
-                // Encryptor.EncryptFile(tempFile, LOCAL_LOGIN_INFO, password);
             }
-            catch (IOException e)
+            catch (IOException)
             {
-                Console.PrintLine("SaveLoginInfoCookies()发生异常: {0}", e);
-                LogManager.Error(e);
                 return false;
             }
-            catch (UnauthorizedAccessException e)
+            catch (UnauthorizedAccessException)
             {
-                Console.PrintLine("SaveLoginInfoCookies()没有写入权限: {0}", e);
-                LogManager.Error(e);
                 return false;
             }
             finally
             {
-                if (File.Exists(tempFile))
-                {
-                    File.Delete(tempFile);
-                }
+                TryDeleteTemporaryFile(tempFile);
             }
 
             // 写入成功后使缓存立即失效
@@ -129,10 +122,7 @@ public static class LoginHelper
         }
         else
         {
-            if (File.Exists(tempFile))
-            {
-                File.Delete(tempFile);
-            }
+            TryDeleteTemporaryFile(tempFile);
         }
 
         return isSucceed;
@@ -148,7 +138,7 @@ public static class LoginHelper
         CacheLock.EnterReadLock();
         try
         {
-            if (_cachedCookies != null)
+            if (_isCookieCacheInitialized)
             {
                 return CloneCookies(_cachedCookies);
             }
@@ -163,14 +153,17 @@ public static class LoginHelper
         try
         {
             // 双重检查：可能其他线程已完成加载
-            if (_cachedCookies != null)
+            if (_isCookieCacheInitialized)
             {
                 return CloneCookies(_cachedCookies);
             }
 
             if (!File.Exists(LocalLoginInfo))
             {
-                return new List<DownKyiCookie>();
+                _cachedCookies = [];
+                _cachedCookieString = string.Empty;
+                _isCookieCacheInitialized = true;
+                return [];
             }
 
             List<DownKyiCookie>? cookies;
@@ -186,20 +179,19 @@ public static class LoginHelper
                         cookie.Domain))
                     .ToList();
             }
-            catch (IOException e)
+            catch (IOException)
             {
-                Console.PrintLine("GetLoginInfoCookies()发生异常: {0}", e);
-                LogManager.Error(e);
                 return new List<DownKyiCookie>();
             }
-            catch (UnauthorizedAccessException e)
+            catch (UnauthorizedAccessException)
             {
-                Console.PrintLine("GetLoginInfoCookies()没有读取权限: {0}", e);
-                LogManager.Error(e);
                 return new List<DownKyiCookie>();
             }
 
-            _cachedCookies = cookies ?? new List<DownKyiCookie>();
+            _cachedCookies = (cookies ?? [])
+                .Select(CloneCookie)
+                .ToImmutableArray();
+            _isCookieCacheInitialized = true;
             // 同步更新字符串缓存
             _cachedCookieString = BuildCookieHeader(_cachedCookies);
 
@@ -249,30 +241,59 @@ public static class LoginHelper
     /// 注销登录
     /// </summary>
     /// <returns></returns>
-    public static bool Logout()
+    public static bool Logout(ISettingsStore settingsStore)
     {
-        if (!File.Exists(LocalLoginInfo)) return false;
+        return Logout(settingsStore, LocalLoginInfo);
+    }
+
+    internal static bool Logout(ISettingsStore settingsStore, string loginInfoPath)
+    {
+        ArgumentNullException.ThrowIfNull(settingsStore);
+        ArgumentException.ThrowIfNullOrWhiteSpace(loginInfoPath);
+        if (!File.Exists(loginInfoPath)) return false;
+
         try
         {
-            File.Delete(LocalLoginInfo);
+            File.Delete(loginInfoPath);
 
             // 注销后使缓存立即失效
             InvalidateCache();
 
-            SettingsManager.Instance.SetUserInfo(new UserInfoSettings
+            settingsStore.Update(settings => settings with
             {
-                Mid = -1,
-                Name = "",
-                IsLogin = false,
-                IsVip = false
+                User = new UserApplicationSettings(
+                    Mid: -1,
+                    Name: string.Empty,
+                    IsLogin: false,
+                    IsVip: false,
+                    ImgKey: string.Empty,
+                    SubKey: string.Empty)
             });
             return true;
         }
-        catch (IOException e)
+        catch (IOException)
         {
-            Console.PrintLine("Logout()发生异常: {0}", e);
-            LogManager.Error(e);
             return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private static void TryDeleteTemporaryFile(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (IOException)
+        {
+            return;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return;
         }
     }
 }

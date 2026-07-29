@@ -20,6 +20,7 @@ public sealed class ProjectDependencyTests
         {
             var matches = Directory
                 .EnumerateFiles(RepositoryRoot, $"{projectName}.csproj", SearchOption.AllDirectories)
+                .Where(IsRepositorySourcePath)
                 .Where(path => !IsUnderDirectory(path, "tests"))
                 .ToArray();
 
@@ -56,6 +57,7 @@ public sealed class ProjectDependencyTests
             ["DownKyi.Desktop"] = new(StringComparer.OrdinalIgnoreCase)
             {
                 "DownKyi.Application",
+                "DownKyi.Core",
                 "DownKyi.Domain",
                 "DownKyi.Infrastructure"
             }
@@ -86,6 +88,7 @@ public sealed class ProjectDependencyTests
     {
         var domainProject = Directory
             .EnumerateFiles(RepositoryRoot, "DownKyi.Domain.csproj", SearchOption.AllDirectories)
+            .Where(IsRepositorySourcePath)
             .SingleOrDefault();
         if (domainProject == null)
         {
@@ -180,18 +183,58 @@ public sealed class ProjectDependencyTests
     }
 
     [Fact]
-    public void LegacyDesktopBridgeHasAnExplicitRemovalOwner()
+    public void PrismPackagesAndLegacyCompositionBridgesAreRemoved()
     {
-        var bridgePath = Path.Combine(RepositoryRoot, "DownKyi", "Composition", "LegacyDesktopComposition.cs");
-        var bridge = File.ReadAllText(bridgePath);
+        var projectSource = File.ReadAllText(Path.Combine(RepositoryRoot, "DownKyi", "DownKyi.csproj"));
+        var desktopRoot = Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop");
+        var packageSource = File.ReadAllText(Path.Combine(RepositoryRoot, "Directory.Packages.props"));
 
-        Assert.Contains("PR 25-29", bridge, StringComparison.Ordinal);
+        Assert.DoesNotContain("Prism", projectSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("Prism", packageSource, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(
+            desktopRoot,
+            "Composition",
+            "LegacyDesktopComposition.cs")));
+        Assert.False(File.Exists(Path.Combine(
+            desktopRoot,
+            "Composition",
+            "LegacyPrismComposition.cs")));
+    }
+
+    [Fact]
+    public void ExecutableProjectIsOnlyTheDesktopBootstrap()
+    {
+        var executableRoot = Path.Combine(RepositoryRoot, "DownKyi");
+        var projectPath = Path.Combine(executableRoot, "DownKyi.csproj");
+        var sourceFiles = Directory
+            .EnumerateFiles(executableRoot, "*.cs", SearchOption.AllDirectories)
+            .Where(path => !IsUnderDirectory(path, "bin"))
+            .Where(path => !IsUnderDirectory(path, "obj"))
+            .Select(path => Path.GetRelativePath(executableRoot, path).Replace('\\', '/'))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        var project = XDocument.Load(projectPath);
+        var references = project
+            .Descendants("ProjectReference")
+            .Select(element => (string?)element.Attribute("Include"))
+            .Where(include => !string.IsNullOrWhiteSpace(include))
+            .Cast<string>()
+            .Select(include => include.Replace('\\', '/'))
+            .Select(Path.GetFileNameWithoutExtension)
+            .Cast<string>()
+            .ToArray();
+
+        Assert.Equal(["Program.cs"], sourceFiles);
+        Assert.Equal(["DownKyi.Desktop"], references);
+        Assert.Empty(project.Descendants("PackageReference"));
+        Assert.Empty(project.Descendants("AvaloniaResource"));
     }
 
     private static string GetTargetProjectPath(string projectName)
     {
         return Directory
             .EnumerateFiles(RepositoryRoot, $"{projectName}.csproj", SearchOption.AllDirectories)
+            .Where(IsRepositorySourcePath)
             .Single(path => !IsUnderDirectory(path, "tests"));
     }
 
@@ -209,6 +252,7 @@ public sealed class ProjectDependencyTests
     {
         var projects = Directory
             .EnumerateFiles(RepositoryRoot, "*.csproj", SearchOption.AllDirectories)
+            .Where(IsRepositorySourcePath)
             .Where(path => !IsUnderDirectory(path, "tests"))
             .Where(path => !IsUnderDirectory(path, "benchmarks"))
             .ToArray();
@@ -259,6 +303,14 @@ public sealed class ProjectDependencyTests
     {
         var marker = Path.DirectorySeparatorChar + directoryName + Path.DirectorySeparatorChar;
         return path.Contains(marker, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsRepositorySourcePath(string path)
+    {
+        return !IsUnderDirectory(path, ".git") &&
+               !IsUnderDirectory(path, ".tools") &&
+               !IsUnderDirectory(path, "bin") &&
+               !IsUnderDirectory(path, "obj");
     }
 
     private static string FindRepositoryRoot()

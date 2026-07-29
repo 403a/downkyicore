@@ -2,39 +2,16 @@
     <PropertyGroup>
         <OutputType>WinExe</OutputType>
         <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
         <ApplicationManifest>app.manifest</ApplicationManifest>
-        <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
-        <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>
-        <ApplicationIcon>Resources\favicon.ico</ApplicationIcon>
+        <ApplicationIcon>..\src\DownKyi.Desktop\Resources\favicon.ico</ApplicationIcon>
         <TieredCompilation>true</TieredCompilation>
         <TieredPGO>true</TieredPGO>
         <TC_QuickJitForLoops>true</TC_QuickJitForLoops>
         <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
     </PropertyGroup>
-    
     <ItemGroup>
-        <AvaloniaResource Include="Resources\**"/>
-    </ItemGroup>
-
-    <ItemGroup>
-        <PackageReference Include="Avalonia"/>
-        <PackageReference Include="Avalonia.Controls.DataGrid"/>
-        <PackageReference Include="Avalonia.Desktop"/>
-        <!--Condition below keeps the Avalonia developer tooling bridge out of Release output.-->
-        <PackageReference Condition="'$(Configuration)' == 'Debug'" Include="AvaloniaUI.DiagnosticsSupport"/>
-        <PackageReference Include="Avalonia.Themes.Simple"/>
-        <PackageReference Include="Downloader"/>
-        <PackageReference Include="Prism.Avalonia"/>
-        <PackageReference Include="Prism.DryIoc.Avalonia"/>
-        <PackageReference Include="Xaml.Behaviors"/>
-        <PackageReference Include="System.Formats.Nrbf"/>
-    </ItemGroup>
-
-
-    <ItemGroup>
-        <ProjectReference Include="..\DownKyi.Core\DownKyi.Core.csproj"/>
         <ProjectReference Include="..\src\DownKyi.Desktop\DownKyi.Desktop.csproj" />
     </ItemGroup>
 </Project>

@@ -1,0 +1,22 @@
+using Avalonia.Styling;
+using DownKyi.Core.Settings;
+
+namespace DownKyi.Utils;
+
+internal static class ThemeHelper
+{
+    public static void SetTheme(ThemeMode themeMode)
+    {
+        var themeVariant = themeMode switch
+        {
+            ThemeMode.Default => ThemeVariant.Default,
+            ThemeMode.Dark => ThemeVariant.Dark,
+            ThemeMode.Light => ThemeVariant.Light,
+            _ => ThemeVariant.Dark
+        };
+        if (Avalonia.Application.Current is { } application)
+        {
+            application.RequestedThemeVariant = themeVariant;
+        }
+    }
+}

@@ -30,12 +30,12 @@
     }
   },
   "ffmpeg": {
-    "version": "btbn-autobuild-2026-07-08-13-30_martin-riedl-2026-07",
-    "repository": "Windows/Linux: https://github.com/BtbN/FFmpeg-Builds; macOS: https://ffmpeg.martin-riedl.de",
+    "version": "btbn-autobuild-2026-07-08-13-30_ytdlp-autobuild-2026-07-12-15-07_martin-riedl-2026-07",
+    "repository": "Windows x64/Linux: https://github.com/BtbN/FFmpeg-Builds; Windows x86: https://github.com/yt-dlp/FFmpeg-Builds; macOS: https://ffmpeg.martin-riedl.de",
     "assets": {
       "win-x86": {
-        "url": "https://github.com/yaobiao131/downkyi-ffmpeg-build/releases/download/continuous/ffmpeg-i686-w64-mingw32_static.zip",
-        "sha256": "969a75924bfaa642d54dafea771cc1cf77103915428b1eaeac061eda7f837471"
+        "url": "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/autobuild-2026-07-12-15-07/ffmpeg-N-125551-ga09be9b91e-win32-gpl.zip",
+        "sha256": "a794b4229a64f2cef817c20c0f2a3bf6c2cf20e5ec527f6b6893e6e7a6ec5e26"
       },
       "win-x64": {
         "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-08-13-30/ffmpeg-N-125505-gc57660fb18-win64-gpl.zip",
@@ -49,14 +49,18 @@
         "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-08-13-30/ffmpeg-N-125505-gc57660fb18-linuxarm64-gpl.tar.xz",
         "sha256": "e7f52bcc7a42fef23a104b75b87462ba3588aa168f937115471b5200eed7ccb2"
       },
-      "osx-x64": {
-        "url": "https://ffmpeg.martin-riedl.de/download/macos/amd64/1767299902_N-122320-g38e89fe502/ffmpeg.zip",
-        "sha256": "6f0736d424b7426f8cbb7bba5c5448d94c976c138c669593b1f40ba534ed192f"
-      },
-      "osx-arm64": {
-        "url": "https://ffmpeg.martin-riedl.de/download/macos/arm64/1783164229_N-125450-gfad2e0bc50/ffmpeg.zip",
-        "sha256": "b5ce8b77f8c0686e4f68a46f8e4d094fe7e6f4ded50bcfacd9944ad1efdf66e9"
-      }
+        "osx-x64": {
+          "url": "https://ffmpeg.martin-riedl.de/download/macos/amd64/1767299902_N-122320-g38e89fe502/ffmpeg.zip",
+          "sha256": "6f0736d424b7426f8cbb7bba5c5448d94c976c138c669593b1f40ba534ed192f",
+          "ffprobeUrl": "https://ffmpeg.martin-riedl.de/download/macos/amd64/1767299902_N-122320-g38e89fe502/ffprobe.zip",
+          "ffprobeSha256": "46852ce00ae6f722ed30be269f310ea96c106a4246f2905d3147c5e02293081c"
+        },
+        "osx-arm64": {
+          "url": "https://ffmpeg.martin-riedl.de/download/macos/arm64/1783164229_N-125450-gfad2e0bc50/ffmpeg.zip",
+          "sha256": "b5ce8b77f8c0686e4f68a46f8e4d094fe7e6f4ded50bcfacd9944ad1efdf66e9",
+          "ffprobeUrl": "https://ffmpeg.martin-riedl.de/download/macos/arm64/1783164229_N-125450-gfad2e0bc50/ffprobe.zip",
+          "ffprobeSha256": "fadcf23296a4b57921c70d6d7d8b9930a4c8d4e0658b8e696f188bae1dcc47d8"
+        }
     }
   }
 }
