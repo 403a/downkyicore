@@ -2,8 +2,8 @@
 
 Status: active
 Last updated: 2026-07-29
-Current group: Gate 10 integrate main and release v1.1.0
-Current branch: `release/v1.1.0-integration`
+Current group: Gate 10 Windows lifecycle blocker and corrective release
+Current branch: `fix/windows-test-host-shutdown`
 
 This file contains only unfinished or not-yet-integrated work. Completed Gate
 1-9 detail is retained in `docs/maintenance.md`, design documents and Git
@@ -67,8 +67,53 @@ history, not repeated here.
   Cache, Storage, Cookie, database or other user-data paths. Same-RID package
   manifests agree, and remote Windows asset hashes match the repository
   catalog.
-- Final remote and package validation is not complete, so no tag may be
-  created.
+- PR #112 is merged into `main` at `fcc1d226`; its tree exactly matches the
+  tested integration head. Annotated tag `v1.1.0` points to that immutable
+  commit.
+- Tag workflow `30434000154` attempt 1 exposed a Windows lifecycle race before
+  Desktop test discovery. The xUnit `-assemblyInfo` child printed valid JSON
+  and then `Waiting 10 seconds for foreground threads to exit`, corrupting the
+  runner protocol. Attempt 2 passed, but a successful rerun is not accepted as
+  evidence that the foreground-thread owner has been fixed.
+- The release produced by attempt 2 was immediately returned to draft. Package
+  publication is frozen until the thread owner, test-host teardown and
+  production Host shutdown path are verified and corrected.
+- Local unmodified baselines currently pass 200 sequential and 400 concurrent
+  `-assemblyInfo` process runs plus 50 full Desktop test runs. This establishes
+  that the failure is intermittent; it does not close the blocker.
+- The foreground output owner is now identified: the old test-data module
+  initializer registered synchronous recursive cleanup on `ProcessExit`, and
+  the xUnit v3 watchdog emitted its foreground-thread warning after valid
+  `-assemblyInfo` JSON. Test isolation is now an async assembly fixture.
+- Desktop tests use Avalonia's assembly-scoped headless xUnit session instead
+  of a custom foreground Dispatcher thread. Production desktop shutdown awaits
+  App, Host and runtime disposal; the production Host smoke also exposed and
+  fixed a pooled SQLite connection surviving store disposal.
+- The Assembly Lifecycle Stability Gate now probes load, assembly info,
+  discovery, execution, assembly teardown and process exit in independent
+  children. Its ownership audit covers production/test/benchmark/tool owners,
+  and Windows delay forensics captures process/thread state and managed stacks.
+- The historical schema 1 local Verification passed all seven test assemblies for five
+  iterations: 211 phase results, zero failures, zero unknown owners, teardown
+  at no more than 65 ms and process exit at no more than 170 ms on this Windows x64
+  worktree. The report is deliberately marked dirty and is not release evidence.
+- Review of that schema 1 report found that marker-aware execution was excluded
+  from slow-phase capture and that process-exit used the collector observation
+  time. Schema 2 captures every phase at the unchanged five-second threshold,
+  fails unexplained missing evidence, separates execution/exit/timeout evidence
+  and measures process exit from the fixture marker to OS `Process.ExitTime`.
+- The first real execution stack identified a separate Windows delay:
+  protocol-relative `//host/path` artwork was passed to `File.Exists` as a UNC
+  path before HTTP classification. External image sources are now classified
+  first; the focused image tests run in 172 ms and a subsequent full
+  `DownKyi.Tests` execution completes in 1.893 seconds without crossing the
+  slow threshold.
+- Schema 2 formal local Verification now passes all seven assemblies for five
+  iterations with 211 phase results, zero failures, zero unowned mechanisms,
+  zero real slow phases and zero missing evidence. Teardown is at most 2 ms,
+  OS-measured process exit is at most 15 ms, and `DownKyi.Tests` execution is
+  1.685-1.716 seconds across the five runs. The 774.833 ms diagnostic capture
+  time belongs to the deliberate marker-aware forensics self-test.
 
 ## Gate 10 Checklist
 
@@ -90,10 +135,30 @@ history, not repeated here.
       map, completed segment keys and resume fixtures remain green.
 - [x] Confirm the source candidate and inspected packages contain no
       credential, account data, Config, Logs, Cache, Storage or user database.
-- [ ] Merge the integration PR into `main`.
-- [ ] Verify clean `main` points at the tested integration tree.
-- [ ] Create tag `v1.1.0` once, wait for the tag workflow, inspect its release
-      artifacts and checksums, then publish curated release notes.
+- [x] Merge the integration PR into `main`.
+- [x] Verify clean `main` points at the tested integration tree.
+- [x] Create immutable annotated tag `v1.1.0` and run the tag workflow.
+- [x] Identify the owner of the intermittent Windows foreground thread; record
+      whether it belongs to xUnit discovery, the Avalonia test Dispatcher, a
+      hosted service or production application lifecycle.
+- [x] Replace the custom headless Avalonia foreground thread with the official
+      assembly-scoped headless test session and deterministic async teardown.
+- [x] Exercise production-style Host startup, shutdown and desktop-lifetime
+      exit with bounded completion assertions.
+- [x] Add the ownership audit, six-phase Assembly Lifecycle Stability Gate,
+      automatic Windows timeout forensics and blocking PR/main/rehearsal jobs.
+- [x] Pass the formal local five-iteration lifecycle Verification with managed
+      stack forensics validated and retain its machine-readable report.
+- [x] Correct schema 1 timing/evidence ambiguities and prove marker-aware
+      execution captures a managed stack at the unchanged slow threshold.
+- [x] Remove protocol-relative image UNC probing and add a bounded regression
+      test so `//host/path` reaches HTTPS without blocking local file lookup.
+- [ ] Repeat Windows assembly-info and Desktop/full-solution tests enough to
+      make the original race observable if it remains.
+- [ ] Pass a new strict PR quality run and a complete manual release rehearsal
+      on the corrected commit.
+- [ ] Keep `v1.1.0` immutable. Document the withdrawn draft and publish a
+      corrective version only after every lifecycle and release gate is green.
 
 ## Stable Contracts
 
@@ -121,6 +186,14 @@ dotnet build ./DownKyi.sln -c Release --no-restore --no-incremental `
   -p:EnforceCodeStyleInBuild=true -p:TreatWarningsAsErrors=true `
   -p:CodeAnalysisTreatWarningsAsErrors=true
 pwsh ./script/test-solution.ps1 -Configuration Release -NoRestore -NoBuild
+pwsh ./script/audit-lifecycle-ownership.ps1 `
+  -OutputDirectory ./artifacts/assembly-lifecycle/ownership
+pwsh ./script/test-assembly-lifecycle.ps1 `
+  -Configuration Release `
+  -Iterations 5 `
+  -NoBuild `
+  -ValidateForensics `
+  -ResultsDirectory ./artifacts/assembly-lifecycle/verification
 dotnet format ./DownKyi.sln --verify-no-changes --no-restore
 pwsh ./script/audit-module-boundaries.ps1
 dotnet package list --project ./DownKyi.sln --vulnerable --include-transitive
@@ -131,10 +204,13 @@ git diff --check
 
 ## Completion
 
-Gate 10 is complete only when the tested tree is merged into `main`, tag
-`v1.1.0` points to that release commit, every release package is validated, the
-GitHub Release is published with checksums and curated notes, and this file is
-updated or removed from the next development branch.
+Gate 10 is complete only when the Windows foreground-thread owner is identified,
+the relevant test and production teardown paths are deterministic, the formal
+five-iteration Verification report passes, the release `Rehearsal` profile
+runs at least 50 iterations per assembly with diagnostics enabled, a complete
+rehearsal passes on the corrected commit, and the corrective GitHub Release is
+published with validated artifacts and notes. A successful blind rerun is not
+completion evidence.
 
 ## Rollback
 

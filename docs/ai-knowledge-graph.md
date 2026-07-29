@@ -141,6 +141,8 @@ flowchart TD
     Release["workflow.release-packaging\n.github/workflows/build.yml"]
     Nightly["workflow.system-baselines\nnightly cross-platform reports"]
     AnalyzerInventory["workflow.analyzer-inventory\nscript/analyzer-inventory.ps1"]
+    LifecycleGate["workflow.assembly-lifecycle\nload + discovery + execution + teardown + exit"]
+    LifecycleOwners["doc.lifecycle-owners\nmachine-readable start/stop/teardown policy"]
 
     Program -->|calls| App
     App -->|creates| Host
@@ -168,6 +170,12 @@ flowchart TD
     SystemBenchmarks -->|measures| DownloadService
     SystemBenchmarks -->|measures| FFmpeg
     Nightly -->|runs| SystemBenchmarks
+    CI -->|runs PR and main profiles| LifecycleGate
+    Release -->|runs rehearsal profile| LifecycleGate
+    LifecycleOwners -->|governs| LifecycleGate
+    LifecycleGate -->|guards| Tests
+    LifecycleGate -->|guards| Host
+    LifecycleGate -->|guards| SqliteStore
     MainWindow -->|binds| MainVm
     MainVm -->|navigates through| Navigation
     MainWindow -->|awaits close cleanup| Lifecycle
@@ -2306,10 +2314,12 @@ outbound:
 contracts:
   - URI scheme access is allowed only after absolute-URI validation.
   - Protocol-relative image addresses are normalized to HTTPS only at the image-loader boundary; raw Bilibili wire-model strings remain unchanged.
+  - External and protocol-relative sources are classified before local file probing so Windows never treats `//host/path` as a blocking UNC lookup.
   - Ordinary relative sources remain Avalonia asset candidates and are never sent as HTTP requests.
   - Malformed, unavailable, unauthorized, or missing image sources return `null` so the control can retain its fallback instead of faulting the binding task.
 hazards:
   - Treating `//host/path` as an Avalonia relative asset can throw before remote fallback begins.
+  - Calling `File.Exists` before classifying `//host/path` can block a test or UI image load on Windows UNC resolution.
   - Globally rewriting API address fields would alter external wire contracts and cache identity.
 tests:
   - test.image-loader
@@ -2329,6 +2339,7 @@ inbound:
   - github.pull_request
 outbound:
   - test.suites
+  - workflow.assembly-lifecycle
 contracts:
   - PR CI should block definite failures.
   - Nightly/release workflows should own heavy or noisy regression discovery.
@@ -2338,12 +2349,52 @@ contracts:
   - Cleaned analyzer rules are promoted to errors and cannot regress.
   - Test projects run in stable path order so one constrained runner cannot make independent xUnit hosts starve one another during discovery or shutdown.
   - Every test project writes a distinct assembly-named TRX; no solution-level logger filename may overwrite earlier project evidence.
+  - Windows PR and main jobs must run the Assembly Lifecycle Stability Gate and upload its reports even when a phase fails.
 hazards:
   - Turning every historical analyzer suggestion into PR failure makes unrelated PRs impossible.
   - Broad NoWarn, global suppressions, nullable disable, or analyzer exclusions hide new defects.
   - Restoring one parallel solution-level `dotnet test` command can reintroduce Windows foreground-thread timeouts and TRX overwrite.
 tests:
   - github.actions
+```
+
+### workflow.assembly-lifecycle
+
+```yaml
+id: workflow.assembly-lifecycle
+type: workflow
+paths:
+  - script/audit-lifecycle-ownership.ps1
+  - script/test-assembly-lifecycle.ps1
+  - tools/DownKyi.AssemblyLifecycleProbe
+  - tests/TestInfrastructure
+  - tests/DownKyi.Architecture.Tests/AssemblyLifecycleArchitectureTests.cs
+  - docs/testing/assembly-lifecycle-owners.json
+  - docs/testing/assembly-lifecycle-stability.md
+responsibility: Proves that every test assembly can load, report metadata, discover, execute, tear down and exit in isolated child processes without protocol pollution, unknown lifecycle ownership or residual work.
+inbound:
+  - workflow.strict-pr-ci
+  - workflow.release-packaging
+outbound:
+  - test.suites
+  - app.application
+  - storage.sqlite-download-task-store
+contracts:
+  - Formal local Verification runs the ownership audit and five iterations per assembly with timeout forensics validated.
+  - PR, main and release profiles run 3, 50 and 100 iterations per assembly; release evidence must never drop below 50.
+  - Every report identifies runtime, OS, architecture, commit SHA, dirty-worktree state, thresholds, phase exit codes, slow-evidence status and P50/P95/P99/max durations.
+  - Execution duration includes runner startup through OS process exit; teardown uses fixture marker timestamps, while process-exit uses the child's OS ExitTime and excludes collector overhead.
+  - Marker-aware execution phases are sampled at the unchanged slow threshold; missing slow evidence is a gate failure rather than an unexplained empty array.
+  - Diagnostic capture wall time is reported separately because managed-stack collection perturbs the instrumented phase; slow execution evidence cannot be presented as post-teardown exit evidence.
+  - Unexpected stdout/stderr, timeout, residual child process, missing teardown marker or failed process exit blocks the gate.
+  - Slow and timed-out Windows processes preserve thread state, wait reason, process tree and a managed stack when `dotnet-stack` is available.
+  - Every scanned lifecycle mechanism maps to a declared owner with explicit start, stop and teardown behavior.
+hazards:
+  - A green rerun can hide a race and does not replace owner identification or deterministic teardown.
+  - Comparing timing from different runner metadata creates invalid performance conclusions.
+tests:
+  - test.assembly-lifecycle-architecture
+  - workflow-generated assembly lifecycle report
 ```
 
 ### workflow.analyzer-inventory
@@ -2446,6 +2497,7 @@ outbound:
   - github.release
 contracts:
   - Windows, Linux, and macOS run strict Release build and all tests before changelog or package jobs can start.
+  - Changelog and package jobs also require the Windows `Rehearsal` lifecycle profile to pass and upload evidence.
   - Manual dispatch builds and uploads the same packages without publishing a GitHub Release; tag execution alone may create the Release.
   - Each RID validates a fixed publish directory containing non-empty DownKyi, aria2, FFmpeg, ffprobe, and dependency-manifest files.
   - Publish validation checks the expected assembly version, requires Fluent, rejects Simple, and emits per-file SHA-256 values.
@@ -3007,6 +3059,8 @@ test.ui-smoke:
     - the public-favorites back arrow resolves to visible black and white brushes under Light and Dark theme variants
     - Host creation does not redirect database, settings, login, portable-mode, or aria2 paths
     - production AppBuilder can be created
+    - the production Host starts, stops and disposes every owned runtime within bounded deadlines
+    - disposing SQLite download storage clears only its owned connection pool so the process can exit without retaining the database
 
 test.composition-root:
   paths:
@@ -3075,12 +3129,26 @@ test.application-lifetime:
   guards:
     - application shutdown cancels every linked operation
     - caller cancellation does not cancel unrelated work or global shutdown
-    - lifecycle shutdown is idempotent, stops Host-owned work, and flushes settings/log state once
+  - lifecycle shutdown is idempotent, stops Host-owned work, and flushes settings/log state once
+  - App teardown detaches process-wide exception handlers and still disposes later owners when an earlier shutdown or disposal step fails
     - a known hosted-service stop failure is logged but cannot strand the main window in a canceled close
     - a restart-helper launch failure leaves the current application running
     - helper arguments accept only one positive parent PID and use `ProcessStartInfo.ArgumentList`
     - single-instance names are stable per install, do not expose the install path, and can be reacquired after disposal
     - ViewModels cannot regain App, desktop lifetime, or process-restart ownership
+
+test.assembly-lifecycle-architecture:
+  paths:
+    - tests/DownKyi.Architecture.Tests/AssemblyLifecycleArchitectureTests.cs
+    - tests/TestInfrastructure/TestDataIsolation.cs
+    - tests/TestInfrastructure/TestDataIsolationRegistration.cs
+  guards:
+    - every test assembly receives async fixture-owned data isolation without ModuleInitializer or ProcessExit cleanup
+    - the lifecycle gate retains all six process phases, timing statistics, output-pollution checks and timeout forensics
+    - PR, main and release workflows cannot drop their lifecycle profiles or managed-stack diagnostics
+    - formal Verification cannot omit the ownership audit, five-iteration local gate or Rehearsal report
+    - Desktop main-loop teardown awaits async App and Host disposal
+    - every declared lifecycle owner documents start, stop, teardown, paths and allowed mechanisms
 
 test.infrastructure-clock:
   paths:

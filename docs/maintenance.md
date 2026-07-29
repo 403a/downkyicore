@@ -15,12 +15,33 @@ Avoid mixing package updates with large refactors unless the refactor is require
 
 ## CI Policy
 
+Assembly/process lifecycle is a separate quality dimension from test
+assertions. Run `script/audit-lifecycle-ownership.ps1` after changing any
+thread, Dispatcher, timer, Host, global event, fixture or external-process
+owner. Run `script/test-assembly-lifecycle.ps1` before release; its PR, main and
+rehearsal profiles execute 3, 50 and 100 iterations per test assembly. The
+contract, diagnostics and report schema are documented in
+`docs/testing/assembly-lifecycle-stability.md`.
+
+Formal local verification runs the ownership audit followed by five iterations
+per test assembly with `-ValidateForensics`. The release workflow uses the
+`Rehearsal` profile and writes the full 100-iteration report below
+`artifacts/assembly-lifecycle/release`; neither step may be replaced by a
+successful one-off rerun.
+
+Lifecycle report schema 2 uses the child OS `Process.ExitTime` for post-fixture
+exit, captures marker-aware execution at the unchanged slow threshold, records
+diagnostic collection wall time, and fails a slow phase whose evidence is
+missing. Schema 1 exit values include collector overhead and are historical
+only; do not compare them directly with schema 2.
+
 Pull requests are guarded by `.github/workflows/quality.yml`:
 
 - format check with `dotnet format --verify-no-changes --verbosity diagnostic`
 - Windows, Linux, and macOS Release builds
 - compiler and all `AnalysisMode=All` CA diagnostics treated as errors
 - unit tests with uploaded TRX reports
+- assembly load/info/discovery/execution/teardown/exit stability on Windows
 - transitive vulnerable package audit
 - deprecated package report
 
