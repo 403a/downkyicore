@@ -199,14 +199,15 @@ history, not repeated here.
   five-second classification stays unchanged; capture now arms 1,000 ms early.
   Its held-child test uses a 1.25-second synthetic threshold, proving the full
   lead dynamically instead of passing through a zero-clamped arm.
-- The dirty-worktree local candidate passes strict `AnalysisMode=All` build
-  with zero warnings/errors, all 731 tests, format, module boundaries,
+- Clean code commit `ca8103e` passes strict `AnalysisMode=All` build with zero
+  warnings/errors, all 731 tests, format, module boundaries,
   vulnerable/deprecated dependency audits, Gitleaks and diff checks. Its
   five-iteration lifecycle run covers seven assemblies and 213 phases with
-  zero failures, eight slow phases, eight evidence captures, zero missing
-  evidence and zero real residual processes. Both dynamic self-tests pass.
-  Diagnostic collection consumed 20,859.884 ms in total and remains separately
-  disclosed; exact-commit PR and Main evidence are still required.
+  zero failures, seven slow phases, seven evidence captures, zero missing
+  evidence and zero real residual processes. Both dynamic self-tests pass;
+  teardown is at most 7 ms and OS process exit is at most 75 ms. Diagnostic
+  collection consumed 19,765.952 ms in total and remains separately disclosed;
+  exact-commit PR and Main evidence are still required.
 
 ## Gate 10 Checklist
 
