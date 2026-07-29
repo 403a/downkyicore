@@ -13,7 +13,18 @@ public static class DesktopApplication
             return;
         }
 
-        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        var appBuilder = BuildAvaloniaApp();
+        try
+        {
+            appBuilder.StartWithClassicDesktopLifetime(args);
+        }
+        finally
+        {
+            if (appBuilder.Instance is IAsyncDisposable application)
+            {
+                await application.DisposeAsync().ConfigureAwait(false);
+            }
+        }
     }
 
     public static AppBuilder BuildAvaloniaApp()
