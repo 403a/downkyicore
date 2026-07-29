@@ -59,7 +59,8 @@ Current owner progress, pending PR integration:
 - Git history traces the source to DownKyi commit `587fcfb` (`add the aria2cNet sources`, 2020-12-26). No generator, external package, or separate upstream sync source exists; it is hand-maintained project protocol code.
 - The 1,119-line owner is split into transport core, download control, status/URI, options, lifecycle and `system.*` partials, all below 500 lines, without changing public signatures.
 - A deterministic contract inventory invokes every public RPC method and verifies JSON-RPC version, request ID, method name and token placement. It exposed and fixed the pre-existing `ChangeUriAsync` mapping to `aria2.changePosition`; the method now correctly emits `aria2.changeUri`.
-- Strict `AnalysisMode=All` Release build has zero warnings/errors and all 713 tests pass across seven test projects. Format changed 0/849 files; the boundary audit reports zero oversized production files; vulnerable/deprecated package audits, `git diff --check`, and the 985-candidate Gitleaks scan pass. Remote Windows/Linux/macOS quality and CodeQL gates remain before integration.
+- Strict `AnalysisMode=All` Release build has zero warnings/errors and all 713 tests pass across seven test projects. Format changed 0/849 files; the boundary audit reports zero oversized production files; vulnerable/deprecated package audits, `git diff --check`, and the 985-candidate Gitleaks scan pass.
+- PR #111 implementation head passed Windows/Linux/macOS quality run `30424513258` and CodeQL run `30424513284`; all seven checks had zero annotations and every platform retained seven distinct assembly-named TRX artifacts. The final documentation head must repeat the remote gates before integration.
 
 Verification:
 
