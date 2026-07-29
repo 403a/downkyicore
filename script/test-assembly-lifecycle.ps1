@@ -47,6 +47,8 @@ $script:markerReadContentionCount = 0
 $script:markerReadRetriesExhaustedCount = 0
 $script:markerReadErrorCount = 0
 $script:markerReadErrorType = $null
+$slowEvidenceCaptureLeadMilliseconds = 100
+$forensicsSelfTestCaptureLeadValidated = $false
 $markerReaderSelfTestRequired = $IsWindows -and
     @("PR", "Main", "Rehearsal", "Flaky").Contains($Profile)
 $markerReaderSelfTestComplete = $false
@@ -481,8 +483,12 @@ function Invoke-IsolatedProcess {
     $slowEvidenceCaptured = $false
     $slowEvidenceStatus = "not-triggered"
     $slowEvidenceErrorType = $null
+    $slowEvidenceTriggeredBeforeThreshold = $false
     $exitEvidenceCaptured = $false
     $teardownObservedAt = $null
+    $evidenceCaptureThresholdSeconds = [Math]::Max(
+        0,
+        $EvidenceThresholdSeconds - ($slowEvidenceCaptureLeadMilliseconds / 1000))
     try {
         if (-not $process.Start()) {
             throw "Process did not start for $AssemblyName/$Phase."
@@ -494,8 +500,9 @@ function Invoke-IsolatedProcess {
         $stderrTask = $process.StandardError.ReadToEndAsync()
         while (-not $process.WaitForExit(25)) {
             if (-not $slowEvidenceAttempted -and
-                $stopwatch.Elapsed.TotalSeconds -ge $EvidenceThresholdSeconds) {
-                $slowThresholdExceeded = $true
+                $stopwatch.Elapsed.TotalSeconds -ge $evidenceCaptureThresholdSeconds) {
+                $slowEvidenceTriggeredBeforeThreshold =
+                    $stopwatch.Elapsed.TotalSeconds -lt $EvidenceThresholdSeconds
                 $slowEvidenceAttempted = $true
                 $captureStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
                 try {
@@ -620,6 +627,8 @@ function Invoke-IsolatedProcess {
             slowThresholdExceeded = $slowThresholdExceeded
             slowEvidenceStatus = $slowEvidenceStatus
             slowEvidenceErrorType = $slowEvidenceErrorType
+            slowEvidenceTriggeredBeforeThreshold =
+                $slowEvidenceTriggeredBeforeThreshold
             processExitedAtUnixMs = $processExitedAtUnixMs
             observedAtUnixMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
         }
@@ -748,6 +757,8 @@ function New-ProcessPhaseResult {
         slowThresholdExceeded = $ProcessResult.slowThresholdExceeded
         slowEvidenceStatus = $ProcessResult.slowEvidenceStatus
         slowEvidenceErrorType = $ProcessResult.slowEvidenceErrorType
+        slowEvidenceTriggeredBeforeThreshold =
+            $ProcessResult.slowEvidenceTriggeredBeforeThreshold
     }
 }
 
@@ -900,7 +911,10 @@ if ($ValidateForensics) {
     )
     $forensicsValid = $selfTestPhase.success -and
         $evidenceReports.Count -gt 0 -and
-        @($evidenceReports | Where-Object { $_.managedStack.captured -eq $true }).Count -gt 0
+        @($evidenceReports | Where-Object { $_.managedStack.captured -eq $true }).Count -gt 0 -and
+        $selfTest.slowEvidenceTriggeredBeforeThreshold
+    $forensicsSelfTestCaptureLeadValidated =
+        $selfTest.slowEvidenceTriggeredBeforeThreshold
     $phaseResults += [pscustomobject]@{
         assembly = "Gate.Forensics"
         iteration = 1
@@ -926,6 +940,8 @@ if ($ValidateForensics) {
         slowThresholdExceeded = $false
         slowEvidenceStatus = "not-applicable"
         slowEvidenceErrorType = $null
+        slowEvidenceTriggeredBeforeThreshold =
+            $selfTest.slowEvidenceTriggeredBeforeThreshold
     }
 
     if ($IsWindows) {
@@ -1094,6 +1110,7 @@ if ($ValidateForensics) {
             slowThresholdExceeded = $false
             slowEvidenceStatus = "not-applicable"
             slowEvidenceErrorType = $null
+            slowEvidenceTriggeredBeforeThreshold = $false
         }
 
         $script:markerReadContentionCount = 0
@@ -1219,6 +1236,7 @@ foreach ($testProject in $testProjects) {
             slowThresholdExceeded = $false
             slowEvidenceStatus = "not-applicable"
             slowEvidenceErrorType = $null
+            slowEvidenceTriggeredBeforeThreshold = $false
         }
         $exitSucceeded = $execution.exitCode -eq 0 -and
             -not $execution.timedOut -and
@@ -1248,6 +1266,7 @@ foreach ($testProject in $testProjects) {
             slowThresholdExceeded = $false
             slowEvidenceStatus = "not-applicable"
             slowEvidenceErrorType = $null
+            slowEvidenceTriggeredBeforeThreshold = $false
         }
     }
 }
@@ -1285,6 +1304,9 @@ $report = [ordered]@{
     testAssemblyCount = $testProjects.Count
     phaseTimeoutSeconds = $PhaseTimeoutSeconds
     slowPhaseThresholdSeconds = $SlowPhaseThresholdSeconds
+    slowEvidenceCaptureLeadMilliseconds = $slowEvidenceCaptureLeadMilliseconds
+    forensicsSelfTestCaptureLeadValidated =
+        $forensicsSelfTestCaptureLeadValidated
     exitThresholdSeconds = $ExitThresholdSeconds
     diagnosticsTool = if ($null -eq $script:diagnosticsTool) {
         "unavailable"
@@ -1338,6 +1360,9 @@ $markdown.Add(
     "- Slow phase evidence: $slowEvidenceCapturedCount captured, " +
     "$slowEvidenceMissingCount missing")
 $markdown.Add("- Diagnostic capture wall time: $diagnosticCaptureTotalMs ms")
+$markdown.Add(
+    "- Forensics pre-threshold capture self-test: " +
+    "$forensicsSelfTestCaptureLeadValidated")
 $markdown.Add("- Marker read contentions: $script:markerReadContentionCount")
 $markdown.Add("- Marker read retry exhaustion: $script:markerReadRetriesExhaustedCount")
 $markdown.Add(

@@ -18,6 +18,8 @@ Audit JSON 記錄 commit SHA、source metrics 與目前 boundary markers，供 A
 ```powershell
 dotnet restore ./DownKyi.sln
 
+pwsh ./script/validate-release-version.ps1
+
 dotnet build ./DownKyi.sln `
   -c Release `
   --no-restore `
@@ -94,11 +96,24 @@ catalog 檔案加入 output/publish；自訂 RID 不得跨 ProjectReference。
 sidecar，並檢查 manifest、版本、必要 binary、Fluent theme 與使用者
 資料排除。
 
-v1.1.0 的通過證據是 rehearsal `30431043860`：三個 release gate、九個
-package job 全部成功，手動 dispatch 的 release job 正確跳過。九個
-sidecar、九個 manifest 與所有 zip/deb/rpm/AppImage/DMG 實際內容都已
-檢查；相同 RID 的 manifest hash 一致，必要 runtime 完整，且沒有
-Config、Logs、Cache、Storage、Cookie 或資料庫路徑。
+歷史 rehearsal `30431043860` 證明 v1.1.0 candidate 的三個 release
+gate、九個 package job、sidecar、manifest 與實際套件內容正確；它不是
+正式發布證據。後續 tag workflow 暴露偶發 Windows test-host 前台執行緒，
+因此 v1.1.0 draft 已撤回，標籤保持不可變。
+
+修正後 main run `30450175286` 是 lifecycle 根因修正的 50 輪證據：
+七個 assembly 共 2,102 phase results，零失敗、零缺失 slow evidence、
+零 marker read error；teardown 最大 7 ms，OS process-exit 最大 187 ms。
+14 個超过五秒的 execution phase 均保存取证。v1.1.1 仍必须在最终版本
+commit 上完成 `Rehearsal` 100 轮与所有跨平台 package job，才能建立 tag。
+
+正式 tag 前及 workflow 中均執行：
+
+```powershell
+pwsh ./script/validate-release-version.ps1 -GitRef refs/tags/v1.1.1
+```
+
+這個檢查要求 tag 與 `version.txt` 完全一致；不得移動或重用既有 tag。
 
 登入態 API audit 只能由明確授權的 operator 執行：
 

@@ -56,6 +56,9 @@ public sealed class AssemblyLifecycleArchitectureTests
             "slowEvidenceStatus",
             "slowEvidenceComplete",
             "slowEvidenceMissingCount",
+            "slowEvidenceCaptureLeadMilliseconds",
+            "slowEvidenceTriggeredBeforeThreshold",
+            "forensicsSelfTestCaptureLeadValidated",
             "diagnosticCaptureDurationMs",
             "processExitedAtUnixMs",
             "markerReadContentionCount",
@@ -77,6 +80,22 @@ public sealed class AssemblyLifecycleArchitectureTests
         Assert.Contains("-LifecycleMarkerPath $selfTestMarker", source, StringComparison.Ordinal);
         Assert.DoesNotContain(
             "[string]::IsNullOrWhiteSpace($LifecycleMarkerPath) -and",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "$slowEvidenceCaptureLeadMilliseconds = 100",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "$EvidenceThresholdSeconds - ($slowEvidenceCaptureLeadMilliseconds / 1000)",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "$selfTest.slowEvidenceTriggeredBeforeThreshold",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "$forensicsSelfTestCaptureLeadValidated =",
             source,
             StringComparison.Ordinal);
     }
@@ -151,7 +170,7 @@ public sealed class AssemblyLifecycleArchitectureTests
     {
         var livePlan = Read("docs/refactoring-live-plan.md");
         var operations = Read("docs/operations/verification-and-rollback.md");
-        var releaseGate = Read("docs/product-specs/v1.1.0-release-gate.md");
+        var releaseGate = Read("docs/product-specs/v1.1.1-corrective-release-gate.md");
 
         Assert.Contains("audit-lifecycle-ownership.ps1", livePlan, StringComparison.Ordinal);
         Assert.Contains("-Iterations 5", livePlan, StringComparison.Ordinal);

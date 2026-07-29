@@ -3,7 +3,7 @@
 Status: active
 Last updated: 2026-07-29
 Current group: Gate 10 Windows lifecycle blocker and corrective release
-Current branch: `fix/windows-test-host-shutdown`
+Current branch: `release/v1.1.1-corrective`
 
 This file contains only unfinished or not-yet-integrated work. Completed Gate
 1-9 detail is retained in `docs/maintenance.md`, design documents and Git
@@ -136,6 +136,30 @@ history, not repeated here.
   phase, summary and gate now consume one complete proof result. Phase schema
   now has general `failureType` / `errorType`, so marker contract failures no
   longer masquerade as slow-evidence capture errors.
+- PR #116 is merged into `main` at `6a61247`. Strict PR CI
+  `30450175286` and CodeQL `30450175415` passed. The authoritative Main
+  lifecycle report ran all seven assemblies for 50 iterations: 2,102 phase
+  results, zero failures, zero missing slow evidence, zero marker read errors,
+  teardown at no more than 7 ms and OS process exit at no more than 187 ms.
+  All 14 slow execution phases retained diagnostics. The marker self-test
+  executed, observed two lock contentions, recovered, parsed the marker and
+  passed every mutation check.
+- `v1.1.0` remains an immutable audit tag; its GitHub Release draft is
+  withdrawn. The corrective candidate uses the sole version source `1.1.1`,
+  adds an exact tag/version contract and will publish only after a same-commit
+  Main 50 run plus the complete 100-iteration cross-platform rehearsal.
+- The first v1.1.1 local Verification exposed a gate-side threshold race:
+  Architecture execution exited normally at 5005.587 ms, but the 25 ms
+  monitor moved from below five seconds to an exited child and had no process
+  left to inspect. The five-second classification is unchanged; forensics is
+  now armed 100 ms early and the report discloses pre-threshold capture.
+- The corrected final local Verification passes all seven assemblies for five
+  iterations: 212 phase results, zero failures, five slow phases with five
+  evidence captures, and zero missing evidence. The deterministic capture-lead
+  self-test is true, the marker self-test observed two contentions with no
+  error, teardown is at most 2 ms and OS process exit is at most 145 ms. This
+  dirty-worktree report validates the candidate locally but is not release
+  evidence.
 
 ## Gate 10 Checklist
 
@@ -177,12 +201,14 @@ history, not repeated here.
       test so `//host/path` reaches HTTPS without blocking local file lookup.
 - [x] Make lifecycle marker sampling tolerate concurrent fixture writes and add
       an exclusive-lock recovery self-test.
-- [ ] Repeat Windows assembly-info and Desktop/full-solution tests enough to
+- [x] Repeat Windows assembly-info and Desktop/full-solution tests enough to
       make the original race observable if it remains.
-- [ ] Pass a new strict PR quality run and a complete manual release rehearsal
-      on the corrected commit.
+- [x] Pass a new strict PR quality run on the corrected lifecycle commit.
+- [ ] Pass the complete manual release rehearsal on the final versioned
+      candidate commit.
 - [ ] Keep `v1.1.0` immutable. Document the withdrawn draft and publish a
-      corrective version only after every lifecycle and release gate is green.
+      `v1.1.1` corrective version only after every lifecycle and release gate
+      is green.
 
 ## Stable Contracts
 
@@ -195,7 +221,8 @@ history, not repeated here.
   second `Version`, `VersionPrefix`, `AssemblyVersion`, `FileVersion` or
   `InformationalVersion`.
 - Manual workflow dispatch may build artifacts but cannot publish a GitHub
-  Release. Only the tested `v1.1.0` tag may publish.
+  Release. Only an exact `v1.1.1` tag matching the tested `version.txt` may
+  publish; `v1.1.0` cannot be moved, updated or republished.
 - Release artifacts must not contain developer credentials or application
   data.
 
@@ -205,6 +232,7 @@ Run sequentially in one worktree:
 
 ```powershell
 dotnet restore ./DownKyi.sln
+pwsh ./script/validate-release-version.ps1
 dotnet build ./DownKyi.sln -c Release --no-restore --no-incremental `
   -p:EnableNETAnalyzers=true -p:AnalysisMode=All `
   -p:EnforceCodeStyleInBuild=true -p:TreatWarningsAsErrors=true `
@@ -241,4 +269,5 @@ completion evidence.
 - Before merge: close the integration PR and leave `main` unchanged.
 - After merge but before tag: revert the merge commit; do not create the tag.
 - After publication: never move or reuse `v1.1.0`. Withdraw invalid artifacts,
-  document the reason and publish a corrective version.
+  document the reason and publish the next corrective version. Never repair a
+  release by moving an existing tag.

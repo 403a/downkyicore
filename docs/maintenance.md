@@ -35,6 +35,16 @@ diagnostic collection wall time, and fails a slow phase whose evidence is
 missing. Schema 1 exit values include collector overhead and are historical
 only; do not compare them directly with schema 2.
 
+The slow classification threshold remains five seconds. Evidence collection
+is armed 100 ms before that boundary so a 25 ms monitor poll cannot observe a
+5.005-second process only after it has exited. Reports expose both the capture
+lead and whether a phase was sampled before the classification boundary;
+`capture-failed` and `process-exited-before-capture` remain fail-closed for
+phases whose final duration reaches the threshold.
+The `-ValidateForensics` held-child self-test must also set
+`forensicsSelfTestCaptureLeadValidated=true`, proving this arm point executed
+rather than merely existing in source.
+
 Formal Windows PR, Main, Rehearsal and Flaky lifecycle profiles require
 `-ValidateForensics`. Their schema 2 report must show a detailed
 `markerReaderSelfTest` with `executed`, `passed`, `contentionObserved`,
@@ -52,6 +62,15 @@ Only Windows sharing/lock error codes count as marker contention.
 `UnauthorizedAccessException` and other I/O errors remain separately visible
 as `markerReadErrorCount` and `markerReadErrorType`.
 
+PR #116 merged the final lifecycle proof consistency fix into `main` at
+`6a61247`. Strict PR CI `30450175286` and CodeQL `30450175415` passed. Its
+Main profile report contains 2,102 phase results across seven assemblies and
+50 iterations, with zero failures, zero missing slow evidence and zero marker
+read errors. Teardown max is 7 ms and OS process-exit max is 187 ms; all 14
+slow execution phases retained evidence. This report validates the corrected
+lifecycle owner and gate, but the final versioned release commit must still
+pass its own Main profile and the 100-iteration Rehearsal profile.
+
 Pull requests are guarded by `.github/workflows/quality.yml`:
 
 - format check with `dotnet format --verify-no-changes --verbosity diagnostic`
@@ -61,6 +80,12 @@ Pull requests are guarded by `.github/workflows/quality.yml`:
 - assembly load/info/discovery/execution/teardown/exit stability on Windows
 - transitive vulnerable package audit
 - deprecated package report
+
+Release tags are additionally checked by
+`script/validate-release-version.ps1`. `version.txt` must contain one stable
+`major.minor.patch` value, and a tag workflow may proceed only when
+`GITHUB_REF` equals `refs/tags/v<version>`. The v1.1.0 tag is immutable and its
+withdrawn draft must not be republished; the corrective release is v1.1.1.
 
 Gate 10 v1.1.0 integration candidate `355ef7cb` passed the local strict
 `AnalysisMode=All` Release build with zero warnings/errors, all 714 tests,

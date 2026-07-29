@@ -1,5 +1,20 @@
 # 更新日志
 
+## [1.1.1] - 2026-07-29
+
+### Reliability
+
+- 修复 Windows 测试宿主偶发残留前台执行绪的问题：测试资料清理由同步 `ProcessExit` handler 改为可等待的 assembly fixture，Avalonia 测试改用 assembly-scoped headless session，正式 Host、Dispatcher、SQLite 与应用关闭路径均有确定性 teardown。
+- 建立 Assembly Lifecycle Stability Gate，逐测试组件隔离验证 load、assembly info、discovery、execution、teardown 与 process exit；PR、main 与 release rehearsal 分别执行 3、50 与 100 轮。
+- 生命周期报告升级为 schema 2：使用 OS `Process.ExitTime`、保留 P50/P95/P99/max、慢阶段证据及一般错误分类，并在证据缺失、残留程序、输出污染或退出异常时 fail closed。
+- 修复 lifecycle marker 并发写入时的共享锁竞态；正式 Windows gate 会实际制造独占锁、确认 contention、释放后恢复解析，并以单一完整 proof result 判定。
+- 修复 protocol-relative 图片来源被误当成 Windows UNC 路径而阻塞 `File.Exists` 的问题。
+
+### Release
+
+- `v1.1.0` 标签保持不可变；其发布草稿在 Windows lifecycle 问题确认后撤回，不作为正式发行版。`v1.1.1` 是包含根因修正及长期质量门槛的替代版本。
+- 新增 tag 与 `version.txt` 的自动一致性检查，防止错误标签发布成另一版本的套件。
+
 ## [1.1.0] - 2026-07-29
 
 ### Architecture
