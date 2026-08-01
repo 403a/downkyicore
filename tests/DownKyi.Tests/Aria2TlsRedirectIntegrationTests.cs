@@ -47,6 +47,7 @@ public sealed partial class Aria2TlsIntegrationTests
     private static async Task RunPreflightThenActualDowngradeRejectedAsync(
         Aria2TlsTestRuntime runtime,
         X509Certificate2 certificate,
+        X509Certificate2 trustedRoot,
         byte[] payload,
         List<Aria2TlsCaseResult> results,
         CancellationToken cancellationToken)
@@ -58,7 +59,7 @@ public sealed partial class Aria2TlsIntegrationTests
             payload,
             redirectFactory: (connection, _) => connection > 1 ? target.Url : null);
         await using var redirectLifetime = redirect.ConfigureAwait(false);
-        using var resolver = AriaDownloadAddressResolver.Create(proxyAddress: null);
+        using var resolver = CreateTrustedAddressResolver(trustedRoot);
         var resolution = await resolver.ResolveAsync(
             redirect.Url.AbsoluteUri,
             "DownKyi-TLS-Test",
@@ -88,6 +89,38 @@ public sealed partial class Aria2TlsIntegrationTests
             "preflight-safe-actual-downgrade",
             true,
             "zero-http-requests"));
+    }
+
+    private static AriaDownloadAddressResolver CreateTrustedAddressResolver(
+        X509Certificate2 trustedRoot)
+    {
+        var chainPolicy = new X509ChainPolicy
+        {
+            TrustMode = X509ChainTrustMode.CustomRootTrust,
+            RevocationMode = X509RevocationMode.NoCheck
+        };
+        chainPolicy.CustomTrustStore.Add(trustedRoot);
+
+        SocketsHttpHandler? handler = new()
+        {
+            AllowAutoRedirect = false,
+            AutomaticDecompression = DecompressionMethods.None,
+            ConnectTimeout = TimeSpan.FromSeconds(15),
+            PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+            UseCookies = false,
+            UseProxy = false
+        };
+        handler.SslOptions.CertificateChainPolicy = chainPolicy;
+        try
+        {
+            var resolver = AriaDownloadAddressResolver.CreateForTest(handler);
+            handler = null;
+            return resolver;
+        }
+        finally
+        {
+            handler?.Dispose();
+        }
     }
 
     private static async Task RunHeadSafeGetDowngradeRejectedAsync(

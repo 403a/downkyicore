@@ -76,6 +76,7 @@ public sealed partial class Aria2TlsIntegrationTests
             await RunPreflightThenActualDowngradeRejectedAsync(
                 runtime,
                 trustedCertificate,
+                trustedAuthority.RootCertificate,
                 payload,
                 results,
                 cancellationToken).ConfigureAwait(true);
