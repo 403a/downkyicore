@@ -8,6 +8,143 @@ namespace DownKyi.Core.Tests;
 public sealed class SettingsStoreTests
 {
     [Fact]
+    public async Task LegacyPlainHttpSettingIsMigratedToRequiredHttps()
+    {
+        var directory = CreateTestDirectory();
+        var settingsPath = Path.Combine(directory, "settings.json");
+        const string source = """
+            {
+              "Network": {
+                "UseSsl": 1
+              }
+            }
+            """;
+
+        try
+        {
+            await File.WriteAllTextAsync(
+                settingsPath,
+                source,
+                TestContext.Current.CancellationToken);
+            using var store = new SettingsStore(settingsPath);
+
+            Assert.Null(typeof(NetworkApplicationSettings).GetProperty("UseSsl"));
+
+            await store.FlushAsync(TestContext.Current.CancellationToken);
+            using var document = JsonDocument.Parse(await File.ReadAllTextAsync(
+                settingsPath,
+                TestContext.Current.CancellationToken));
+            Assert.False(document.RootElement.GetProperty("Network").TryGetProperty(
+                "UseSsl",
+                out _));
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public async Task RemotePlaintextAriaRpcSettingIsRestoredToLoopback()
+    {
+        var directory = CreateTestDirectory();
+        var settingsPath = Path.Combine(directory, "settings.json");
+        const string source = """
+            {
+              "Network": {
+                "AriaHost": "http://192.0.2.10"
+              }
+            }
+            """;
+
+        try
+        {
+            await File.WriteAllTextAsync(
+                settingsPath,
+                source,
+                TestContext.Current.CancellationToken);
+            using var store = new SettingsStore(settingsPath);
+
+            Assert.Equal("http://localhost", store.Current.Network.AriaHost);
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public async Task LegacyRemoteAriaDownloadProxyIsDisabledAndRemoved()
+    {
+        var directory = CreateTestDirectory();
+        var settingsPath = Path.Combine(directory, "settings.json");
+        const string source = """
+            {
+              "Network": {
+                "IsAriaHttpProxy": 2,
+                "AriaHttpProxy": "192.0.2.10",
+                "AriaHttpProxyListenPort": 7890
+              }
+            }
+            """;
+
+        try
+        {
+            await File.WriteAllTextAsync(
+                settingsPath,
+                source,
+                TestContext.Current.CancellationToken);
+            using var store = new SettingsStore(settingsPath);
+
+            Assert.Equal(AllowStatus.No, store.Current.Network.IsAriaHttpProxy);
+            Assert.Empty(store.Current.Network.AriaHttpProxy);
+
+            await store.FlushAsync(TestContext.Current.CancellationToken);
+            using var document = JsonDocument.Parse(await File.ReadAllTextAsync(
+                settingsPath,
+                TestContext.Current.CancellationToken));
+            var network = document.RootElement.GetProperty("Network");
+            Assert.Equal(1, network.GetProperty("IsAriaHttpProxy").GetInt32());
+            Assert.Equal(string.Empty, network.GetProperty("AriaHttpProxy").GetString());
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public void LocalAriaDownloadProxySurvivesValidationAsHttpConnectEndpoint()
+    {
+        var directory = CreateTestDirectory();
+        try
+        {
+            using var store = new SettingsStore(Path.Combine(directory, "settings.json"));
+            var updated = store.Update(settings => settings with
+            {
+                Network = settings.Network with
+                {
+                    IsAriaHttpProxy = AllowStatus.Yes,
+                    AriaHttpProxy = "[::1]",
+                    AriaHttpProxyListenPort = 7890
+                }
+            });
+
+            Assert.Equal(AllowStatus.Yes, updated.Network.IsAriaHttpProxy);
+            Assert.Equal("::1", updated.Network.AriaHttpProxy);
+            Assert.True(AriaHttpsProxyPolicy.TryCreateConnectProxyUri(
+                updated.Network.AriaHttpProxy,
+                updated.Network.AriaHttpProxyListenPort,
+                out var proxyUri));
+            Assert.Equal("http://[::1]:7890/", proxyUri.AbsoluteUri);
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
     public async Task NewStoreDoesNotPersistDefaultsUntilASettingChanges()
     {
         var directory = CreateTestDirectory();

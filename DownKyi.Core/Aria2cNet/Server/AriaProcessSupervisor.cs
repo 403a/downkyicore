@@ -28,6 +28,17 @@ internal sealed class AriaProcessSupervisor
         }
     }
 
+    public bool HasRunningProcess
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _process is { HasExited: false };
+            }
+        }
+    }
+
     public void Track(Process process)
     {
         ArgumentNullException.ThrowIfNull(process);

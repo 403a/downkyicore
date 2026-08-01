@@ -10,18 +10,18 @@ namespace DownKyi.Core.Aria2cNet.Client;
 public sealed partial class AriaClient
 {
     private const string JSONRPC = "2.0";
-    private const string LOCAL_HOST = "http://localhost";
-    private const string TOKEN = "downkyi";
-    private const int LISTEN_PORT = 35076;
-    private static readonly HttpClient HttpClient = new();
+    private static readonly HttpClient HttpClient = new(new SocketsHttpHandler
+    {
+        AllowAutoRedirect = false
+    });
     private readonly Func<Uri, string, Task<string?>> _requestAsync;
     private readonly Uri _rpcUri;
     private readonly string _token;
 
     public AriaClient(
-        string host = LOCAL_HOST,
-        int listenPort = LISTEN_PORT,
-        string token = TOKEN)
+        string host,
+        int listenPort,
+        string token)
         : this(host, listenPort, token, static (url, parameters) => RequestAsync(url, parameters))
     {
     }
@@ -42,6 +42,21 @@ public sealed partial class AriaClient
             throw new ArgumentException("The aria2 RPC host must be an absolute HTTP or HTTPS URI.", nameof(host));
         }
 
+        if (string.Equals(hostUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+            && !hostUri.IsLoopback)
+        {
+            throw new ArgumentException(
+                "Remote aria2 RPC endpoints must use HTTPS.",
+                nameof(host));
+        }
+
+        if (!string.IsNullOrEmpty(hostUri.UserInfo))
+        {
+            throw new ArgumentException(
+                "The aria2 RPC host must not contain user information.",
+                nameof(host));
+        }
+
         _rpcUri = new UriBuilder(hostUri)
         {
             Port = listenPort,
@@ -49,7 +64,8 @@ public sealed partial class AriaClient
             Query = string.Empty,
             Fragment = string.Empty
         }.Uri;
-        _token = token ?? string.Empty;
+        ArgumentException.ThrowIfNullOrWhiteSpace(token);
+        _token = token;
         _requestAsync = requestAsync ?? throw new ArgumentNullException(nameof(requestAsync));
     }
 
