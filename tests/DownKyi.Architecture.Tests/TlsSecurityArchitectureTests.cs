@@ -240,6 +240,7 @@ public sealed class TlsSecurityArchitectureTests
             "Aria2RuntimeLifecycle.cs");
         var powerShellInstaller = ReadProductionSource("script", "aria2.ps1");
         var shellInstaller = ReadProductionSource("script", "aria2.sh");
+        var qualityWorkflow = ReadProductionSource(".github", "workflows", "quality.yml");
 
         Assert.Contains("AppContext.BaseDirectory", server, StringComparison.Ordinal);
         Assert.True(
@@ -255,6 +256,10 @@ public sealed class TlsSecurityArchitectureTests
         Assert.Contains("aria2c.exe.sha256", powerShellInstaller, StringComparison.Ordinal);
         Assert.Contains("binarySha256", shellInstaller, StringComparison.Ordinal);
         Assert.Contains("aria2c.sha256", shellInstaller, StringComparison.Ordinal);
+        Assert.Contains(
+            "run: bash ./script/aria2.sh '${{ matrix.asset-argument }}'",
+            qualityWorkflow,
+            StringComparison.Ordinal);
     }
 
     private static string ReadProductionSource(params string[] segments)

@@ -159,9 +159,15 @@ public sealed class TestCertificateAuthority : IDisposable
     private static X509Certificate2 LoadExportedCertificate(X509Certificate2 certificate)
     {
         var keyStorageFlags = X509KeyStorageFlags.Exportable;
-        keyStorageFlags |= OperatingSystem.IsWindows()
-            ? X509KeyStorageFlags.UserKeySet
-            : X509KeyStorageFlags.EphemeralKeySet;
+        if (OperatingSystem.IsWindows())
+        {
+            keyStorageFlags |= X509KeyStorageFlags.UserKeySet;
+        }
+        else if (!OperatingSystem.IsMacOS())
+        {
+            keyStorageFlags |= X509KeyStorageFlags.EphemeralKeySet;
+        }
+
         return X509CertificateLoader.LoadPkcs12(
             certificate.Export(X509ContentType.Pkcs12),
             password: null,
