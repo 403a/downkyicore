@@ -146,7 +146,11 @@ public sealed partial class Aria2TlsIntegrationTests
                 "unknown-ca",
                 unknownCertificate,
                 payload,
-                ["download.transfer.tls.untrusted", "download.transfer.tls.handshake"],
+                [
+                    "download.transfer.tls.untrusted",
+                    "download.transfer.tls.handshake",
+                    "download.transfer.tls.chain"
+                ],
                 results,
                 cancellationToken).ConfigureAwait(true);
             await RunRejectedCertificateAsync(
@@ -154,7 +158,11 @@ public sealed partial class Aria2TlsIntegrationTests
                 "self-signed",
                 selfSignedCertificate,
                 payload,
-                ["download.transfer.tls.untrusted", "download.transfer.tls.handshake"],
+                [
+                    "download.transfer.tls.untrusted",
+                    "download.transfer.tls.handshake",
+                    "download.transfer.tls.chain"
+                ],
                 results,
                 cancellationToken).ConfigureAwait(true);
             await RunRejectedCertificateAsync(
@@ -162,7 +170,11 @@ public sealed partial class Aria2TlsIntegrationTests
                 "expired",
                 expiredCertificate,
                 payload,
-                ["download.transfer.tls.expired", "download.transfer.tls.handshake"],
+                [
+                    "download.transfer.tls.expired",
+                    "download.transfer.tls.handshake",
+                    "download.transfer.tls.chain"
+                ],
                 results,
                 cancellationToken).ConfigureAwait(true);
             await RunRejectedCertificateAsync(
@@ -170,7 +182,12 @@ public sealed partial class Aria2TlsIntegrationTests
                 "not-yet-valid",
                 notYetValidCertificate,
                 payload,
-                ["download.transfer.tls.not-yet-valid", "download.transfer.tls.handshake"],
+                [
+                    "download.transfer.tls.not-yet-valid",
+                    "download.transfer.tls.expired",
+                    "download.transfer.tls.handshake",
+                    "download.transfer.tls.chain"
+                ],
                 results,
                 cancellationToken).ConfigureAwait(true);
             await RunRejectedCertificateAsync(
@@ -178,7 +195,11 @@ public sealed partial class Aria2TlsIntegrationTests
                 "hostname-mismatch",
                 hostnameMismatchCertificate,
                 payload,
-                ["download.transfer.tls.hostname", "download.transfer.tls.handshake"],
+                [
+                    "download.transfer.tls.hostname",
+                    "download.transfer.tls.handshake",
+                    "download.transfer.tls.chain"
+                ],
                 results,
                 cancellationToken).ConfigureAwait(true);
             await RunRejectedCertificateAsync(
@@ -186,7 +207,11 @@ public sealed partial class Aria2TlsIntegrationTests
                 "missing-san-wrong-common-name",
                 missingSanCertificate,
                 payload,
-                ["download.transfer.tls.hostname", "download.transfer.tls.handshake"],
+                [
+                    "download.transfer.tls.hostname",
+                    "download.transfer.tls.handshake",
+                    "download.transfer.tls.chain"
+                ],
                 results,
                 cancellationToken).ConfigureAwait(true);
             await RunRejectedCertificateAsync(
@@ -234,7 +259,10 @@ public sealed partial class Aria2TlsIntegrationTests
         List<Aria2TlsCaseResult> results,
         CancellationToken cancellationToken)
     {
-        var server = new LoopbackTlsFileServer(_ => certificate, payload);
+        var server = new LoopbackTlsFileServer(
+            _ => certificate,
+            payload,
+            chunkDelay: TimeSpan.FromMilliseconds(10));
         await using var serverLifetime = server.ConfigureAwait(false);
         const string outputName = "trusted-split.bin";
         var gid = await runtime.AddDownloadAsync(
@@ -335,7 +363,11 @@ public sealed partial class Aria2TlsIntegrationTests
             status,
             runtime.GetOutputPath(outputName),
             payload,
-            ["download.transfer.tls.untrusted", "download.transfer.tls.handshake"]);
+            [
+                "download.transfer.tls.untrusted",
+                "download.transfer.tls.handshake",
+                "download.transfer.tls.chain"
+            ]);
 
         Assert.Contains("localhost:443", proxy.ConnectAuthorities);
         Assert.Equal(0, proxy.AbsoluteUriRequestCount);
@@ -470,7 +502,11 @@ public sealed partial class Aria2TlsIntegrationTests
             status,
             runtime.GetOutputPath(outputName),
             payload,
-            ["download.transfer.tls.untrusted", "download.transfer.tls.handshake"]);
+            [
+                "download.transfer.tls.untrusted",
+                "download.transfer.tls.handshake",
+                "download.transfer.tls.chain"
+            ]);
         Assert.NotEmpty(redirect.Requests);
         results.Add(new Aria2TlsCaseResult(
             "trusted-redirect-to-untrusted",
@@ -522,7 +558,11 @@ public sealed partial class Aria2TlsIntegrationTests
             status,
             runtime.GetOutputPath(outputName),
             payload,
-            ["download.transfer.tls.untrusted", "download.transfer.tls.handshake"]);
+            [
+                "download.transfer.tls.untrusted",
+                "download.transfer.tls.handshake",
+                "download.transfer.tls.chain"
+            ]);
         Assert.True(server.ConnectionCount >= 2);
         results.Add(new Aria2TlsCaseResult(
             "application-retry-resumes-to-untrusted",

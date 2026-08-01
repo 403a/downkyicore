@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using DownKyi.Core.Aria2cNet.Client;
@@ -78,9 +79,14 @@ internal sealed class Aria2TlsTestRuntime : IAsyncDisposable
             rootPath,
             trustedRoot.ExportCertificatePem(),
             cancellationToken).ConfigureAwait(false);
+        var rootCertificatePath = Path.Combine(workingDirectory, "trusted-root.cer");
+        await File.WriteAllBytesAsync(
+            rootCertificatePath,
+            trustedRoot.Export(X509ContentType.Cert),
+            cancellationToken).ConfigureAwait(false);
         var trustedRootScope = await TrustedRootScope.InstallAsync(
             trustedRoot,
-            rootPath,
+            rootCertificatePath,
             cancellationToken).ConfigureAwait(false);
         Process? process = null;
         try
@@ -405,17 +411,18 @@ internal sealed class Aria2TlsTestRuntime : IAsyncDisposable
 
 internal sealed class TrustedRootScope : IAsyncDisposable
 {
-    private readonly string? _cleanupCommand;
-    private readonly IReadOnlyList<string>? _cleanupArguments;
+    private const string MacSystemKeychain = "/Library/Keychains/System.keychain";
+    private readonly string? _macCommonName;
+    private readonly WindowsTrustedRootRegistration? _windowsRoot;
 
     private TrustedRootScope(
         string source,
-        string? cleanupCommand = null,
-        IReadOnlyList<string>? cleanupArguments = null)
+        WindowsTrustedRootRegistration? windowsRoot = null,
+        string? macCommonName = null)
     {
         Source = source;
-        _cleanupCommand = cleanupCommand;
-        _cleanupArguments = cleanupArguments;
+        _windowsRoot = windowsRoot;
+        _macCommonName = macCommonName;
     }
 
     public string Source { get; }
@@ -425,37 +432,43 @@ internal sealed class TrustedRootScope : IAsyncDisposable
         string rootPath,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(root);
+        ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
+
         if (OperatingSystem.IsLinux())
         {
             return new TrustedRootScope("aria2-ca-file");
         }
 
-        if (OperatingSystem.IsMacOS())
+        if (OperatingSystem.IsWindows())
         {
-            var commonName = root.GetNameInfo(X509NameType.SimpleName, forIssuer: false);
-            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            var keychain = Path.Combine(home, "Library", "Keychains", "login.keychain-db");
-            await RunProcessAsync(
-                "security",
-                ["add-trusted-cert", "-r", "trustRoot", "-k", keychain, rootPath],
-                cancellationToken).ConfigureAwait(false);
+            var registration = WindowsTrustedRootRegistration.Install(root.RawData);
             return new TrustedRootScope(
-                "macos-user-keychain",
-                "security",
-                ["delete-certificate", "-c", commonName, keychain]);
+                "windows-local-machine-root-store",
+                windowsRoot: registration);
         }
 
-        await RunProcessAsync(
-            "certutil",
-            ["-user", "-addstore", "-f", "Root", rootPath],
+        var commonName = root.GetNameInfo(X509NameType.SimpleName, forIssuer: false);
+        await RunBoundedProcessAsync(
+            "sudo",
+            [
+                "-n",
+                "security",
+                "add-trusted-cert",
+                "-d",
+                "-r",
+                "trustRoot",
+                "-k",
+                MacSystemKeychain,
+                rootPath
+            ],
             cancellationToken).ConfigureAwait(false);
         return new TrustedRootScope(
-            "windows-current-user-root-store",
-            "certutil",
-            ["-user", "-delstore", "Root", root.SerialNumber]);
+            "macos-system-keychain",
+            macCommonName: commonName);
     }
 
-    private static async Task RunProcessAsync(
+    private static async Task RunBoundedProcessAsync(
         string fileName,
         IReadOnlyList<string> arguments,
         CancellationToken cancellationToken)
@@ -473,12 +486,31 @@ internal sealed class TrustedRootScope : IAsyncDisposable
             startInfo.ArgumentList.Add(argument);
         }
 
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(15));
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("The certificate trust tool did not start.");
-        var standardError = process.StandardError.ReadToEndAsync(cancellationToken);
-        var standardOutput = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        var standardError = process.StandardError.ReadToEndAsync(CancellationToken.None);
+        var standardOutput = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
+        try
+        {
+            await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (timeout.IsCancellationRequested)
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
+
+            await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+            await Task.WhenAll(standardOutput, standardError).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new TimeoutException("The certificate trust tool did not finish in time.");
+        }
+
         await Task.WhenAll(standardOutput, standardError).ConfigureAwait(false);
+
         if (process.ExitCode != 0)
         {
             throw new InvalidOperationException(
@@ -488,12 +520,128 @@ internal sealed class TrustedRootScope : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        if (_cleanupCommand != null && _cleanupArguments != null)
+        if (_windowsRoot != null)
         {
-            await RunProcessAsync(
-                _cleanupCommand,
-                _cleanupArguments,
+            _windowsRoot.Dispose();
+        }
+
+        if (_macCommonName != null)
+        {
+            await RunBoundedProcessAsync(
+                "sudo",
+                [
+                    "-n",
+                    "security",
+                    "delete-certificate",
+                    "-c",
+                    _macCommonName,
+                    MacSystemKeychain
+                ],
                 CancellationToken.None).ConfigureAwait(false);
         }
     }
+}
+
+internal sealed class WindowsTrustedRootRegistration : IDisposable
+{
+    private const uint CertificateEncoding = 0x00000001;
+    private const uint LocalMachineStore = 0x00020000;
+    private const uint StoreAddUseExisting = 2;
+    private IntPtr _certificateContext;
+    private IntPtr _store;
+
+    private WindowsTrustedRootRegistration(
+        IntPtr store,
+        IntPtr certificateContext)
+    {
+        _store = store;
+        _certificateContext = certificateContext;
+    }
+
+    public static WindowsTrustedRootRegistration Install(byte[] certificate)
+    {
+        ArgumentNullException.ThrowIfNull(certificate);
+        var store = CertOpenStore(
+            new IntPtr(10),
+            encodingType: 0,
+            cryptographicProvider: IntPtr.Zero,
+            LocalMachineStore,
+            "Root");
+        if (store == IntPtr.Zero)
+        {
+            throw CreateNativeError("The Windows root certificate store could not be opened.");
+        }
+
+        if (CertAddEncodedCertificateToStore(
+                store,
+                CertificateEncoding,
+                certificate,
+                certificate.Length,
+                StoreAddUseExisting,
+                out var context))
+        {
+            return new WindowsTrustedRootRegistration(store, context);
+        }
+
+        var error = Marshal.GetLastPInvokeError();
+        CertCloseStore(store, flags: 0);
+        throw new InvalidOperationException(
+            $"The Windows test root certificate could not be installed (code {error}).");
+    }
+
+    private static InvalidOperationException CreateNativeError(string message)
+    {
+        return new InvalidOperationException(
+            $"{message} Native error code: {Marshal.GetLastPInvokeError()}.");
+    }
+
+    public void Dispose()
+    {
+        var context = Interlocked.Exchange(ref _certificateContext, IntPtr.Zero);
+        var store = Interlocked.Exchange(ref _store, IntPtr.Zero);
+        try
+        {
+            if (context != IntPtr.Zero && !CertDeleteCertificateFromStore(context))
+            {
+                throw CreateNativeError("The Windows test root certificate could not be removed.");
+            }
+        }
+        finally
+        {
+            if (store != IntPtr.Zero)
+            {
+                CertCloseStore(store, flags: 0);
+            }
+        }
+    }
+
+    [DllImport("crypt32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static extern IntPtr CertOpenStore(
+        IntPtr storeProvider,
+        uint encodingType,
+        IntPtr cryptographicProvider,
+        uint flags,
+        string storeName);
+
+    [DllImport("crypt32.dll", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CertAddEncodedCertificateToStore(
+        IntPtr certificateStore,
+        uint certificateEncodingType,
+        byte[] certificate,
+        int certificateLength,
+        uint addDisposition,
+        out IntPtr certificateContext);
+
+    [DllImport("crypt32.dll", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CertDeleteCertificateFromStore(IntPtr certificateContext);
+
+    [DllImport("crypt32.dll", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CertCloseStore(IntPtr certificateStore, uint flags);
 }
