@@ -55,7 +55,6 @@ public partial class SettingsManager
                 IsRepeatFileAutoAddNumberSuffix()),
             new NetworkApplicationSettings(
                 GetIsLiftingOfRegion(),
-                GetUseSsl(),
                 GetUserAgent(),
                 GetDownloader(),
                 GetHighSpeedDownloadMode(),
@@ -148,7 +147,6 @@ public partial class SettingsManager
                 IsRepeatFileAutoAddNumberSuffix(validated.Basic.RepeatFileAutoAddNumberSuffix);
 
                 SetIsLiftingOfRegion(validated.Network.IsLiftingOfRegion);
-                SetUseSsl(validated.Network.UseSsl);
                 SetUserAgent(validated.Network.UserAgent);
                 SetDownloader(validated.Network.Downloader);
                 SetHighSpeedDownloadMode(validated.Network.HighSpeedDownloadMode);

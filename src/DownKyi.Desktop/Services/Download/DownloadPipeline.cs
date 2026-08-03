@@ -55,7 +55,10 @@ internal sealed class DownloadPipeline : IDownloadTaskExecutor
             _logger.LogWarningMessage(
                 $"Download stage {failedStage ?? "unknown"} failed with " +
                 $"{stageResult.Error?.Code ?? "unknown"}.");
-            await MarkFailedAsync(taskId, cancellationToken).ConfigureAwait(true);
+            await _stateWriter.FailAsync(
+                taskId,
+                DownloadActivityPresenter.CreateFailure(stageResult.Error),
+                cancellationToken).ConfigureAwait(true);
         }
         catch (OperationCanceledException exception)
         {
