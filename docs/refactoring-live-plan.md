@@ -45,16 +45,16 @@ design and completed history belong in `ARCHITECTURE.md`, `docs/design-docs/`,
       versioned secure-redirect feature for bundled and custom aria2 RPC.
 - [x] Complete all six static binary builds, fix their archive/binary SHA-256
       values and publish them from immutable tag `1.37.0-downkyi.2`.
-- [ ] Pass the actual-transfer TLS/redirect/header suite on all six binaries and
+- [x] Pass the actual-transfer TLS/redirect/header suite on all six binaries and
       prove downgrade targets receive zero requests. Windows x64/x86 are
-      locally green; Linux/macOS remain exact-head CI evidence.
+      locally green; all six RIDs passed CI run `30799263926`.
 - [x] Pass strict local Release build, all seven tests, format, module audit,
       lifecycle ownership/gate, package audits, secret scan and diff check on
       the final manifest and product diff.
-- [ ] Commit and push the complete isolated item to its one feature branch.
-- [ ] Open one Draft PR against `main` and require all six real aria2 RID jobs,
+- [x] Commit and push the complete isolated item to its one feature branch.
+- [x] Open one Draft PR against `main` and require all six real aria2 RID jobs,
       normal quality jobs and CodeQL to pass on the exact head commit.
-- [ ] Review uploaded sanitized reports, verify no credential/path leakage and
+- [x] Review uploaded sanitized reports, verify no credential/path leakage and
       update `aria2-security-baseline.json` with exact CI evidence.
 - [ ] Resolve all item-1 merge blockers and mark the item complete.
 
