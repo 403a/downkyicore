@@ -3,8 +3,10 @@ using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Security.Principal;
 using DownKyi.Core.Aria2cNet.Client;
 using DownKyi.Core.Aria2cNet.Client.Entity;
 using DownKyi.Core.Aria2cNet.Server;
@@ -86,6 +88,7 @@ internal sealed class Aria2TlsTestRuntime : IAsyncDisposable
             cancellationToken).ConfigureAwait(false);
         var trustedRootScope = await TrustedRootScope.InstallAsync(
             trustedRoot,
+            rootPath,
             rootCertificatePath,
             cancellationToken).ConfigureAwait(false);
         Process? process = null;
@@ -104,7 +107,6 @@ internal sealed class Aria2TlsTestRuntime : IAsyncDisposable
                 binaryPath,
                 workingDirectory,
                 secretFile,
-                rootPath,
                 port);
             process = new Process { StartInfo = startInfo };
             if (!process.Start())
@@ -232,7 +234,6 @@ internal sealed class Aria2TlsTestRuntime : IAsyncDisposable
         string binaryPath,
         string workingDirectory,
         string secretFile,
-        string rootPath,
         int port)
     {
         var startInfo = new ProcessStartInfo
@@ -266,11 +267,6 @@ internal sealed class Aria2TlsTestRuntime : IAsyncDisposable
             "--console-log-level=warn",
             "--summary-interval=0"
         };
-        if (OperatingSystem.IsLinux())
-        {
-            arguments.Add($"--ca-certificate={rootPath}");
-        }
-
         foreach (var argument in arguments)
         {
             startInfo.ArgumentList.Add(argument);
@@ -296,7 +292,9 @@ internal sealed class Aria2TlsTestRuntime : IAsyncDisposable
 
             try
             {
-                var response = await client.GetAriaVersionAsync().ConfigureAwait(false);
+                var response = await client
+                    .GetAriaVersionAsync(cancellationToken)
+                    .ConfigureAwait(false);
                 if (!string.IsNullOrWhiteSpace(response.Result?.Version)
                     && response.Result.EnabledFeatures.Contains(
                         SecureRedirectFeature,
@@ -412,16 +410,19 @@ internal sealed class Aria2TlsTestRuntime : IAsyncDisposable
 internal sealed class TrustedRootScope : IAsyncDisposable
 {
     private const string MacSystemKeychain = "/Library/Keychains/System.keychain";
+    private readonly string? _linuxCertificatePath;
     private readonly string? _macCommonName;
     private readonly WindowsTrustedRootRegistration? _windowsRoot;
 
     private TrustedRootScope(
         string source,
         WindowsTrustedRootRegistration? windowsRoot = null,
+        string? linuxCertificatePath = null,
         string? macCommonName = null)
     {
         Source = source;
         _windowsRoot = windowsRoot;
+        _linuxCertificatePath = linuxCertificatePath;
         _macCommonName = macCommonName;
     }
 
@@ -429,22 +430,53 @@ internal sealed class TrustedRootScope : IAsyncDisposable
 
     public static async Task<TrustedRootScope> InstallAsync(
         X509Certificate2 root,
-        string rootPath,
+        string rootPemPath,
+        string rootCertificatePath,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(root);
-        ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(rootPemPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(rootCertificatePath);
 
         if (OperatingSystem.IsLinux())
         {
-            return new TrustedRootScope("aria2-ca-file");
+            var installedPath = Path.Combine(
+                "/usr/local/share/ca-certificates",
+                $"downkyi-aria2-{root.Thumbprint}.crt");
+            await RunBoundedProcessAsync(
+                "sudo",
+                ["-n", "install", "-m", "0644", "--", rootPemPath, installedPath],
+                cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await RunBoundedProcessAsync(
+                    "sudo",
+                    ["-n", "update-ca-certificates"],
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                await RunBoundedProcessAsync(
+                    "sudo",
+                    ["-n", "rm", "-f", "--", installedPath],
+                    CancellationToken.None).ConfigureAwait(false);
+                await RunBoundedProcessAsync(
+                    "sudo",
+                    ["-n", "update-ca-certificates"],
+                    CancellationToken.None).ConfigureAwait(false);
+                throw;
+            }
+
+            return new TrustedRootScope(
+                "linux-system-ca-store",
+                linuxCertificatePath: installedPath);
         }
 
         if (OperatingSystem.IsWindows())
         {
             var registration = WindowsTrustedRootRegistration.Install(root.RawData);
             return new TrustedRootScope(
-                "windows-local-machine-root-store",
+                registration.Source,
                 windowsRoot: registration);
         }
 
@@ -460,7 +492,7 @@ internal sealed class TrustedRootScope : IAsyncDisposable
                 "trustRoot",
                 "-k",
                 MacSystemKeychain,
-                rootPath
+                rootCertificatePath
             ],
             cancellationToken).ConfigureAwait(false);
         return new TrustedRootScope(
@@ -520,6 +552,18 @@ internal sealed class TrustedRootScope : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        if (_linuxCertificatePath != null)
+        {
+            await RunBoundedProcessAsync(
+                "sudo",
+                ["-n", "rm", "-f", "--", _linuxCertificatePath],
+                CancellationToken.None).ConfigureAwait(false);
+            await RunBoundedProcessAsync(
+                "sudo",
+                ["-n", "update-ca-certificates"],
+                CancellationToken.None).ConfigureAwait(false);
+        }
+
         if (_windowsRoot != null)
         {
             _windowsRoot.Dispose();
@@ -545,6 +589,7 @@ internal sealed class TrustedRootScope : IAsyncDisposable
 internal sealed class WindowsTrustedRootRegistration : IDisposable
 {
     private const uint CertificateEncoding = 0x00000001;
+    private const uint CurrentUserStore = 0x00010000;
     private const uint LocalMachineStore = 0x00020000;
     private const uint StoreAddUseExisting = 2;
     private IntPtr _certificateContext;
@@ -552,24 +597,54 @@ internal sealed class WindowsTrustedRootRegistration : IDisposable
 
     private WindowsTrustedRootRegistration(
         IntPtr store,
-        IntPtr certificateContext)
+        IntPtr certificateContext,
+        string source)
     {
         _store = store;
         _certificateContext = certificateContext;
+        Source = source;
     }
 
+    public string Source { get; }
+
+    [SupportedOSPlatform("windows")]
     public static WindowsTrustedRootRegistration Install(byte[] certificate)
     {
         ArgumentNullException.ThrowIfNull(certificate);
+        using var identity = WindowsIdentity.GetCurrent();
+        var elevated = new WindowsPrincipal(identity)
+            .IsInRole(WindowsBuiltInRole.Administrator);
+        var storeLocation = elevated ? LocalMachineStore : CurrentUserStore;
+        var source = elevated
+            ? "windows-local-machine-root-store"
+            : "windows-current-user-root-store";
+        var registration = TryInstall(
+            certificate,
+            storeLocation,
+            source,
+            out var error);
+        return registration
+               ?? throw CreateNativeError(
+                   "The selected Windows root certificate store could not be updated.",
+                   error);
+    }
+
+    private static WindowsTrustedRootRegistration? TryInstall(
+        byte[] certificate,
+        uint storeLocation,
+        string source,
+        out int error)
+    {
         var store = CertOpenStore(
             new IntPtr(10),
             encodingType: 0,
             cryptographicProvider: IntPtr.Zero,
-            LocalMachineStore,
+            storeLocation,
             "Root");
         if (store == IntPtr.Zero)
         {
-            throw CreateNativeError("The Windows root certificate store could not be opened.");
+            error = Marshal.GetLastPInvokeError();
+            return null;
         }
 
         if (CertAddEncodedCertificateToStore(
@@ -580,19 +655,23 @@ internal sealed class WindowsTrustedRootRegistration : IDisposable
                 StoreAddUseExisting,
                 out var context))
         {
-            return new WindowsTrustedRootRegistration(store, context);
+            error = 0;
+            return new WindowsTrustedRootRegistration(store, context, source);
         }
 
-        var error = Marshal.GetLastPInvokeError();
+        error = Marshal.GetLastPInvokeError();
         CertCloseStore(store, flags: 0);
-        throw new InvalidOperationException(
-            $"The Windows test root certificate could not be installed (code {error}).");
+        return null;
     }
 
     private static InvalidOperationException CreateNativeError(string message)
     {
-        return new InvalidOperationException(
-            $"{message} Native error code: {Marshal.GetLastPInvokeError()}.");
+        return CreateNativeError(message, Marshal.GetLastPInvokeError());
+    }
+
+    private static InvalidOperationException CreateNativeError(string message, int error)
+    {
+        return new InvalidOperationException($"{message} Native error code: {error}.");
     }
 
     public void Dispose()

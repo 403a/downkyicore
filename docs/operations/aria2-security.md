@@ -1,7 +1,7 @@
 # aria2 Transport And Control Security
 
 Status: required runtime contract
-Last updated: 2026-08-01
+Last updated: 2026-08-03
 
 ## Security Boundary
 
@@ -39,8 +39,10 @@ flowchart LR
   secret are regenerated for every runtime. Startup succeeds only while the
   supervised child is alive; shutdown addresses only that tracked child.
 - The RPC secret is written to a unique temporary config with mode `0600` on
-  Unix. It is removed after startup or on every failure/shutdown path. Neither
-  the secret nor Cookie is present in `ProcessStartInfo.ArgumentList`.
+  Unix. Startup failure and shutdown first wait for the supervised child to
+  exit, including a bounded kill-and-wait fallback, and only then remove the
+  config. Neither the secret nor Cookie is present in
+  `ProcessStartInfo.ArgumentList`.
 - `AriaClient` permits `http` only for loopback. Non-loopback endpoints require
   `https`; URI user information and redirects are rejected.
 - Every transfer receives an isolated header option. Cookie is eligible only
@@ -49,8 +51,9 @@ flowchart LR
   The DownKyi aria2 fork rejects HTTPS-to-non-HTTPS redirects while processing
   the actual `Location`, before another request is emitted. It also rejects an
   actual cross-origin HTTPS redirect after Cookie, Authorization,
-  Proxy-Authorization, token or API-key material was emitted. Header values
-  containing CR, LF, NUL or other control characters are rejected.
+  Proxy-Authorization, token or API-key material was emitted. A credentialed
+  same-origin HTTPS redirect remains valid. Header values containing CR, LF,
+  NUL or other control characters are rejected.
 - Packaged aria2 starts only after its SHA-256 sidecar matches the executable.
   Both packaged and custom endpoints must report
   `downkyi-secure-redirect-v2` through `aria2.getVersion().enabledFeatures`;
@@ -98,6 +101,13 @@ all six RIDs against a local deterministic certificate authority. It verifies:
 - same-origin and cross-origin HTTPS redirects, plus zero cross-origin
   connections for Cookie, Authorization, Proxy-Authorization, token and API-key
   cases.
+
+Linux installs the fixture root temporarily into the system CA store and starts
+aria2 without `--ca-certificate`, so the trusted case exercises the same default
+trust discovery path used by production. An elevated Windows runner uses
+LocalMachine Root; a non-elevated runner selects CurrentUser Root before any
+store write. Both are Windows system trust stores used by WinTLS. macOS uses
+the System keychain. Each registration is removed during test teardown.
 
 The report contains only environment metadata, backend, aria2 version, case
 names and pass/fail diagnostics. Header names may identify the tested policy;

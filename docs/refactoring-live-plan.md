@@ -48,7 +48,7 @@ design and completed history belong in `ARCHITECTURE.md`, `docs/design-docs/`,
 - [ ] Pass the actual-transfer TLS/redirect/header suite on all six binaries and
       prove downgrade targets receive zero requests. Windows x64/x86 are
       locally green; Linux/macOS remain exact-head CI evidence.
-- [ ] Pass strict local Release build, all seven tests, format, module audit,
+- [x] Pass strict local Release build, all seven tests, format, module audit,
       lifecycle ownership/gate, package audits, secret scan and diff check on
       the final manifest and product diff.
 - [ ] Commit and push the complete isolated item to its one feature branch.

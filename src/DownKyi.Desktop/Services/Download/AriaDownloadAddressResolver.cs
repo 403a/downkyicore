@@ -104,12 +104,6 @@ internal sealed class AriaDownloadAddressResolver : IDisposable
                     taskHeaders);
             }
 
-            if (taskHeaders.CarriesCredentials)
-            {
-                return AriaDownloadAddressResolution.Rejected(
-                    "download.transfer.credentialed-redirect");
-            }
-
             if (redirectCount >= MaximumRedirects)
             {
                 return AriaDownloadAddressResolution.Rejected(
@@ -122,9 +116,16 @@ internal sealed class AriaDownloadAddressResolver : IDisposable
                 return redirect;
             }
 
-            current = redirect.Address
+            var next = redirect.Address
                 ?? throw new InvalidOperationException(
                     "The accepted aria2 redirect address is missing.");
+            if (taskHeaders.CarriesCredentials && !IsSameOrigin(current, next))
+            {
+                return AriaDownloadAddressResolution.Rejected(
+                    "download.transfer.credentialed-redirect");
+            }
+
+            current = next;
         }
     }
 
@@ -179,6 +180,19 @@ internal sealed class AriaDownloadAddressResolver : IDisposable
             or HttpStatusCode.SeeOther
             or HttpStatusCode.TemporaryRedirect
             or HttpStatusCode.PermanentRedirect;
+    }
+
+    private static bool IsSameOrigin(Uri first, Uri second)
+    {
+        return string.Equals(
+                   first.Scheme,
+                   second.Scheme,
+                   StringComparison.OrdinalIgnoreCase)
+               && string.Equals(
+                   first.IdnHost,
+                   second.IdnHost,
+                   StringComparison.OrdinalIgnoreCase)
+               && first.Port == second.Port;
     }
 
     public void Dispose()

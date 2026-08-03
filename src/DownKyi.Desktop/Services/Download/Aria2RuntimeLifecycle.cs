@@ -109,7 +109,9 @@ internal sealed class Aria2RuntimeLifecycle : IDisposable
 
             try
             {
-                var version = await _ariaClient.GetAriaVersionAsync().ConfigureAwait(true);
+                var version = await _ariaClient
+                    .GetAriaVersionAsync(cancellationToken)
+                    .ConfigureAwait(true);
                 if (version is { Result: { } versionResult })
                 {
                     EnsureSecureRedirectFeature(versionResult.EnabledFeatures);
@@ -151,8 +153,9 @@ internal sealed class Aria2RuntimeLifecycle : IDisposable
     private async Task EnsureSecureRedirectFeatureAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var version = await _ariaClient.GetAriaVersionAsync().ConfigureAwait(true);
-        cancellationToken.ThrowIfCancellationRequested();
+        var version = await _ariaClient
+            .GetAriaVersionAsync(cancellationToken)
+            .ConfigureAwait(true);
         if (version is not { Result: { } versionResult })
         {
             throw new InvalidOperationException(

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using DownKyi.Core.Aria2cNet.Client;
 using DownKyi.Core.FileName;
 using DownKyi.Core.Settings;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -7,6 +8,38 @@ namespace DownKyi.Core.Tests;
 
 public sealed class SettingsStoreTests
 {
+    [Fact]
+    public void CustomAriaAcceptsTheDefaultEmptyRpcSecretWithoutBootstrapFailure()
+    {
+        var directory = CreateTestDirectory();
+        try
+        {
+            using var store = new SettingsStore(Path.Combine(directory, "settings.json"));
+            var updated = store.Update(settings => settings with
+            {
+                Network = settings.Network with
+                {
+                    Downloader = Downloader.CustomAria,
+                    AriaHost = "https://aria.example",
+                    AriaToken = string.Empty
+                }
+            });
+
+            var client = new AriaClient(
+                updated.Network.AriaHost,
+                updated.Network.AriaListenPort,
+                updated.Network.AriaToken);
+
+            Assert.NotNull(client);
+            Assert.Equal(Downloader.CustomAria, updated.Network.Downloader);
+            Assert.Empty(updated.Network.AriaToken);
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
     [Fact]
     public async Task LegacyPlainHttpSettingIsMigratedToRequiredHttps()
     {
@@ -66,6 +99,70 @@ public sealed class SettingsStoreTests
             using var store = new SettingsStore(settingsPath);
 
             Assert.Equal("http://localhost", store.Current.Network.AriaHost);
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public async Task CredentialBearingAriaRpcSettingIsRestoredBeforeBootstrap()
+    {
+        var directory = CreateTestDirectory();
+        var settingsPath = Path.Combine(directory, "settings.json");
+        const string source = """
+            {
+              "Network": {
+                "Downloader": 3,
+                "AriaHost": "https://user:password@aria.example"
+              }
+            }
+            """;
+
+        try
+        {
+            await File.WriteAllTextAsync(
+                settingsPath,
+                source,
+                TestContext.Current.CancellationToken);
+            using var store = new SettingsStore(settingsPath);
+
+            Assert.Equal("http://localhost", store.Current.Network.AriaHost);
+            Assert.Empty(new Uri(store.Current.Network.AriaHost).UserInfo);
+
+            await store.FlushAsync(TestContext.Current.CancellationToken);
+            using var document = JsonDocument.Parse(await File.ReadAllTextAsync(
+                settingsPath,
+                TestContext.Current.CancellationToken));
+            Assert.Equal(
+                "http://localhost",
+                document.RootElement.GetProperty("Network").GetProperty("AriaHost").GetString());
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
+    public void CredentialBearingAriaRpcUpdateIsRejectedByTheSnapshotContract()
+    {
+        var directory = CreateTestDirectory();
+        try
+        {
+            using var store = new SettingsStore(Path.Combine(directory, "settings.json"));
+
+            var updated = store.Update(settings => settings with
+            {
+                Network = settings.Network with
+                {
+                    AriaHost = "https://user:password@aria.example"
+                }
+            });
+
+            Assert.Equal("http://localhost", updated.Network.AriaHost);
+            Assert.Empty(new Uri(updated.Network.AriaHost).UserInfo);
         }
         finally
         {

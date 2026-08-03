@@ -352,7 +352,7 @@ public sealed partial class Aria2TlsIntegrationTests
             server.Url,
             outputName,
             maximumTries: 1,
-            headers: null,
+            headers: ["Cookie: test-session=fixture"],
             cancellationToken).ConfigureAwait(false);
 
         AssertCompleted(status, "same-origin-https-redirect", server.Failures);
@@ -363,6 +363,11 @@ public sealed partial class Aria2TlsIntegrationTests
         Assert.Contains(
             server.Requests,
             request => request.RequestTarget.StartsWith("/final.bin", StringComparison.Ordinal));
+        Assert.All(
+            server.Requests,
+            request => Assert.Equal(
+                "test-session=fixture",
+                request.Headers["Cookie"]));
         results.Add(new Aria2TlsCaseResult(
             "same-origin-https-redirect",
             true,

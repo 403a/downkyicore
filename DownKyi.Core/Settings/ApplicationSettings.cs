@@ -388,6 +388,11 @@ internal static class ApplicationSettingsValidator
             return false;
         }
 
+        if (!string.IsNullOrEmpty(uri.UserInfo))
+        {
+            return false;
+        }
+
         if (string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
         {
             return true;

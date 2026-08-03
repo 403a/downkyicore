@@ -324,16 +324,52 @@ internal sealed class Aria2TransferBackend : ITransferBackend
         }
         else if (string.Equals(existingStatus, "paused", StringComparison.Ordinal))
         {
-            var unpaused = await _ariaClient.UnpauseAsync(gid).ConfigureAwait(true);
-            if (unpaused is not { Result: { } unpausedGid } ||
-                string.IsNullOrWhiteSpace(unpausedGid))
-            {
-                throw new InvalidOperationException(
-                    "aria2 rejected the unpause request.");
-            }
+            await RefreshOptionsAndUnpauseAsync(
+                _ariaClient,
+                gid,
+                taskHeaders,
+                request.CancellationToken).ConfigureAwait(true);
         }
 
         return AriaTaskPreparation.Ready(gid);
+    }
+
+    internal static async Task RefreshOptionsAndUnpauseAsync(
+        AriaClient ariaClient,
+        string gid,
+        AriaTaskHeaders taskHeaders,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(ariaClient);
+        ArgumentException.ThrowIfNullOrWhiteSpace(gid);
+        ArgumentNullException.ThrowIfNull(taskHeaders);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var options = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["header"] = taskHeaders.Headers.ToArray(),
+            ["user-agent"] = taskHeaders.UserAgent
+        };
+        var changed = await ariaClient
+            .ChangeOptionAsync(gid, options)
+            .WaitAsync(cancellationToken)
+            .ConfigureAwait(true);
+        if (changed is not { Result: "OK" })
+        {
+            throw new InvalidOperationException(
+                "aria2 rejected the task credential refresh.");
+        }
+
+        var unpaused = await ariaClient
+            .UnpauseAsync(gid)
+            .WaitAsync(cancellationToken)
+            .ConfigureAwait(true);
+        if (unpaused is not { Result: { } unpausedGid }
+            || string.IsNullOrWhiteSpace(unpausedGid))
+        {
+            throw new InvalidOperationException(
+                "aria2 rejected the unpause request.");
+        }
     }
 
     private static bool IsNotFound(AriaError? error)

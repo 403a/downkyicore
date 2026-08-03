@@ -137,7 +137,7 @@ namespace DownKyi.Core.Aria2cNet.Server
             }
             catch
             {
-                ReleaseStartupSecrets();
+                KillTrackedServer("aria2 process startup failed.");
                 throw;
             }
 
@@ -168,40 +168,37 @@ namespace DownKyi.Core.Aria2cNet.Server
                 var completed = await Task.WhenAny(shutdown, Task.Delay(waitTimeout)).ConfigureAwait(false);
                 if (completed != shutdown)
                 {
-                    KillTrackedServer("aria2 shutdown rpc timed out.");
-                    return false;
+                    return KillTrackedServer("aria2 shutdown rpc timed out.");
                 }
 
                 var result = await shutdown.ConfigureAwait(false);
                 if (result?.Result != "OK")
                 {
-                    KillTrackedServer("aria2 shutdown rpc failed.");
-                    return false;
+                    return KillTrackedServer("aria2 shutdown rpc failed.");
                 }
 
-                return await WaitForExitOrKillAsync(waitTimeout).ConfigureAwait(false);
+                var exited = await WaitForExitOrKillAsync(waitTimeout).ConfigureAwait(false);
+                if (exited)
+                {
+                    ReleaseStartupSecrets();
+                }
+
+                return exited;
             }
             catch (HttpRequestException e)
             {
                 _logger.LogErrorMessage("aria2 shutdown request failed.", e);
-                KillTrackedServer("aria2 shutdown failed.");
-                return false;
+                return KillTrackedServer("aria2 shutdown failed.");
             }
             catch (InvalidOperationException e)
             {
                 _logger.LogErrorMessage("aria2 shutdown encountered an invalid process state.", e);
-                KillTrackedServer("aria2 shutdown failed.");
-                return false;
+                return KillTrackedServer("aria2 shutdown failed.");
             }
             catch (Newtonsoft.Json.JsonException e)
             {
                 _logger.LogErrorMessage("aria2 shutdown returned an invalid response.", e);
-                KillTrackedServer("aria2 shutdown response was invalid.");
-                return false;
-            }
-            finally
-            {
-                ReleaseStartupSecrets();
+                return KillTrackedServer("aria2 shutdown response was invalid.");
             }
         }
 
@@ -224,53 +221,49 @@ namespace DownKyi.Core.Aria2cNet.Server
                 var completed = await Task.WhenAny(shutdown, Task.Delay(waitTimeout)).ConfigureAwait(false);
                 if (completed != shutdown)
                 {
-                    KillTrackedServer("aria2 force shutdown rpc timed out.");
-                    return false;
+                    return KillTrackedServer("aria2 force shutdown rpc timed out.");
                 }
 
                 var result = await shutdown.ConfigureAwait(false);
                 if (result?.Result != "OK")
                 {
-                    KillTrackedServer("aria2 force shutdown rpc failed.");
-                    return false;
+                    return KillTrackedServer("aria2 force shutdown rpc failed.");
                 }
 
-                return await WaitForExitOrKillAsync(waitTimeout).ConfigureAwait(false);
+                var exited = await WaitForExitOrKillAsync(waitTimeout).ConfigureAwait(false);
+                if (exited)
+                {
+                    ReleaseStartupSecrets();
+                }
+
+                return exited;
             }
             catch (HttpRequestException e)
             {
                 _logger.LogErrorMessage("aria2 force-shutdown request failed.", e);
-                KillTrackedServer("aria2 force shutdown failed.");
-                return false;
+                return KillTrackedServer("aria2 force shutdown failed.");
             }
             catch (InvalidOperationException e)
             {
                 _logger.LogErrorMessage("aria2 force shutdown encountered an invalid process state.", e);
-                KillTrackedServer("aria2 force shutdown failed.");
-                return false;
+                return KillTrackedServer("aria2 force shutdown failed.");
             }
             catch (Newtonsoft.Json.JsonException e)
             {
                 _logger.LogErrorMessage("aria2 force shutdown returned an invalid response.", e);
-                KillTrackedServer("aria2 force shutdown response was invalid.");
-                return false;
-            }
-            finally
-            {
-                ReleaseStartupSecrets();
+                return KillTrackedServer("aria2 force shutdown response was invalid.");
             }
         }
 
         public bool KillTrackedServer(string reason)
         {
-            try
-            {
-                return _processSupervisor.Kill(reason);
-            }
-            finally
+            var exited = _processSupervisor.Kill(reason);
+            if (exited)
             {
                 ReleaseStartupSecrets();
             }
+
+            return exited;
         }
 
         internal void SetTrackedServerForTests(Process? process)
@@ -281,6 +274,11 @@ namespace DownKyi.Core.Aria2cNet.Server
         internal bool HasTrackedServerForTests()
         {
             return _processSupervisor.HasTrackedProcess;
+        }
+
+        internal void SetStartupSecretForTests(AriaRpcSecretFile? secretFile)
+        {
+            Interlocked.Exchange(ref _startupSecret, secretFile)?.Dispose();
         }
 
         internal static string GetLogLevelArgument(AriaConfigLogLevel logLevel)

@@ -3,6 +3,7 @@ using DownKyi.Core.Aria2cNet.Client;
 using DownKyi.Core.Aria2cNet.Client.Entity;
 using DownKyi.TestInfrastructure;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace DownKyi.Core.Tests;
 
@@ -36,13 +37,63 @@ public sealed class AriaClientSecurityTests
             new AriaClient("https://user:password@aria.example", 6800, "test-token"));
     }
 
-    [Theory]
-    [InlineData("")]
-    [InlineData("   ")]
-    public void RpcSecretMustNotBeEmpty(string token)
+    [Fact]
+    public async Task EmptyRpcSecretUsesTheUnauthenticatedAriaContract()
+    {
+        string? capturedPayload = null;
+        var client = new AriaClient(
+            "http://localhost",
+            6800,
+            string.Empty,
+            (_, payload) =>
+            {
+                capturedPayload = payload;
+                return Task.FromResult<string?>(
+                    "{\"id\":\"test\",\"jsonrpc\":\"2.0\",\"result\":{\"version\":\"1.37.0\",\"enabledFeatures\":[]}}");
+            });
+
+        var response = await client.GetAriaVersionAsync(
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("1.37.0", response.Result?.Version);
+        var request = JObject.Parse(Assert.IsType<string>(capturedPayload));
+        Assert.Empty(Assert.IsType<JArray>(request["params"]));
+    }
+
+    [Fact]
+    public void WhitespaceOnlyRpcSecretIsRejected()
     {
         Assert.Throws<ArgumentException>(() =>
-            new AriaClient("http://localhost", 6800, token));
+            new AriaClient("http://localhost", 6800, "   "));
+    }
+
+    [Fact]
+    public async Task CapabilityRequestPropagatesCancellationToTheRpcTransport()
+    {
+        CancellationToken observedToken = default;
+        var entered = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var client = new AriaClient(
+            "https://aria.example",
+            6800,
+            "test-token",
+            async (_, _, cancellationToken) =>
+            {
+                observedToken = cancellationToken;
+                entered.TrySetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken)
+                    .ConfigureAwait(false);
+                return null;
+            });
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            TestContext.Current.CancellationToken);
+
+        var request = client.GetAriaVersionAsync(cancellation.Token);
+        await entered.Task.WaitAsync(TestContext.Current.CancellationToken);
+        await cancellation.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => request);
+        Assert.Equal(cancellation.Token, observedToken);
     }
 
     [Fact]

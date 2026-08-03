@@ -1,7 +1,11 @@
 using System.Net;
 using System.Net.Http;
+using DownKyi.Core.Aria2cNet.Client;
+using DownKyi.Core.Aria2cNet.Server;
 using DownKyi.Core.Settings;
 using DownKyi.Services.Download;
+using Microsoft.Extensions.Logging.Abstractions;
+using Newtonsoft.Json.Linq;
 
 namespace DownKyi.Tests;
 
@@ -151,12 +155,12 @@ public sealed class AriaSecurityTests
     }
 
     [Fact]
-    public async Task AddressResolverRejectsEveryCredentialBearingRedirect()
+    public async Task AddressResolverRejectsCredentialBearingCrossOriginRedirect()
     {
         using var handler = new StubHttpMessageHandler((_, _) => new HttpResponseMessage(
             HttpStatusCode.Found)
         {
-            Headers = { Location = new Uri("https://api.bilibili.com/final") }
+            Headers = { Location = new Uri("https://cdn.example/final") }
         });
         using var resolver = AriaDownloadAddressResolver.CreateForTest(handler);
 
@@ -169,6 +173,38 @@ public sealed class AriaSecurityTests
         Assert.Equal("download.transfer.credentialed-redirect", result.ErrorCode);
         Assert.Null(result.Address);
         Assert.Equal(1, handler.RequestCount);
+    }
+
+    [Fact]
+    public async Task AddressResolverAllowsCredentialBearingSameOriginHttpsRedirect()
+    {
+        using var handler = new StubHttpMessageHandler((request, requestNumber) =>
+        {
+            Assert.Equal("api.bilibili.com", request.RequestUri?.Host);
+            Assert.True(request.Headers.TryGetValues("Cookie", out var cookies));
+            Assert.Contains("test-cookie=value", cookies);
+            if (requestNumber == 1)
+            {
+                return new HttpResponseMessage(HttpStatusCode.Found)
+                {
+                    Headers = { Location = new Uri("/final", UriKind.Relative) }
+                };
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.PartialContent);
+        });
+        using var resolver = AriaDownloadAddressResolver.CreateForTest(handler);
+
+        var result = await resolver.ResolveAsync(
+            "https://api.bilibili.com/media",
+            "DownKyi-Test-Agent",
+            "test-cookie=value",
+            TestContext.Current.CancellationToken);
+
+        Assert.Null(result.ErrorCode);
+        Assert.Equal("https://api.bilibili.com/final", result.Address?.AbsoluteUri);
+        Assert.True(result.Headers?.CarriesCredentials);
+        Assert.Equal(2, handler.RequestCount);
     }
 
     [Fact]
@@ -200,6 +236,129 @@ public sealed class AriaSecurityTests
         Assert.Equal("https://download.example/final", acceptedAddress.AbsoluteUri);
         Assert.False(acceptedHeaders.CarriesCredentials);
         Assert.Equal(2, handler.RequestCount);
+    }
+
+    [Fact]
+    public async Task CustomAriaCapabilityProbeStopsWhenStartupIsCanceled()
+    {
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            $"downkyi-custom-aria-cancel-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            using var settings = new SettingsStore(Path.Combine(directory, "settings.json"));
+            var entered = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            var client = new AriaClient(
+                "https://aria.example",
+                6800,
+                string.Empty,
+                async (_, _, cancellationToken) =>
+                {
+                    entered.TrySetResult();
+                    await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken)
+                        .ConfigureAwait(false);
+                    return null;
+                });
+            using var lifecycle = new Aria2RuntimeLifecycle(
+                settings.Current.Network,
+                client,
+                new DownloadDiagnosticLogger(
+                    NullLogger<DownloadDiagnosticLogger>.Instance),
+                new AriaServer(NullLoggerFactory.Instance),
+                NullLogger<Aria2RuntimeLifecycle>.Instance,
+                ownsAriaServer: false,
+                localEndpoint: null);
+            using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                TestContext.Current.CancellationToken);
+
+            var startup = lifecycle.StartAsync(cancellation.Token);
+            await entered.Task.WaitAsync(TestContext.Current.CancellationToken);
+            await cancellation.CancelAsync();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => startup);
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task PausedGidRefreshesCurrentCredentialsBeforeUnpause()
+    {
+        var requests = new List<JObject>();
+        var client = CreatePausedTaskClient(requests);
+        var headers = new AriaTaskHeaders(
+            ["Cookie: current-session=fixture"],
+            "Current-Agent",
+            CarriesCredentials: true);
+
+        await Aria2TransferBackend.RefreshOptionsAndUnpauseAsync(
+            client,
+            "existing-gid",
+            headers,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(["aria2.changeOption", "aria2.unpause"],
+            requests.Select(request => request["method"]?.Value<string>()));
+        var options = Assert.IsType<JObject>(
+            Assert.IsType<JArray>(requests[0]["params"])[2]);
+        Assert.Equal("Current-Agent", options["user-agent"]?.Value<string>());
+        Assert.Equal(
+            ["Cookie: current-session=fixture"],
+            Assert.IsType<JArray>(options["header"])
+                .Values<string>()
+                .OfType<string>()
+                .ToArray());
+    }
+
+    [Fact]
+    public async Task PausedGidCanClearStoredCredentialsBeforeUnpause()
+    {
+        var requests = new List<JObject>();
+        var client = CreatePausedTaskClient(requests);
+        var headers = new AriaTaskHeaders(
+            [],
+            "Current-Agent",
+            CarriesCredentials: false);
+
+        await Aria2TransferBackend.RefreshOptionsAndUnpauseAsync(
+            client,
+            "existing-gid",
+            headers,
+            TestContext.Current.CancellationToken);
+
+        var options = Assert.IsType<JObject>(
+            Assert.IsType<JArray>(requests[0]["params"])[2]);
+        Assert.Empty(Assert.IsType<JArray>(options["header"]));
+        Assert.Equal("aria2.unpause", requests[1]["method"]?.Value<string>());
+    }
+
+    private static AriaClient CreatePausedTaskClient(
+        List<JObject> requests)
+    {
+        return new AriaClient(
+            "http://localhost",
+            6800,
+            "test-token",
+            (_, payload) =>
+            {
+                var request = JObject.Parse(payload);
+                requests.Add(request);
+                var result = request["method"]?.Value<string>() switch
+                {
+                    "aria2.changeOption" => "OK",
+                    "aria2.unpause" => "existing-gid",
+                    _ => throw new InvalidOperationException("Unexpected aria2 RPC method.")
+                };
+                return Task.FromResult<string?>(
+                    $"{{\"id\":\"test\",\"jsonrpc\":\"2.0\",\"result\":\"{result}\"}}");
+            });
     }
 
     private sealed class StubHttpMessageHandler(
