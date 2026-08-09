@@ -41,7 +41,7 @@ gate directly on `main` before further #120 or #127 remediation.
 
 ## Local Verification
 
-Verified on Windows x64 against `origin/main` at `a03ab647a9965b8b95f57369fb9784f58484d5bb`:
+Verified on Windows x64 against `origin/main` at `c4d00b3296922844826343e5ba82085364ebba32`:
 
 - Strict Release build: 0 warnings, 0 errors.
 - Review invariant corpus: 9 invariants, 7 projects, 239 tests passed.
