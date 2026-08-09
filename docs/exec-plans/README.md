@@ -2,6 +2,8 @@
 
 目前即時狀態位於 `../refactoring-live-plan.md`。v1.1.1 的安全修補順序、
 範圍、驗證與回滾位於 `v1.1.1-security-patch.md`。
+Root-cause review remediation policy baseline 的獨立範圍與驗證位於
+`root-cause-review-policy-baseline.md`。
 
 每個 work item 必須包含：
 
