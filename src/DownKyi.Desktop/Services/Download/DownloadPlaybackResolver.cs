@@ -61,6 +61,7 @@ internal sealed class DownloadPlaybackResolver
                 downloading.DownloadBase.Avid,
                 downloading.DownloadBase.Bvid,
                 downloading.DownloadBase.Cid,
+                downloading.DownloadBase.EpisodeId,
                 cancellationToken: cancellationToken),
             PlayStreamType.Cheese => _client.GetCheesePlayUrlAsync(
                 downloading.DownloadBase.Avid,

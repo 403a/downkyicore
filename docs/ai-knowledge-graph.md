@@ -1628,6 +1628,8 @@ contracts:
   - Publication search uses `x/space/wbi/arc/search` and retains `data.page.count`; favorite search uses `x/v3/fav/resource/list` and retains `data.has_more`.
   - Anonymous navigation alone may accept API code `-101` because `/x/web-interface/nav` still supplies public WBI metadata; the exception cannot spread to other endpoints.
   - Ordinary playback selects `data`, bangumi v2 playback selects `result.video_info`, and cheese playback selects `data`.
+  - Bangumi v2 playback requires a positive `ep_id`; page parsing and persisted download playback must preserve the episode identity to the HTTP request boundary.
+  - Bangumi v2 DURL and DASH are alternative playback formats. Explicit null playback fields and all-empty playback collections are typed failures; an absent alternative does not invalidate a non-empty format.
   - Every fixed endpoint literal in Core must appear in the API audit with status, evidence, alternative and deterministic coverage.
 hazards:
   - Bilibili schema changes must fail at this boundary rather than deserialize into a plausible empty success object.
@@ -3036,10 +3038,13 @@ test.bilibili-api-contract-audit:
     - tests/DownKyi.Core.Tests/PlayUrlEnvelopeContractTests.cs
     - tests/DownKyi.Core.Tests/BiliApi/JsonSamples/user-navigation-anonymous.json
     - tests/DownKyi.Core.Tests/BiliApi/JsonSamples/playurl-bangumi-v2-result.json
+    - tests/DownKyi.Tests/BangumiEpisodeIdentityTests.cs
     - tests/DownKyi.Architecture.Tests/BilibiliApiInventoryArchitectureTests.cs
   guards:
     - anonymous navigation preserves public WBI metadata while nonzero API codes remain rejected everywhere else
-    - bangumi v2 requires a non-empty `result.video_info` payload
+    - bangumi v2 requires a positive `ep_id` and a non-empty `result.video_info` payload
+    - page playback and persisted download playback preserve the same bangumi episode identity in the actual request URI
+    - explicit null DURL/DASH fields and all-empty playback collections fail with typed diagnostics while DURL-only and DASH-only payloads remain valid
     - optional `data` and `result` envelopes cannot invent payloads with default initializers
     - every hard-coded Core endpoint is listed in the maintained API audit
     - anonymous and authenticated probes have separate explicit-consent paths

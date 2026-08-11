@@ -2,10 +2,9 @@
 
 Status: active
 Last updated: 2026-08-11
-Current work item: v1.1.1 item 2, PR #120 review remediation
-Current remote branch: `perf/watch-later-list-virtualization`
-Current remote head: `c9fb114c2039c2f7d970c75f60fbef07971de3d6`
-Current base: `origin/main` at `912949735733c986bcfeefaa4300a5fdb25c907e`
+Current work item: v1.1.1 item 3, Bangumi episode identity and playback contract
+Current working branch: `fix/bangumi-ep-id-contract`
+Current base: `origin/main` at `6e1e1d79b9aa10c06f534a94a845b4707d9766ba`
 
 This file contains only unfinished, blocked or integration-pending work. Accepted
 design and completed history belong in `ARCHITECTURE.md`, `docs/design-docs/`,
@@ -14,32 +13,34 @@ in `docs/exec-plans/v1.1.1-security-patch.md`.
 
 ## Current Item
 
-### v1.1.1 Item 2: PR #120 Root-Cause Review Remediation
+### v1.1.1 Item 3: Bangumi Episode Identity And Playback Contract
 
-- [ ] Reconcile the remote PR head with the already verified local remediation
-      commits without force-push or unrelated product changes.
-- [ ] Preserve append-only artifact ownership so a failed required artifact
-      cannot publish completion or leave an unowned file.
-- [ ] Bound segmented danmaku termination and distinguish normal absence from
-      protocol/transport failure.
-- [ ] Preserve borderless dialog hit testing, migration close/cancel semantics
-      and startup-dialog ownership.
-- [ ] Run the invariant corpus, strict Release build, all seven test projects,
-      architecture/lifecycle checks, format, secrets, workflow and package
-      gates on one exact head.
-- [ ] Reply to and resolve only the review threads proven complete by that exact
-      head. Keep PR #120 open until its required checks are green.
+- [x] Require a positive `ep_id` before the Bangumi v2 playback request and
+      preserve it through page parsing and persisted download playback.
+- [x] Keep DURL and DASH as alternative valid formats while rejecting missing
+      envelopes, explicit null playback fields and all-empty playback results
+      with typed diagnostics.
+- [x] Cover the actual request URI, invalid-ID no-request behavior, malformed
+      response matrix and both production callers with deterministic tests.
+- [x] Synchronize the Bilibili API audit and AI knowledge graph.
+- [x] Pass strict Release, invariant corpus, all seven test projects,
+      architecture/lifecycle, format, module, workflow, package, secret and diff
+      gates locally.
+- [ ] Push one exact head, open the current-architecture replacement for stale
+      PR #85, and obtain all required remote checks. Close #85 only after the
+      replacement is merged.
 
 ## Next Items
 
-These remain deliberately unstarted until the current item is complete:
+These remain deliberately unstarted until the current item is integrated:
 
-1. Bangumi `ep_id` propagation and playback response contract, reimplemented on
-   current `main` rather than merging the stale PR #85 base.
-2. Remaining v1.1.1 P1, merge-blocking or core runtime review debt, including
+1. Remaining v1.1.1 P1, merge-blocking or core runtime review debt, including
    the open dialog/output-path/mux/source-transition stack after its dependency
    graph is reconciled with current `main`.
-3. Final release rehearsal, package validation and v1.1.1 publication.
+   This includes the pre-existing `DownKyi.Tests` SQLite pool-disposal race
+   observed once during item 3 verification; an isolated rerun and the next full
+   run passed, which does not prove that separate lifecycle root cause fixed.
+2. Final release rehearsal, package validation and v1.1.1 publication.
 
 ## Deferred After v1.1.1
 

@@ -56,7 +56,7 @@ Dynamic media dependencies are not fixed API endpoints: subtitle JSON addresses 
 |---|---|---|---|---|
 | `api.bilibili.com/pgc/review/user` | `BangumiInfo.BangumiMediaInfo`; media-to-season resolution | GET, `result` | `current`; YT/community implementations retain the media/season route | Keep. Optional `result` remains nullable and required by the caller. |
 | `api.bilibili.com/pgc/view/web/season` | `BangumiInfo.BangumiSeasonInfo`; season/episode metadata | GET, `result` | `current`; LIVE code 0 for multiple public episodes; YT agrees | Keep. Public episode fixtures cover field selection. |
-| `api.bilibili.com/pgc/player/web/v2/playurl` | `VideoStreamApi.GetBangumiPlayUrl`; bangumi streams | GET, `result.video_info`; auth/region rules vary | `fixed`; LIVE code 0 for ep 21495, 50188 and 678060; YT and NEMO use v2 | Replaced legacy v1 runtime URL. New nullable `BangumiPlayUrlV2Origin` contract rejects missing/empty `result.video_info`; v1 fixture remains only as wire compatibility coverage. |
+| `api.bilibili.com/pgc/player/web/v2/playurl` | `VideoStreamApi.GetBangumiPlayUrlAsync`; bangumi streams | GET, positive `ep_id` required, `result.video_info`; auth/region rules vary | `fixed`; LIVE code 0 for ep 21495, 50188 and 678060; YT and NEMO use v2 | Replaced legacy v1 runtime URL. Page parsing and persisted download playback both preserve the episode identity. The contract rejects missing `result.video_info`, explicit null playback fields and an empty DURL/DASH result; DURL and DASH remain alternative valid formats. |
 | `api.bilibili.com/pugv/view/web/season` | `CheeseInfo.CheeseViewInfo`; course metadata | GET, `data`; access varies | `current`; LIVE endpoint responds; NEMO/fixtures agree | Keep. Required `data` failure is typed. |
 | `api.bilibili.com/pugv/view/web/ep/list` | `CheeseInfo.CheeseEpisodeList`; course pages | GET, `data` | `current`; LIVE endpoint responds; NEMO agrees | Keep. Pagination remains explicit. |
 | `api.bilibili.com/pugv/player/web/playurl` | `VideoStreamApi.GetCheesePlayUrl`; course streams | GET, `data`, `ep_id` required | `current`; LIVE endpoint responds; YT uses the same route | Keep. `PlayUrlEnvelopeContractTests.CheeseEndpointUsesDataEnvelope` fixes the endpoint contract. |
@@ -120,7 +120,7 @@ The machine-readable artifact is [`bilibili-authenticated-api-audit.json`](bilib
 ## Confirmed Changes
 
 1. Anonymous navigation now accepts only API code `-101` at the `/nav` contract, then requires `data`. This repairs WBI bootstrap for public videos without weakening global API error handling.
-2. Bangumi playback now uses `/pgc/player/web/v2/playurl` and explicitly selects `result.video_info`. The v2 DTO does not create default payloads.
+2. Bangumi playback uses `/pgc/player/web/v2/playurl`, requires a positive `ep_id`, and explicitly selects `result.video_info`. Both page playback and persisted download playback carry the episode identity. The v2 DTO does not create a default envelope payload; explicit null playback fields and an all-empty DURL/DASH result fail with typed diagnostics while either non-empty format remains valid by itself.
 3. The audit records the retired channel family, invalid nickname query, legacy danmaku path, and watch-later ambiguity without speculative remapping.
 4. `BilibiliApiInventoryArchitectureTests` fails when a fixed Core endpoint is not present in this document or when the `/nav` nonzero-code exception spreads to another source file.
 5. `script/audit-bilibili-api.ps1 -ConfirmLive` reproduces the anonymous subset and outputs only sanitized diagnostics. It is an operator tool, not a CI test.
@@ -131,7 +131,13 @@ The machine-readable artifact is [`bilibili-authenticated-api-audit.json`](bilib
 - `UserNavigationContractTests.AnonymousNavigationResponsePreservesPublicWbiMetadata`
 - `UserNavigationContractTests.AnonymousCodeRemainsRejectedOutsideTheNavigationContract`
 - `PlayUrlEnvelopeContractTests.BangumiEndpointUsesResultVideoInfoEnvelope`
+- `PlayUrlEnvelopeContractTests.BangumiEndpointRejectsInvalidEpisodeIdBeforeRequest`
 - `PlayUrlEnvelopeContractTests.BangumiV2MissingVideoInfoThrowsTypedContractFailure`
+- `PlayUrlEnvelopeContractTests.BangumiV2NullPlaybackFieldThrowsTypedMalformedFailure`
+- `PlayUrlEnvelopeContractTests.BangumiV2EmptyPlaybackCollectionsThrowTypedEmptyFailure`
+- `PlayUrlEnvelopeContractTests.BangumiV2DashOnlyPayloadRemainsValid`
+- `BangumiEpisodeIdentityTests.InfoServicePassesPageEpisodeIdToPlaybackRequest`
+- `BangumiEpisodeIdentityTests.DownloadResolverPassesPersistedEpisodeIdToPlaybackRequest`
 - existing `PlayUrlEnvelopeContractTests` for ordinary video and cheese
 - existing `BvFixtureContractTests` for `BV1U7V66FEiK`
 - `BilibiliApiInventoryArchitectureTests.EveryHardCodedBilibiliApiEndpointIsRecordedInTheAudit`
