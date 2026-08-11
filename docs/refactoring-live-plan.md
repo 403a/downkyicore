@@ -1,70 +1,59 @@
 # DownKyi Live Plan
 
 Status: active
-Last updated: 2026-08-01
-Current work item: v1.1.1 item 1, aria2 TLS and control-plane security
-Current branch: `fix/aria2-tls-certificate-validation`
-Current base: `origin/main` at `e2fd83d09b0fa641453fc92912ad238ed5499056`
+Last updated: 2026-08-11
+Current work item: v1.1.1 item 2, PR #120 review remediation
+Current remote branch: `perf/watch-later-list-virtualization`
+Current remote head: `c9fb114c2039c2f7d970c75f60fbef07971de3d6`
+Current base: `origin/main` at `912949735733c986bcfeefaa4300a5fdb25c907e`
 
 This file contains only unfinished, blocked or integration-pending work. Accepted
 design and completed history belong in `ARCHITECTURE.md`, `docs/design-docs/`,
-`docs/maintenance.md` and release notes. The detailed item contract is
-`docs/exec-plans/v1.1.1-security-patch.md`.
+`docs/maintenance.md` and release notes. Completed v1.1.1 item 1 evidence remains
+in `docs/exec-plans/v1.1.1-security-patch.md`.
 
 ## Current Item
 
-### v1.1.1 Item 1: aria2 TLS And Control Plane
+### v1.1.1 Item 2: PR #120 Root-Cause Review Remediation
 
-- [x] Remove the packaged aria2 certificate-validation bypass and every
-      production HTTP downgrade path.
-- [x] Remove Cookie and RPC secret from aria2 process arguments.
-- [x] Replace process-global headers with per-transfer headers and exact HTTPS
-      Bilibili credential scope.
-- [x] Use `ProcessStartInfo.ArgumentList` and reject header control characters.
-- [x] Give each packaged runtime a fresh ephemeral loopback port and 256-bit
-      secret; verify the supervised child remains alive before accepting RPC.
-- [x] Reject non-loopback plaintext RPC, URI credentials and RPC redirects.
-- [x] Make legacy `UseSsl` a read-only migration marker that cannot affect
-      runtime and disappears on the next settings write.
-- [x] Add typed TLS failure classification and user-visible status.
-- [x] Add architecture, settings, RPC, process-argument, header-scope and retry
-      regression tests.
-- [x] Add a real-binary deterministic TLS suite covering valid trust, resume,
-      redirects, RPC lifecycle, unknown/self-signed/expired/future/wrong-host/
-      missing-SAN/incomplete-chain failures, app-level retry, actual GET/Range/
-      second-request downgrade and sensitive cross-origin redirects.
-- [x] Add the six-RID `aria2-tls-security` quality matrix and sanitized report.
-- [x] Preserve the original fork and complete mirror bundle; create independent
-      `downkyi-aria2` source and `downkyi-aria2-static-build` repositories.
-- [x] Generate a normal-context canonical patch from fixed source commit
-      `9938788f7e62af0530a1b28ece752e1de1fd0d46`; verify its SHA, apply and exact
-      resulting tree separately from ordinary repository `git diff --check`.
-- [x] Pin zlib and OpenSSL source URLs and SHA-256 values in `source-lock.json`;
-      build jobs do not follow a movable source branch or dependency page.
-- [x] Require bundled binary SHA verification before process start and the
-      versioned secure-redirect feature for bundled and custom aria2 RPC.
-- [x] Complete all six static binary builds, fix their archive/binary SHA-256
-      values and publish them from immutable tag `1.37.0-downkyi.2`.
-- [x] Pass the actual-transfer TLS/redirect/header suite on all six binaries and
-      prove downgrade targets receive zero requests. Windows x64/x86 are
-      locally green; all six RIDs passed CI run `30799263926`.
-- [x] Pass strict local Release build, all seven tests, format, module audit,
-      lifecycle ownership/gate, package audits, secret scan and diff check on
-      the final manifest and product diff.
-- [x] Commit and push the complete isolated item to its one feature branch.
-- [x] Open one Draft PR against `main` and require all six real aria2 RID jobs,
-      normal quality jobs and CodeQL to pass on the exact head commit.
-- [x] Review uploaded sanitized reports, verify no credential/path leakage and
-      update `aria2-security-baseline.json` with exact CI evidence.
-- [ ] Resolve all item-1 merge blockers and mark the item complete.
+- [ ] Reconcile the remote PR head with the already verified local remediation
+      commits without force-push or unrelated product changes.
+- [ ] Preserve append-only artifact ownership so a failed required artifact
+      cannot publish completion or leave an unowned file.
+- [ ] Bound segmented danmaku termination and distinguish normal absence from
+      protocol/transport failure.
+- [ ] Preserve borderless dialog hit testing, migration close/cancel semantics
+      and startup-dialog ownership.
+- [ ] Run the invariant corpus, strict Release build, all seven test projects,
+      architecture/lifecycle checks, format, secrets, workflow and package
+      gates on one exact head.
+- [ ] Reply to and resolve only the review threads proven complete by that exact
+      head. Keep PR #120 open until its required checks are green.
 
 ## Next Items
 
-These remain deliberately unstarted until the previous item is complete:
+These remain deliberately unstarted until the current item is complete:
 
-1. PR #120 scope cleanup and merge-blocking findings.
-2. Bangumi `ep_id` propagation and playback response contract.
-3. Remaining v1.1.1 P1, merge-blocking or core runtime review debt.
+1. Bangumi `ep_id` propagation and playback response contract, reimplemented on
+   current `main` rather than merging the stale PR #85 base.
+2. Remaining v1.1.1 P1, merge-blocking or core runtime review debt, including
+   the open dialog/output-path/mux/source-transition stack after its dependency
+   graph is reconciled with current `main`.
+3. Final release rehearsal, package validation and v1.1.1 publication.
+
+## Deferred After v1.1.1
+
+Desktop feature-locality work is accepted but must not enter the v1.1.1 product
+scope. Its design is `docs/design-docs/desktop-feature-locality.md`; baseline,
+unknowns, acceptance, rollback and the mandatory PR dependency are in
+`docs/exec-plans/desktop-feature-locality.md`.
+
+```text
+PR A: route / manifest completeness gate
+  -> PR B: simple Shell descriptor migration
+  -> PR C: stateful Shell migration
+  -> PR D: proven legacy cleanup + architecture ratchet
+```
 
 Each item must use a separate branch and PR. Do not merge, rebase or copy legacy
 architecture wholesale; migrate only valid behavior into current DI, typed
