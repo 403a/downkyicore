@@ -44,6 +44,7 @@ public sealed class FfmpegProcessor
         VideoApplicationSettings videoSettings,
         IReadOnlyList<FfmpegConcatSegment> segments,
         string outputVideo,
+        bool overwriteDestination,
         Action<string>? action = null,
         CancellationToken cancellationToken = default)
     {
@@ -57,6 +58,7 @@ public sealed class FfmpegProcessor
                 outputVideo,
                 encoder,
                 allowStreamCopy: false,
+                overwriteDestination,
                 action,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -67,6 +69,7 @@ public sealed class FfmpegProcessor
         string? audio,
         string? video,
         string destination,
+        bool overwriteDestination,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(videoSettings);
@@ -84,6 +87,7 @@ public sealed class FfmpegProcessor
                 temporaryOutput,
                 videoSettings.IsTranscodingAacToMp3 == AllowStatus.Yes),
             destination,
+            overwriteDestination,
             action: null,
             cancellationToken).ConfigureAwait(false);
         return succeeded;
@@ -108,6 +112,7 @@ public sealed class FfmpegProcessor
                 width,
                 height),
             destination,
+            overwriteDestination: true,
             action,
             cancellationToken);
     }
@@ -121,6 +126,7 @@ public sealed class FfmpegProcessor
         return RunToFileAsync(
             temporaryOutput => FfmpegCommandFactory.BuildExtractAudio(video, temporaryOutput),
             audio,
+            overwriteDestination: true,
             action,
             cancellationToken);
     }
@@ -134,6 +140,7 @@ public sealed class FfmpegProcessor
         return RunToFileAsync(
             temporaryOutput => FfmpegCommandFactory.BuildExtractVideo(video, temporaryOutput),
             destination,
+            overwriteDestination: true,
             action,
             cancellationToken);
     }
@@ -170,6 +177,7 @@ public sealed class FfmpegProcessor
     private async Task<bool> RunToFileAsync(
         Func<string, FfmpegCommand> commandFactory,
         string destination,
+        bool overwriteDestination,
         Action<string>? action,
         CancellationToken cancellationToken)
     {
@@ -192,7 +200,7 @@ public sealed class FfmpegProcessor
                 return false;
             }
 
-            File.Move(temporaryOutput, destination, overwrite: true);
+            File.Move(temporaryOutput, destination, overwrite: overwriteDestination);
             return true;
         }
         catch (IOException e)
