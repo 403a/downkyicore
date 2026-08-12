@@ -365,16 +365,38 @@ public sealed class SqliteDownloadTaskStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task DisposeReleasesTheOwnedConnectionPool()
+    public async Task DisposeDoesNotClearProviderPoolOwnedBySiblingConnections()
     {
         var databasePath = Path.Combine(_directory, "download.db");
         var store = CreateStore();
         await store.InitializeAsync(TestContext.Current.CancellationToken);
+        var connectionString = new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath,
+            Mode = SqliteOpenMode.ReadWriteCreate,
+            Pooling = true,
+            DefaultTimeout = 5
+        }.ToString();
+
+        using (var sibling = new SqliteConnection(connectionString))
+        {
+            await sibling.OpenAsync(TestContext.Current.CancellationToken);
+            await using var createProbe = sibling.CreateCommand();
+            createProbe.CommandText = "CREATE TEMP TABLE pool_owner_probe(value INTEGER);";
+            await createProbe.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
 
         store.Dispose();
-        File.Delete(databasePath);
 
-        Assert.False(File.Exists(databasePath));
+        using var observer = new SqliteConnection(connectionString);
+        await observer.OpenAsync(TestContext.Current.CancellationToken);
+        await using var findProbe = observer.CreateCommand();
+        findProbe.CommandText =
+            "SELECT COUNT(*) FROM sqlite_temp_master WHERE type = 'table' AND name = 'pool_owner_probe';";
+
+        Assert.Equal(
+            1L,
+            (long)(await findProbe.ExecuteScalarAsync(TestContext.Current.CancellationToken))!);
     }
 
     public void Dispose()

@@ -350,8 +350,6 @@ public sealed partial class SqliteDownloadTaskStore : IDownloadTaskStore, IDispo
 
         _disposed = true;
         _initializationGate.Dispose();
-        using var poolKey = new SqliteConnection(_connectionString);
-        SqliteConnection.ClearPool(poolKey);
     }
 
     private async Task EnsureInitializedAsync(CancellationToken cancellationToken)
