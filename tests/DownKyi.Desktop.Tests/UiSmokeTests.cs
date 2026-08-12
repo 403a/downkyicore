@@ -26,6 +26,7 @@ using DownKyi.ViewModels;
 using DownKyi.ViewModels.Settings;
 using DownKyi.Views;
 using DownKyi.Views.Settings;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -374,6 +375,7 @@ public sealed class UiSmokeTests
                 loggerFactory.Dispose();
                 await logProvider.DisposeAsync().ConfigureAwait(true);
                 await settingsStore.DisposeAsync().ConfigureAwait(true);
+                SqliteConnection.ClearAllPools();
                 if (Directory.Exists(testDirectory))
                 {
                     Directory.Delete(testDirectory, recursive: true);
@@ -428,6 +430,7 @@ public sealed class UiSmokeTests
                 loggerFactory.Dispose();
                 await logProvider.DisposeAsync().ConfigureAwait(true);
                 await settingsStore.DisposeAsync().ConfigureAwait(true);
+                SqliteConnection.ClearAllPools();
                 if (Directory.Exists(testDirectory))
                 {
                     Directory.Delete(testDirectory, recursive: true);
@@ -522,6 +525,7 @@ public sealed class UiSmokeTests
                 loggerFactory.Dispose();
                 await logProvider.DisposeAsync().ConfigureAwait(true);
                 await settingsStore.DisposeAsync().ConfigureAwait(true);
+                SqliteConnection.ClearAllPools();
                 if (Directory.Exists(testDirectory))
                 {
                     Directory.Delete(testDirectory, recursive: true);
