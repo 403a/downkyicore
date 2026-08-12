@@ -33,7 +33,8 @@ public sealed class FfmpegCommitBoundaryTests : IDisposable
             audio,
             video,
             output,
-            TestContext.Current.CancellationToken).ConfigureAwait(true);
+            overwriteDestination: false,
+            cancellationToken: TestContext.Current.CancellationToken).ConfigureAwait(true);
 
         Assert.True(succeeded);
         Assert.True(File.Exists(output));

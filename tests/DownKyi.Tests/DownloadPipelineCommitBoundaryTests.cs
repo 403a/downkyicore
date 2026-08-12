@@ -318,6 +318,15 @@ public sealed class DownloadPipelineCommitBoundaryTests
             Task.FromResult<IReadOnlyList<DownloadTask>>(
                 Current == null || Current.Phase == DownloadPhase.Completed ? [] : [Current]);
 
+        public Task<bool> IsOutputPathReservedAsync(
+            string basePath,
+            bool ignoreCase,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(false);
+        }
+
         public Task<DownloadHistoryPage> GetHistoryPageAsync(
             DownloadHistoryCursor? cursor,
             int pageSize,
