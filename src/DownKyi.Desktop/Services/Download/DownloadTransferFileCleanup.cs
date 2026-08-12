@@ -7,6 +7,9 @@ namespace DownKyi.Services.Download;
 
 internal static class DownloadTransferFileCleanup
 {
+    private const int DeleteAttempts = 3;
+    private static readonly TimeSpan DeleteRetryDelay = TimeSpan.FromMilliseconds(100);
+
     public static DownloadTransferFileCleanupResult DeleteInvalidArtifacts(
         string? file,
         ILogger logger)
@@ -24,7 +27,22 @@ internal static class DownloadTransferFileCleanup
             attemptedCount++;
             try
             {
+                if (Directory.Exists(path))
+                {
+                    failedCount++;
+                    logger.LogDebugMessage(
+                        "Delete invalid transfer artifact failed; error=unexpected-directory.");
+                    break;
+                }
+
                 File.Delete(path);
+                if (File.Exists(path) || Directory.Exists(path))
+                {
+                    failedCount++;
+                    logger.LogDebugMessage(
+                        "Delete invalid transfer artifact failed; error=still-present.");
+                    break;
+                }
             }
             catch (IOException)
             {
@@ -43,6 +61,36 @@ internal static class DownloadTransferFileCleanup
         }
 
         return new DownloadTransferFileCleanupResult(attemptedCount, failedCount);
+    }
+
+    public static async Task<DownloadTransferFileCleanupResult> DeleteInvalidArtifactsAsync(
+        string? file,
+        ILogger logger,
+        TimeProvider timeProvider,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(logger);
+        ArgumentNullException.ThrowIfNull(timeProvider);
+        var result = new DownloadTransferFileCleanupResult(0, 0);
+        for (var attempt = 1; attempt <= DeleteAttempts; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            result = DeleteInvalidArtifacts(file, logger);
+            if (result.Succeeded)
+            {
+                return result;
+            }
+
+            if (attempt < DeleteAttempts)
+            {
+                await Task.Delay(
+                    DeleteRetryDelay,
+                    timeProvider,
+                    cancellationToken).ConfigureAwait(true);
+            }
+        }
+
+        return result;
     }
 }
 

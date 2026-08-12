@@ -1960,6 +1960,7 @@ paths:
   - src/DownKyi.Desktop/Services/Download/DownloadCompletionProjector.cs
   - src/DownKyi.Desktop/Services/Download/BuiltinTransferBackend.cs
   - src/DownKyi.Desktop/Services/Download/Aria2TransferBackend.cs
+  - src/DownKyi.Desktop/Services/Download/Aria2TransferBackend.Reset.cs
   - src/DownKyi.Desktop/Services/Download/Aria2TransferFailureClassifier.cs
   - src/DownKyi.Desktop/Services/Download/AriaRuntimeClientRegistry.cs
   - src/DownKyi.Desktop/Services/Download/DownloadArtifactWriter.cs
@@ -1991,6 +1992,7 @@ contracts:
   - Queued, Downloading, Pausing, Paused, Failed, and Canceled tasks retain normalized output reservations. Canceled tasks release the claim only after generated-file cleanup succeeds and the task commits Deleted; Completed tasks release it during the completion transaction. Existing output files still prevent reuse.
   - Output-path comparison is ordinal and case-insensitive on Windows and macOS, and ordinal on Linux. The macOS rule is deliberately fail-closed for the default case-insensitive filesystems. When automatic numeric suffixing is disabled, any active or on-disk collision rejects admission instead of silently renaming the output.
   - `DownloadTransferCoordinator` is the only media-transfer retry budget owner. It supplies exactly one URL to a backend call, rotates backup addresses, and permits one playback-address refresh.
+  - Same normalized URL retries may preserve partial state and backend identity. Before selecting a different backup or refreshed URL, the coordinator must successfully reset the old backend transfer, clear its identity, and use `DownloadTransferFileCleanup` to remove the target plus `.aria2` / `.download`; reset or cleanup failure stops before the new source is contacted.
   - `DownloadRetryPolicy` maps transient network/5xx to bounded exponential backoff, 429 to bounded server delay when available, expired address/403 to backup or one refresh, rejected resume state to one cleanup plus same-address retry, invalid media to the next backup, disk/permanent failure to immediate stop, and cancellation to propagation.
   - Built-in and aria2 backends return typed results and cannot own a second retry budget. Downloader uses `MaxTryAgainOnFailure=0`; aria2 uses `max-tries=1`, `retry-wait=0`, `always-resume=false` and `max-resume-failure-tries=0`.
   - Built-in and aria2 backends share key generation, resume path selection, integrity checks, and awaited persistence; custom aria settings select the same aria backend with external process ownership.
@@ -2368,6 +2370,7 @@ paths:
   - src/DownKyi.Desktop/Services/Download/AriaTaskHeaderPolicy.cs
   - src/DownKyi.Desktop/Services/Download/TlsFailureClassifier.cs
   - src/DownKyi.Desktop/Services/Download/Aria2TransferBackend.cs
+  - src/DownKyi.Desktop/Services/Download/Aria2TransferBackend.Reset.cs
 responsibility: Owns packaged aria2 RPC endpoint creation, startup-secret transfer, process identity checks, task-level credential scope and typed TLS failure behavior.
 inbound:
   - service.download-runtime
