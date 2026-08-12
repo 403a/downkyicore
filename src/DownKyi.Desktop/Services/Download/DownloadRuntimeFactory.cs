@@ -143,7 +143,8 @@ internal sealed class DownloadRuntimeFactory : IDownloadRuntimeFactory
             new MuxStage(
                 presenter,
                 _ffmpegProcessor,
-                _stateWriter),
+                _stateWriter,
+                _loggerFactory.CreateLogger<MuxStage>()),
             new ValidateStage(),
             new FinalizeStage(
                 _projectionStore,

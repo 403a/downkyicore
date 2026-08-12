@@ -494,6 +494,7 @@ public sealed class DownloadRuntimeArchitectureTests
             "DownloadTransferFileCleanup.DeleteInvalidArtifacts",
             coordinatorSource,
             StringComparison.Ordinal);
+        Assert.Contains("if (!cleanup.Succeeded)", coordinatorSource, StringComparison.Ordinal);
         Assert.Contains("request.Urls.Count != 1", builtinSource, StringComparison.Ordinal);
         Assert.Contains("request.Urls.Count != 1", ariaSource, StringComparison.Ordinal);
         Assert.DoesNotContain("foreach (var url in", builtinSource, StringComparison.Ordinal);
@@ -565,6 +566,21 @@ public sealed class DownloadRuntimeArchitectureTests
                 muxSource,
                 "overwriteDestination: false",
                 System.Text.RegularExpressions.RegexOptions.CultureInvariant));
+        Assert.Contains("InvalidInputPaths", muxSource, StringComparison.Ordinal);
+        Assert.Contains(
+            "DownloadTransferFileCleanup.DeleteInvalidArtifacts",
+            muxSource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "_stateWriter.InvalidateCompletedFilesAsync",
+            muxSource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "FfmpegOperationFailureKind.InvalidInput",
+            muxSource,
+            StringComparison.Ordinal);
+        Assert.Contains("if (cleanedKeys.Count > 0)", muxSource, StringComparison.Ordinal);
+        Assert.Contains("return cleanupFailed", muxSource, StringComparison.Ordinal);
 
         var previousIndex = -1;
         foreach (var stageName in stageNames)
