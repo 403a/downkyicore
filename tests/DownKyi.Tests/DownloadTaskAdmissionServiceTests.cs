@@ -7,6 +7,7 @@ using DownKyi.Infrastructure.Time;
 using DownKyi.Models;
 using DownKyi.Services.Download;
 using DownKyi.ViewModels.DownloadManager;
+using Microsoft.Data.Sqlite;
 
 namespace DownKyi.Tests;
 
@@ -309,6 +310,15 @@ public sealed class DownloadTaskAdmissionServiceTests : IDisposable
 
     public void Dispose()
     {
+        using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.Combine(_directory, "download.db"),
+            Mode = SqliteOpenMode.ReadWriteCreate,
+            Pooling = true,
+            DefaultTimeout = 5
+        }.ToString());
+        SqliteConnection.ClearPool(connection);
+
         if (Directory.Exists(_directory))
         {
             Directory.Delete(_directory, recursive: true);
