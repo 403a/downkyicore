@@ -17,6 +17,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
@@ -366,6 +367,12 @@ def extract_archive(archive: Path, destination: Path) -> None:
         raise AssetError(f"Unable to extract {archive}: {error}.") from error
 
 
+def ensure_executable(path: Path) -> None:
+    """Restore executable permission lost by Python zip extraction on Unix."""
+    if os.name != "nt":
+        path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+
 def validate_candidate_archive(candidate: dict[str, Any], rid: str, directory: Path, execute: bool, required_encoder: str | None) -> None:
     files = candidate_files(candidate, rid)
     primary = next((file for file in files if file["role"] == "ffmpeg"), None)
@@ -390,6 +397,7 @@ def validate_candidate_archive(candidate: dict[str, Any], rid: str, directory: P
             raise AssetError(f"Archive layout validation failed for {rid}: ffprobe is missing or empty.")
         if execute:
             for binary in (ffmpeg, ffprobe):
+                ensure_executable(binary)
                 try:
                     result = subprocess.run([str(binary), "-version"], capture_output=True, text=True, timeout=30, check=False)
                 except (OSError, subprocess.TimeoutExpired) as error:

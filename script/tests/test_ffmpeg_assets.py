@@ -5,6 +5,8 @@ import hashlib
 import http.server
 import importlib.util
 import json
+import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -122,6 +124,17 @@ class AssetRequestHandler(http.server.BaseHTTPRequestHandler):
 
 
 class FfmpegAssetsTests(unittest.TestCase):
+    @unittest.skipIf(os.name == "nt", "Unix executable mode is not meaningful on Windows.")
+    def test_candidate_binary_restores_execute_permission_after_zip_extraction(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            binary = Path(temp) / "ffmpeg"
+            binary.write_bytes(b"binary")
+            binary.chmod(stat.S_IRUSR | stat.S_IWUSR)
+
+            ffmpeg_assets.ensure_executable(binary)
+
+            self.assertNotEqual(0, binary.stat().st_mode & stat.S_IXUSR)
+
     def test_manifest_requires_every_rid_url_and_checksum(self) -> None:
         manifest = valid_manifest()
         ffmpeg_assets.validate_manifest(manifest)
