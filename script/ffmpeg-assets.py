@@ -35,6 +35,14 @@ BTBN_REPOSITORY = "BtbN/FFmpeg-Builds"
 YTDLP_REPOSITORY = "yt-dlp/FFmpeg-Builds"
 GITHUB_API = "https://api.github.com"
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+NATIVE_RUNNERS_BY_RID = {
+    "win-x86": {"runner": "windows-latest", "architecture": "x64"},
+    "win-x64": {"runner": "windows-latest", "architecture": "x64"},
+    "linux-x64": {"runner": "ubuntu-latest", "architecture": "x64"},
+    "linux-arm64": {"runner": "ubuntu-24.04-arm", "architecture": "arm64"},
+    "osx-x64": {"runner": "macos-15-intel", "architecture": "x64"},
+    "osx-arm64": {"runner": "macos-15", "architecture": "arm64"},
+}
 
 
 class AssetError(RuntimeError):
@@ -73,9 +81,16 @@ def verify_file(path: Path, expected: str) -> None:
 
 
 def github_api(path: str) -> Any:
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "downkyicore-ffmpeg-updater",
+    }
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     request = urllib.request.Request(
         f"{GITHUB_API}{path}",
-        headers={"Accept": "application/vnd.github+json", "User-Agent": "downkyicore-ffmpeg-updater"},
+        headers=headers,
     )
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
@@ -258,16 +273,18 @@ def candidate_tag(candidate: dict[str, Any]) -> str:
 
 
 def candidate_matrix(candidate: dict[str, Any]) -> list[dict[str, str]]:
-    runners = {
-        "win-x86": "windows-latest",
-        "win-x64": "windows-latest",
-        "linux-x64": "ubuntu-latest",
-        "linux-arm64": "ubuntu-24.04-arm",
-        "osx-x64": "macos-15",
-        "osx-arm64": "macos-15",
-    }
-    return [{"rid": rid, "runner": runners[rid], "requiredEncoder": "h264_nvenc" if rid.startswith(("win-", "linux-")) else ""}
-            for rid in candidate["assets"]]
+    matrix: list[dict[str, str]] = []
+    for rid in candidate["assets"]:
+        runner = NATIVE_RUNNERS_BY_RID.get(rid)
+        if runner is None:
+            raise AssetError(f"Candidate has no native GitHub Actions runner mapping for {rid}.")
+        matrix.append({
+            "rid": rid,
+            "runner": runner["runner"],
+            "runnerArchitecture": runner["architecture"],
+            "requiredEncoder": "h264_nvenc" if rid.startswith(("win-", "linux-")) else "",
+        })
+    return matrix
 
 
 def download(url: str, destination: Path) -> None:
@@ -283,7 +300,7 @@ def download(url: str, destination: Path) -> None:
         raise AssetError(f"Downloaded zero bytes from {url}.")
 
 
-def candidate_files(candidate: dict[str, Any], rid: str) -> list[dict[str, str]]:
+def candidate_files(candidate: dict[str, Any], rid: str) -> list[dict[str, Any]]:
     try:
         files = candidate["assets"][rid]["files"]
     except KeyError as error:
@@ -307,6 +324,24 @@ def download_candidate(candidate: dict[str, Any], rid: str, destination: Path) -
         verify_file(path, file["sha256"])
         paths.append(path)
     return paths
+
+
+def record_downloaded_sizes(candidate: dict[str, Any], directory: Path) -> None:
+    """Bind every candidate record to the verified bytes that will be uploaded."""
+    for rid in candidate["assets"]:
+        for file in candidate_files(candidate, rid):
+            path = directory / file["mirroredFileName"]
+            verify_file(path, file["sha256"])
+            actual_size = path.stat().st_size
+            expected_size = file.get("expectedSize")
+            if expected_size is not None:
+                if not isinstance(expected_size, int) or expected_size <= 0:
+                    raise AssetError(f"Candidate {rid} has an invalid expected size for {path.name}.")
+                if actual_size != expected_size:
+                    raise AssetError(
+                        f"Downloaded size mismatch for {path}. Expected {expected_size} bytes, got {actual_size}."
+                    )
+            file["expectedSize"] = actual_size
 
 
 def find_binary(directory: Path, name: str) -> Path | None:
@@ -442,17 +477,92 @@ def validate_manifest(manifest: dict[str, Any], owner: str = MIRROR_OWNER) -> No
                 raise AssetError(f"ffmpeg asset {rid} provenance is missing {field}.")
 
 
-def record_mirror(candidate: dict[str, Any], repository: str, tag: str, timestamp: str) -> dict[str, Any]:
+def expected_file_size(file: dict[str, Any]) -> int:
+    size = file.get("expectedSize")
+    if not isinstance(size, int) or size <= 0:
+        raise AssetError(f"Validated candidate is missing a positive expected size for {file.get('mirroredFileName')!r}.")
+    return size
+
+
+def release_by_tag(repository: str, tag: str) -> dict[str, Any]:
+    encoded_tag = urllib.parse.quote(tag, safe="")
+    release = github_api(f"/repos/{repository}/releases/tags/{encoded_tag}")
+    if not isinstance(release, dict):
+        raise AssetError(f"GitHub API returned an invalid mirror release for {repository}@{tag}.")
+    return release
+
+
+def collect_mirror_evidence(
+    candidate: dict[str, Any], repository: str, tag: str, release: dict[str, Any], timestamp: str,
+) -> dict[str, Any]:
+    """Create manifest input only from GitHub's read-back release-asset metadata."""
     if not repository.lower().startswith(f"{MIRROR_OWNER.lower()}/"):
         raise AssetError(f"Mirror repository must be controlled by {MIRROR_OWNER}: {repository}.")
-    result: dict[str, Any] = {"repository": repository, "tag": tag, "assets": {}}
+    if release.get("tag_name") != tag:
+        raise AssetError(f"Mirror release read-back tag mismatch. Expected {tag!r}, got {release.get('tag_name')!r}.")
+    release_id = release.get("id")
+    if not isinstance(release_id, int) or release_id <= 0:
+        raise AssetError(f"Mirror release read-back for {repository}@{tag} has no valid release id.")
+    release_assets_value = release.get("assets")
+    if not isinstance(release_assets_value, list):
+        raise AssetError(f"Mirror release read-back for {repository}@{tag} has no asset list.")
+
+    evidence_assets: dict[str, dict[str, Any]] = {}
+    result: dict[str, Any] = {
+        "repository": repository,
+        "tag": tag,
+        "readBack": {"releaseId": release_id, "tag": tag, "assets": evidence_assets},
+        "assets": {},
+    }
     for rid, source in candidate["assets"].items():
         files = source["files"]
-        primary = next(file for file in files if file["role"] == "ffmpeg")
+        files_by_role: dict[str, dict[str, Any]] = {}
+        for file in files:
+            file_name = file.get("mirroredFileName")
+            if not isinstance(file_name, str) or not file_name:
+                raise AssetError(f"Validated candidate {rid} has no mirror filename.")
+            matches = [asset for asset in release_assets_value if asset.get("name") == file_name]
+            if len(matches) != 1:
+                raise AssetError(
+                    f"Mirror release read-back expected exactly one {file_name!r} asset for {rid}, found {len(matches)}."
+                )
+            asset = matches[0]
+            asset_id = asset.get("id")
+            if not isinstance(asset_id, int) or asset_id <= 0 or asset.get("state") != "uploaded":
+                raise AssetError(f"Mirror release read-back asset {file_name!r} is not a completed upload.")
+            expected_size = expected_file_size(file)
+            actual_size = asset.get("size")
+            if actual_size != expected_size:
+                raise AssetError(
+                    f"Mirror release read-back size mismatch for {file_name!r}. "
+                    f"Expected {expected_size}, got {actual_size!r}."
+                )
+            actual_digest = digest_from_api(asset)
+            if actual_digest != file["sha256"]:
+                raise AssetError(f"Mirror release read-back SHA-256 mismatch for {file_name!r}.")
+            actual_url = asset.get("browser_download_url")
+            if not isinstance(actual_url, str) or not is_mirror_url(actual_url, repository, MIRROR_OWNER):
+                raise AssetError(f"Mirror release read-back URL is not project-owned for {file_name!r}.")
+            if Path(urllib.parse.unquote(urllib.parse.urlparse(actual_url).path)).name != file_name:
+                raise AssetError(f"Mirror release read-back URL filename mismatch for {file_name!r}.")
+            asset_evidence = {
+                "releaseAssetId": asset_id,
+                "name": file_name,
+                "size": actual_size,
+                "sha256": actual_digest,
+                "url": actual_url,
+            }
+            evidence_assets[file_name] = asset_evidence
+            files_by_role[file["role"]] = asset_evidence
+
+        primary = next((file for file in files if file["role"] == "ffmpeg"), None)
+        if primary is None or "ffmpeg" not in files_by_role:
+            raise AssetError(f"Validated candidate {rid} has no ffmpeg archive.")
+        primary_evidence = files_by_role["ffmpeg"]
         entry: dict[str, Any] = {
-            "url": mirror_url(repository, tag, primary["mirroredFileName"]),
-            "sha256": primary["sha256"],
-            "fileName": primary["mirroredFileName"],
+            "url": primary_evidence["url"],
+            "sha256": primary_evidence["sha256"],
+            "fileName": primary_evidence["name"],
             "provenance": {
                 "upstreamRepository": source["upstreamRepository"],
                 "upstreamRelease": source["upstreamRelease"],
@@ -464,18 +574,56 @@ def record_mirror(candidate: dict[str, Any], repository: str, tag: str, timestam
         }
         probe = next((file for file in files if file["role"] == "ffprobe"), None)
         if probe is not None:
-            entry["ffprobeUrl"] = mirror_url(repository, tag, probe["mirroredFileName"])
-            entry["ffprobeSha256"] = probe["sha256"]
-            entry["ffprobeFileName"] = probe["mirroredFileName"]
+            probe_evidence = files_by_role.get("ffprobe")
+            if probe_evidence is None:
+                raise AssetError(f"Mirror release read-back evidence is missing ffprobe for {rid}.")
+            entry["ffprobeUrl"] = probe_evidence["url"]
+            entry["ffprobeSha256"] = probe_evidence["sha256"]
+            entry["ffprobeFileName"] = probe_evidence["name"]
             entry["provenance"]["ffprobeOriginalAssetName"] = probe["originalAssetName"]
             entry["provenance"]["ffprobeUpstreamUrl"] = probe["sourceUrl"]
         result["assets"][rid] = entry
     return result
 
 
+def read_mirror_evidence(candidate: dict[str, Any], repository: str, tag: str, timestamp: str) -> dict[str, Any]:
+    return collect_mirror_evidence(candidate, repository, tag, release_by_tag(repository, tag), timestamp)
+
+
+def validate_mirror_evidence(candidate: dict[str, Any], mirror: dict[str, Any]) -> None:
+    if not isinstance(mirror.get("repository"), str) or not isinstance(mirror.get("tag"), str):
+        raise AssetError("Mirror result is malformed.")
+    read_back = mirror.get("readBack")
+    if not isinstance(read_back, dict) or not isinstance(read_back.get("assets"), dict):
+        raise AssetError("Mirror release read-back evidence is missing; manifest was not changed.")
+    if read_back.get("tag") != mirror["tag"]:
+        raise AssetError("Mirror release read-back tag does not match the mirror result; manifest was not changed.")
+    if not isinstance(read_back.get("releaseId"), int) or read_back["releaseId"] <= 0:
+        raise AssetError("Mirror release read-back release id is missing; manifest was not changed.")
+    for rid, source in candidate["assets"].items():
+        for file in source["files"]:
+            file_name = file["mirroredFileName"]
+            evidence = read_back["assets"].get(file_name)
+            if not isinstance(evidence, dict):
+                raise AssetError(f"Mirror release read-back evidence is missing for {file_name!r}; manifest was not changed.")
+            if evidence.get("name") != file_name:
+                raise AssetError(f"Mirror release read-back filename mismatch for {file_name!r}; manifest was not changed.")
+            if evidence.get("size") != expected_file_size(file):
+                raise AssetError(f"Mirror release read-back size mismatch for {file_name!r}; manifest was not changed.")
+            if evidence.get("sha256") != file["sha256"]:
+                raise AssetError(f"Mirror release read-back SHA-256 mismatch for {file_name!r}; manifest was not changed.")
+            if not isinstance(evidence.get("releaseAssetId"), int) or evidence["releaseAssetId"] <= 0:
+                raise AssetError(f"Mirror release read-back asset id is missing for {file_name!r}; manifest was not changed.")
+            if not isinstance(evidence.get("url"), str) or not is_mirror_url(
+                evidence["url"], mirror["repository"], MIRROR_OWNER,
+            ):
+                raise AssetError(f"Mirror release read-back URL is invalid for {file_name!r}; manifest was not changed.")
+
+
 def apply_update(manifest: dict[str, Any], candidate: dict[str, Any], mirror: dict[str, Any]) -> dict[str, Any]:
     """Return a new manifest only after every selected asset has mirror evidence."""
-    if not isinstance(mirror.get("repository"), str) or not isinstance(mirror.get("assets"), dict):
+    validate_mirror_evidence(candidate, mirror)
+    if not isinstance(mirror.get("assets"), dict):
         raise AssetError("Mirror result is malformed.")
     updated = copy.deepcopy(manifest)
     ffmpeg = updated.setdefault("ffmpeg", {})
@@ -490,11 +638,16 @@ def apply_update(manifest: dict[str, Any], candidate: dict[str, Any], mirror: di
     for rid in candidate["assets"]:
         entry = mirror["assets"].get(rid)
         if not isinstance(entry, dict):
-            raise AssetError(f"Mirror upload evidence is missing for {rid}; manifest was not changed.")
+            raise AssetError(f"Mirror release read-back entry is missing for {rid}; manifest was not changed.")
         expected = next(file for file in candidate["assets"][rid]["files"] if file["role"] == "ffmpeg")
-        if entry.get("sha256") != expected["sha256"] or entry.get("fileName") != expected["mirroredFileName"]:
-            raise AssetError(f"Mirror upload evidence does not match the validated candidate for {rid}; manifest was not changed.")
-        assets[rid] = entry
+        evidence = mirror["readBack"]["assets"][expected["mirroredFileName"]]
+        if (
+            entry.get("sha256") != expected["sha256"]
+            or entry.get("fileName") != expected["mirroredFileName"]
+            or entry.get("url") != evidence["url"]
+        ):
+            raise AssetError(f"Mirror release read-back entry does not match the validated candidate for {rid}; manifest was not changed.")
+        assets[rid] = copy.deepcopy(entry)
     validate_manifest(updated)
     return updated
 
@@ -562,10 +715,16 @@ def command_validate_candidate(args: argparse.Namespace) -> None:
     validate_candidate_archive(candidate, args.rid, Path(args.directory), args.execute, args.required_encoder or None)
 
 
-def command_record_mirror(args: argparse.Namespace) -> None:
+def command_record_downloaded_sizes(args: argparse.Namespace) -> None:
+    candidate = load_json(Path(args.candidates))
+    record_downloaded_sizes(candidate, Path(args.directory))
+    write_json(Path(args.candidates), candidate)
+
+
+def command_read_mirror_evidence(args: argparse.Namespace) -> None:
     candidate = load_json(Path(args.candidates))
     timestamp = args.timestamp or dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-    write_json(Path(args.output), record_mirror(candidate, args.repository, args.tag, timestamp))
+    write_json(Path(args.output), read_mirror_evidence(candidate, args.repository, args.tag, timestamp))
 
 
 def command_apply_update(args: argparse.Namespace) -> None:
@@ -580,6 +739,17 @@ def command_apply_update(args: argparse.Namespace) -> None:
 def command_matrix(args: argparse.Namespace) -> None:
     candidate = load_json(Path(args.candidates))
     print(json.dumps({"include": candidate_matrix(candidate)}, separators=(",", ":")))
+
+
+def command_workflow_output(args: argparse.Namespace) -> None:
+    candidate = load_json(Path(args.candidates))
+    no_op = candidate.get("noOp")
+    mirror_tag = candidate.get("mirrorTag")
+    if not isinstance(no_op, bool) or not isinstance(mirror_tag, str) or not mirror_tag:
+        raise AssetError("Candidate is missing workflow output metadata.")
+    print(f"no_op={str(no_op).lower()}")
+    print(f"matrix={json.dumps({'include': candidate_matrix(candidate)}, separators=(',', ':'))}")
+    print(f"mirror_tag={mirror_tag}")
 
 
 def command_pr_body(args: argparse.Namespace) -> None:
@@ -628,18 +798,23 @@ def parse_args() -> argparse.Namespace:
     candidate_validator.add_argument("--directory", required=True)
     candidate_validator.add_argument("--execute", action="store_true")
     candidate_validator.add_argument("--required-encoder")
-    recorder = subparsers.add_parser("record-mirror")
-    recorder.add_argument("--candidates", required=True)
-    recorder.add_argument("--repository", required=True)
-    recorder.add_argument("--tag", required=True)
-    recorder.add_argument("--output", required=True)
-    recorder.add_argument("--timestamp")
+    downloaded_sizes = subparsers.add_parser("record-downloaded-sizes")
+    downloaded_sizes.add_argument("--candidates", required=True)
+    downloaded_sizes.add_argument("--directory", required=True)
+    evidence = subparsers.add_parser("read-mirror-evidence")
+    evidence.add_argument("--candidates", required=True)
+    evidence.add_argument("--repository", required=True)
+    evidence.add_argument("--tag", required=True)
+    evidence.add_argument("--output", required=True)
+    evidence.add_argument("--timestamp")
     updater = subparsers.add_parser("apply-update")
     updater.add_argument("--manifest", required=True)
     updater.add_argument("--candidates", required=True)
     updater.add_argument("--mirror", required=True)
     matrix = subparsers.add_parser("matrix")
     matrix.add_argument("--candidates", required=True)
+    workflow_output = subparsers.add_parser("workflow-output")
+    workflow_output.add_argument("--candidates", required=True)
     body = subparsers.add_parser("pr-body")
     body.add_argument("--candidates", required=True)
     body.add_argument("--mirror", required=True)
@@ -663,12 +838,16 @@ def main() -> int:
             command_download_candidate(args)
         elif args.command == "validate-candidate":
             command_validate_candidate(args)
-        elif args.command == "record-mirror":
-            command_record_mirror(args)
+        elif args.command == "record-downloaded-sizes":
+            command_record_downloaded_sizes(args)
+        elif args.command == "read-mirror-evidence":
+            command_read_mirror_evidence(args)
         elif args.command == "apply-update":
             command_apply_update(args)
         elif args.command == "matrix":
             command_matrix(args)
+        elif args.command == "workflow-output":
+            command_workflow_output(args)
         elif args.command == "pr-body":
             command_pr_body(args)
         else:

@@ -81,10 +81,29 @@ def candidate_for(rid: str = "win-x64") -> dict:
                     "sha256": digest(source_name),
                     "originalAssetName": source_name,
                     "mirroredFileName": f"ffmpeg-{rid}-autobuild-2026-08-12-13-15-{digest(source_name)[:16]}.zip",
+                    "expectedSize": 128,
                 }],
             }
         },
     }
+
+
+def release_readback_for(candidate: dict, repository: str, tag: str) -> dict:
+    assets = []
+    asset_id = 100
+    for source in candidate["assets"].values():
+        for file in source["files"]:
+            name = file["mirroredFileName"]
+            assets.append({
+                "id": asset_id,
+                "name": name,
+                "state": "uploaded",
+                "size": file["expectedSize"],
+                "digest": f"sha256:{file['sha256']}",
+                "browser_download_url": ffmpeg_assets.mirror_url(repository, tag, name),
+            })
+            asset_id += 1
+    return {"id": 99, "tag_name": tag, "assets": assets}
 
 
 class AssetRequestHandler(http.server.BaseHTTPRequestHandler):
@@ -194,28 +213,81 @@ class FfmpegAssetsTests(unittest.TestCase):
             with self.assertRaisesRegex(ffmpeg_assets.AssetError, "ffprobe"):
                 ffmpeg_assets.validate_candidate_archive(candidate, "linux-x64", directory, False, None)
 
-    def test_mirror_failure_leaves_manifest_unchanged(self) -> None:
+    def test_workflow_contracts_guard_yaml_syntax_and_release_package_trigger(self) -> None:
+        workflow_directory = SCRIPT.parents[1] / ".github" / "workflows"
+        updater = (workflow_directory / "update-ffmpeg-assets.yml").read_text(encoding="utf-8")
+        build = (workflow_directory / "build.yml").read_text(encoding="utf-8")
+        self.assertIn(
+            'commit-message: "build(deps): update mirrored FFmpeg to ${{ needs.discover.outputs.mirror_tag }}"',
+            updater,
+        )
+        self.assertIn(
+            'title: "build(deps): update mirrored FFmpeg to ${{ needs.discover.outputs.mirror_tag }}"',
+            updater,
+        )
+        self.assertIn("read-mirror-evidence", updater)
+        self.assertNotIn("record-mirror", updater)
+        self.assertIn("- release/v1.1.1-integration", build)
+        self.assertIn("uses: raven-actions/actionlint@v2", build)
+
+    def test_macos_candidates_use_distinct_native_runners(self) -> None:
+        candidate = {"assets": {"osx-x64": {}, "osx-arm64": {}}}
+        matrix = {entry["rid"]: entry for entry in ffmpeg_assets.candidate_matrix(candidate)}
+        self.assertEqual("macos-15-intel", matrix["osx-x64"]["runner"])
+        self.assertEqual("x64", matrix["osx-x64"]["runnerArchitecture"])
+        self.assertEqual("macos-15", matrix["osx-arm64"]["runner"])
+        self.assertEqual("arm64", matrix["osx-arm64"]["runnerArchitecture"])
+        self.assertNotEqual(matrix["osx-x64"]["runner"], matrix["osx-arm64"]["runner"])
+
+    def test_missing_mirror_readback_evidence_leaves_manifest_unchanged(self) -> None:
         manifest = valid_manifest()
         before = copy.deepcopy(manifest)
-        with self.assertRaisesRegex(ffmpeg_assets.AssetError, "Mirror upload evidence is missing"):
+        with self.assertRaisesRegex(ffmpeg_assets.AssetError, "read-back evidence is missing"):
             ffmpeg_assets.apply_update(manifest, candidate_for(), {
                 "repository": "crazysmile-PhD/downkyi-runtime-assets",
+                "tag": "ffmpeg-btbn-autobuild-2026-08-12-13-15",
                 "assets": {},
             })
         self.assertEqual(before, manifest)
 
-    def test_successful_mirror_evidence_updates_only_the_selected_rid(self) -> None:
+    def test_readback_evidence_updates_only_the_selected_rid(self) -> None:
         manifest = valid_manifest()
         candidate = candidate_for()
-        mirror = ffmpeg_assets.record_mirror(
+        mirror = ffmpeg_assets.collect_mirror_evidence(
             candidate,
             "crazysmile-PhD/downkyi-runtime-assets",
             "ffmpeg-btbn-autobuild-2026-08-12-13-15",
+            release_readback_for(
+                candidate,
+                "crazysmile-PhD/downkyi-runtime-assets",
+                "ffmpeg-btbn-autobuild-2026-08-12-13-15",
+            ),
             "2026-08-13T00:00:00Z",
         )
         updated = ffmpeg_assets.apply_update(manifest, candidate, mirror)
         self.assertEqual(mirror["assets"]["win-x64"], updated["ffmpeg"]["assets"]["win-x64"])
         self.assertEqual(manifest["ffmpeg"]["assets"]["linux-x64"], updated["ffmpeg"]["assets"]["linux-x64"])
+
+    def test_readback_mismatches_reject_manifest_mutation(self) -> None:
+        repository = "crazysmile-PhD/downkyi-runtime-assets"
+        tag = "ffmpeg-btbn-autobuild-2026-08-12-13-15"
+        candidate = candidate_for()
+        file_name = candidate["assets"]["win-x64"]["files"][0]["mirroredFileName"]
+        for field, value in (("name", "wrong-name.zip"), ("size", 129), ("sha256", digest("wrong"))):
+            with self.subTest(field=field):
+                manifest = valid_manifest()
+                before = copy.deepcopy(manifest)
+                mirror = ffmpeg_assets.collect_mirror_evidence(
+                    candidate,
+                    repository,
+                    tag,
+                    release_readback_for(candidate, repository, tag),
+                    "2026-08-13T00:00:00Z",
+                )
+                mirror["readBack"]["assets"][file_name][field] = value
+                with self.assertRaisesRegex(ffmpeg_assets.AssetError, "read-back .* mismatch"):
+                    ffmpeg_assets.apply_update(manifest, candidate, mirror)
+                self.assertEqual(before, manifest)
 
     def test_historical_mirror_manifest_is_valid(self) -> None:
         manifest = valid_manifest("btbn-autobuild-2025-01-01-00-00")

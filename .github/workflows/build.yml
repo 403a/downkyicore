@@ -10,6 +10,7 @@ on:
   pull_request:
     branches:
       - main
+      - release/v1.1.1-integration
     paths:
       - 'script/assets/external-assets.json'
       - 'script/ffmpeg-assets.py'
@@ -30,6 +31,12 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+      - name: Validate GitHub Actions workflow syntax
+        uses: raven-actions/actionlint@v2
+        with:
+          files: .github/workflows/build.yml,.github/workflows/update-ffmpeg-assets.yml
+          pyflakes: false
+          shellcheck: false
       - name: Run FFmpeg asset guards
         run: python -m unittest script/tests/test_ffmpeg_assets.py -v
       - name: Validate immutable FFmpeg manifest

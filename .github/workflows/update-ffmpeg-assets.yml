@@ -44,9 +44,8 @@ jobs:
             --manifest script/assets/external-assets.json \
             --output .ffmpeg-update/candidates.json \
             "${bootstrap_args[@]}"
-          echo "no_op=$(python -c 'import json; print(str(json.load(open(".ffmpeg-update/candidates.json"))["noOp"]).lower())')" >> "$GITHUB_OUTPUT"
-          echo "matrix=$(python script/ffmpeg-assets.py matrix --candidates .ffmpeg-update/candidates.json)" >> "$GITHUB_OUTPUT"
-          echo "mirror_tag=$(python -c 'import json; print(json.load(open(".ffmpeg-update/candidates.json"))["mirrorTag"])')" >> "$GITHUB_OUTPUT"
+          python script/ffmpeg-assets.py workflow-output \
+            --candidates .ffmpeg-update/candidates.json >> "$GITHUB_OUTPUT"
       - name: Upload candidate metadata
         if: steps.candidate.outputs.no_op != 'true'
         uses: actions/upload-artifact@v7
@@ -126,6 +125,9 @@ jobs:
               --rid "$rid" \
               --destination .ffmpeg-update/mirror
           done < <(python -c 'import json; print("\n".join(json.load(open(".ffmpeg-update/candidates.json"))["assets"]))')
+          python script/ffmpeg-assets.py record-downloaded-sizes \
+            --candidates .ffmpeg-update/candidates.json \
+            --directory .ffmpeg-update/mirror
       - name: Create a new immutable mirror release and upload every archive
         shell: bash
         env:
@@ -143,11 +145,13 @@ jobs:
             --repo "$RUNTIME_ASSETS_REPOSITORY" \
             --title 'DownKyi FFmpeg ${{ needs.discover.outputs.mirror_tag }}' \
             --notes-file .ffmpeg-update/candidates.json
-      - name: Record successful mirror evidence and update the manifest in the PR workspace
+      - name: Read back immutable mirror release evidence and update the manifest in the PR workspace
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RUNTIME_ASSETS_TOKEN }}
         run: |
           previous_version=$(python -c 'import json; print(json.load(open("script/assets/external-assets.json"))["ffmpeg"]["version"])')
-          python script/ffmpeg-assets.py record-mirror \
+          python script/ffmpeg-assets.py read-mirror-evidence \
             --candidates .ffmpeg-update/candidates.json \
             --repository "$RUNTIME_ASSETS_REPOSITORY" \
             --tag '${{ needs.discover.outputs.mirror_tag }}' \
@@ -167,8 +171,9 @@ jobs:
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.DOWNKYI_AUTOMATION_TOKEN }}
-          commit-message: build(deps): update mirrored FFmpeg to ${{ needs.discover.outputs.mirror_tag }}
+          commit-message: "build(deps): update mirrored FFmpeg to ${{ needs.discover.outputs.mirror_tag }}"
           branch: automation/ffmpeg-${{ needs.discover.outputs.mirror_tag }}
+          base: release/v1.1.1-integration
           delete-branch: true
-          title: build(deps): update mirrored FFmpeg to ${{ needs.discover.outputs.mirror_tag }}
+          title: "build(deps): update mirrored FFmpeg to ${{ needs.discover.outputs.mirror_tag }}"
           body-path: .ffmpeg-update/pr-body.md
