@@ -211,12 +211,15 @@ PR 03-06 result: legacy GID, partial-file maps, completed asset keys, paused sta
 
 - Queue consumption uses a bounded Channel and fixed workers. Do not restore per-item task spawning or synchronous persistence callbacks.
 - New, resumed, and startup-restored work enters through `DownloadTaskQueueGateway` as `DownloadTaskId`. The unbounded admission channel isolates UI/startup callers from worker-channel capacity; only the internal dispatcher waits for bounded worker capacity. Runtime scheduling must never poll `ObservableCollection`.
+- New task admission is serialized by the singleton `DownloadTaskAdmissionService`. It selects one normalized base path against authoritative unfinished Domain tasks and current disk outputs, persists it before UI/queue publication, and uses case-insensitive comparison on Windows. Failed retryable tasks retain the reservation; canceled/completed/deleted tasks release active ownership.
 - Built-in and aria2 transfers share key, resume, integrity, and persistence behavior. Custom aria2 is a backend selection, not a copied workflow.
 - `DownloadArtifactWriter` owns cover, subtitle, danmaku, and NFO output. `DownloadTaskStateWriter` adapts runtime calls to typed Application commands; it cannot accept `DownloadingItem` or persist reconstructed UI state.
 - Pause first persists `Pausing`; built-in/aria2 backends preserve partial files and return a paused outcome; the worker confirms `Paused` only after transfer teardown. Process shutdown returns active `Downloading`/`Pausing` tasks to `Queued` without dropping GID, partial-file maps, completed keys, progress, output size, or optimistic version.
 - Explicit task deletion persists `Canceled`, stops the physical backend, removes generated media and `.aria2` / `.download` sidecars, then deletes the row. A cleanup failure leaves a retryable canceled record rather than pretending deletion succeeded.
 - Multi-segment DURL identity includes `DURL.Order`, input is sorted by that order, and concat never starts with stream copy.
 - FFmpeg operations use `FfmpegProcessRunner`, bounded concurrency, cancellation, timeout, captured stderr, and process-tree cleanup. Hardware encoding is attempted when available, with CPU fallback kept for success rate.
+- Download mux/concat writes a same-directory temporary output and refuses to overwrite an existing destination. Failure cleans only its temporary file and preserves both foreign destination content and valid source streams; toolbox transforms keep their explicitly separate overwrite contract.
+- FFmpeg mux failure returns typed invalid-input evidence. Only a source that a real fail-on-error decode rejects may have its completed transfer key, backend identity, file and sidecars revoked; process startup, timeout, permission, destination and other infrastructure failures preserve reusable source state.
 - A multi-segment output is complete only after ffprobe confirms a video stream, expected duration, and successful middle/tail seek decoding. Invalid partial output is deleted.
 - Bilibili requests use injected `IBilibiliApiClient` and `IBuvidProvider` ports backed by the Infrastructure `IHttpClientFactory` transport. Endpoint adapters are async; static client state, global configuration and synchronous HTTP compatibility paths are prohibited.
 - HTTP 401/403 and API schema rejection are non-retryable, 429 honors bounded `Retry-After`, cancellation is never retried, and empty/HTML/malformed responses fail visibly.
@@ -341,6 +344,11 @@ Release packaging downloads aria2 and FFmpeg from the scripts in `script/`.
 
 - `script/aria2.ps1` and `script/aria2.sh` manage aria2 assets.
 - `script/ffmpeg.ps1` and `script/ffmpeg.sh` manage FFmpeg and ffprobe assets.
+- FFmpeg upstream discovery and project-owned immutable mirroring are owned by
+  `.github/workflows/update-ffmpeg-assets.yml`; see
+  `docs/operations/ffmpeg-asset-mirroring.md`. Production entries must be
+  fixed project-owned release URLs, never BtbN/yt-dlp/martin-riedl URLs or
+  `latest` aliases.
 - Windows and Linux packages prefer FFmpeg builds with hardware encoders. Windows x86 uses the pinned yt-dlp FFmpeg build because the former compact archive omitted ffprobe.
 - macOS packages prefer builds that expose VideoToolbox when available.
 - Every script resolves the manifest, download directory and binary output

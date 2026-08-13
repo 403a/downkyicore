@@ -39,6 +39,8 @@ public sealed class AgentEnvironmentArchitectureTests
             "version.txt",
             "Directory.Packages.props",
             "script/test-solution.ps1",
+            "script/test-project-runner.ps1",
+            "docs/testing/test-runner-policy.json",
             "docs/maintenance.md",
             "docs/operations/verification-and-rollback.md");
 
@@ -68,8 +70,20 @@ public sealed class AgentEnvironmentArchitectureTests
         var testScript = Read("script/test-solution.ps1");
         Assert.Contains("Get-ChildItem", testScript, StringComparison.Ordinal);
         Assert.Contains("Sort-Object FullName", testScript, StringComparison.Ordinal);
-        Assert.Contains("LogFileName=$($testProject.BaseName).trx", testScript, StringComparison.Ordinal);
+        Assert.Contains("Invoke-DownKyiTestProject", testScript, StringComparison.Ordinal);
         Assert.Contains("throw \"Test project failed:", testScript, StringComparison.Ordinal);
+
+        var runnerScript = Read("script/test-project-runner.ps1");
+        Assert.Contains("test-runner-policy.json", runnerScript, StringComparison.Ordinal);
+        Assert.Contains("xunit-in-process", runnerScript, StringComparison.Ordinal);
+        Assert.Contains("-class", runnerScript, StringComparison.Ordinal);
+
+        var runnerPolicy = Read("docs/testing/test-runner-policy.json");
+        Assert.Contains("DownKyi.Desktop.Tests.csproj", runnerPolicy, StringComparison.Ordinal);
+        Assert.Contains("xunit/xunit#3576", runnerPolicy, StringComparison.Ordinal);
+
+        var lifecycleScript = Read("script/test-assembly-lifecycle.ps1");
+        Assert.Contains("-assemblyInfo", lifecycleScript, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -91,6 +105,40 @@ public sealed class AgentEnvironmentArchitectureTests
         Assert.Contains("ARCHITECTURE.md", agentGuide, StringComparison.Ordinal);
         Assert.Contains("docs/refactoring-live-plan.md", agentGuide, StringComparison.Ordinal);
         Assert.Contains("docs/operations/verification-and-rollback.md", agentGuide, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AgentEntryUsesProgressiveDisclosureAndLivePlanContainsNoMutableWorkState()
+    {
+        var agentGuide = Read("AGENTS.md");
+        var livePlan = Read("docs/refactoring-live-plan.md");
+
+        Assert.Contains("Progressive Disclosure Map", agentGuide, StringComparison.Ordinal);
+        Assert.Contains("issues/137", agentGuide, StringComparison.Ordinal);
+        Assert.DoesNotContain("## 強制閱讀順序", agentGuide, StringComparison.Ordinal);
+
+        string[] forbiddenLiveState =
+        [
+            "Status: active",
+            "Last updated:",
+            "Current work item:",
+            "Current working branch:",
+            "Current base:",
+            "## Current Item",
+            "## Next Items"
+        ];
+
+        foreach (var value in forbiddenLiveState)
+        {
+            Assert.DoesNotContain(value, livePlan, StringComparison.OrdinalIgnoreCase);
+        }
+
+        Assert.DoesNotMatch(
+            new System.Text.RegularExpressions.Regex(
+                @"(?m)^\s*-\s+\[[ xX]\]|\b[0-9a-fA-F]{40}\b",
+                System.Text.RegularExpressions.RegexOptions.CultureInvariant),
+            livePlan);
+        Assert.Contains("issues/137", livePlan, StringComparison.Ordinal);
     }
 
     [Fact]
