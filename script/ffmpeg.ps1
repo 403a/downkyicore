@@ -15,9 +15,10 @@ function Get-Asset($tool, $rid) {
 }
 
 function Verify-Asset($path, $expectedSha256) {
-    $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($actual -ne $expectedSha256) {
-        throw "Checksum mismatch for $path. Expected $expectedSha256, got $actual."
+    $verifier = Join-Path $PSScriptRoot "ffmpeg-assets.py"
+    & python $verifier verify-file --path $path --sha256 $expectedSha256
+    if ($LASTEXITCODE -ne 0) {
+        throw "Checksum verification failed for $path."
     }
 }
 
