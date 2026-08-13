@@ -28,6 +28,62 @@ public sealed class ReleaseWorkflowArchitectureTests
     }
 
     [Fact]
+    public void TagReleaseDependencyChainDoesNotStartFromASkippedPullRequestOnlyJob()
+    {
+        var workflow = File.ReadAllText(
+            Path.Combine(RepositoryRoot, ".github", "workflows", "build.yml"));
+
+        Assert.True(
+            HasRunnableManifestDetectionDependency(workflow),
+            "The manifest-detection dependency must succeed on tag/manual events instead of skipping the release chain.");
+    }
+
+    [Fact]
+    public void TagReleaseDependencyGuardRejectsJobLevelSkipsAndNonExecutableLookalikes()
+    {
+        const string validWorkflow = """
+            jobs:
+              detect-production-manifest-change:
+                runs-on: ubuntu-latest
+                steps:
+                  - name: Detect pull request changes
+                    id: filter
+                    if: github.event_name == 'pull_request'
+                    uses: dorny/paths-filter@v3
+                  - name: Preserve non-pull-request dependency success
+                    if: github.event_name != 'pull_request'
+                    run: echo release-chain-ready
+            """;
+        string[] invalidMutations =
+        [
+            validWorkflow.Replace(
+                "    runs-on: ubuntu-latest",
+                "    if: github.event_name == 'pull_request'\n    runs-on: ubuntu-latest",
+                StringComparison.Ordinal),
+            validWorkflow.Replace(
+                "if: github.event_name != 'pull_request'",
+                "if: github.event_name == 'pull_request'",
+                StringComparison.Ordinal),
+            validWorkflow.Replace(
+                "run: echo release-chain-ready",
+                "run:",
+                StringComparison.Ordinal),
+            validWorkflow.Replace(
+                "uses: dorny/paths-filter@v3",
+                "run: echo not-a-diff-detector",
+                StringComparison.Ordinal),
+            validWorkflow.Replace(
+                "run: echo release-chain-ready",
+                "continue-on-error: true\n        run: echo release-chain-ready",
+                StringComparison.Ordinal)
+        ];
+
+        Assert.True(HasRunnableManifestDetectionDependency(validWorkflow));
+        Assert.All(invalidMutations, mutation =>
+            Assert.False(HasRunnableManifestDetectionDependency(mutation)));
+    }
+
+    [Fact]
     public void ReleaseTagMustMatchTheSingleVersionSource()
     {
         var validator = File.ReadAllText(
@@ -251,6 +307,146 @@ public sealed class ReleaseWorkflowArchitectureTests
     private static int CountOccurrences(string source, string value)
     {
         return source.Split(value, StringSplitOptions.None).Length - 1;
+    }
+
+    private static bool HasRunnableManifestDetectionDependency(string workflow)
+    {
+        var lines = workflow.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        var job = GetYamlBlock(lines, "  detect-production-manifest-change:", 2);
+        if (job.Count == 0 || HasYamlKeyPrefix(job, 4, "if:"))
+        {
+            return false;
+        }
+
+        var stepsStart = job.FindIndex(line =>
+            GetIndent(line) == 4 && string.Equals(line.Trim(), "steps:", StringComparison.Ordinal));
+        if (stepsStart < 0)
+        {
+            return false;
+        }
+
+        var steps = GetYamlSequenceBlocks(job[(stepsStart + 1)..], 6);
+        var pullRequestDetector = steps.Any(step =>
+            HasExactIf(step, "github.event_name == 'pull_request'") &&
+            HasYamlKey(step, 8, "id: filter") &&
+            HasYamlValuePrefix(step, 8, "uses:", "dorny/paths-filter@") &&
+            !HasYamlKey(step, 8, "continue-on-error: true"));
+        var nonPullRequestSuccess = steps.Any(step =>
+            HasExactIf(step, "github.event_name != 'pull_request'") &&
+            HasExecutableRun(step) &&
+            !HasYamlKey(step, 8, "continue-on-error: true"));
+
+        return pullRequestDetector && nonPullRequestSuccess;
+    }
+
+    private static List<string> GetYamlBlock(
+        string[] lines,
+        string header,
+        int headerIndent)
+    {
+        var start = -1;
+        for (var index = 0; index < lines.Length; index++)
+        {
+            if (string.Equals(lines[index], header, StringComparison.Ordinal))
+            {
+                start = index;
+                break;
+            }
+        }
+
+        if (start < 0)
+        {
+            return [];
+        }
+
+        var result = new List<string>();
+        for (var index = start + 1; index < lines.Length; index++)
+        {
+            var line = lines[index];
+            if (!string.IsNullOrWhiteSpace(line) &&
+                !line.TrimStart().StartsWith('#') &&
+                GetIndent(line) <= headerIndent)
+            {
+                break;
+            }
+
+            result.Add(line);
+        }
+
+        return result;
+    }
+
+    private static List<List<string>> GetYamlSequenceBlocks(
+        IReadOnlyList<string> lines,
+        int itemIndent)
+    {
+        var result = new List<List<string>>();
+        List<string>? current = null;
+        foreach (var line in lines)
+        {
+            if (!string.IsNullOrWhiteSpace(line) && GetIndent(line) < itemIndent)
+            {
+                break;
+            }
+
+            if (GetIndent(line) == itemIndent && line.TrimStart().StartsWith("- ", StringComparison.Ordinal))
+            {
+                current = [];
+                result.Add(current);
+            }
+
+            current?.Add(line);
+        }
+
+        return result;
+    }
+
+    private static bool HasExactIf(IReadOnlyList<string> block, string expression)
+    {
+        return block.Any(line =>
+            GetIndent(line) == 8 &&
+            string.Equals(line.Trim(), $"if: {expression}", StringComparison.Ordinal));
+    }
+
+    private static bool HasExecutableRun(IReadOnlyList<string> block)
+    {
+        return block.Any(line =>
+        {
+            if (GetIndent(line) != 8 || !line.TrimStart().StartsWith("run:", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            return !string.IsNullOrWhiteSpace(line.Trim()["run:".Length..]);
+        });
+    }
+
+    private static bool HasYamlKey(IReadOnlyList<string> block, int indent, string key)
+    {
+        return block.Any(line =>
+            GetIndent(line) == indent && string.Equals(line.Trim(), key, StringComparison.Ordinal));
+    }
+
+    private static bool HasYamlKeyPrefix(IReadOnlyList<string> block, int indent, string key)
+    {
+        return block.Any(line =>
+            GetIndent(line) == indent && line.Trim().StartsWith(key, StringComparison.Ordinal));
+    }
+
+    private static bool HasYamlValuePrefix(
+        IReadOnlyList<string> block,
+        int indent,
+        string key,
+        string valuePrefix)
+    {
+        return block.Any(line =>
+            GetIndent(line) == indent &&
+            line.Trim().StartsWith($"{key} {valuePrefix}", StringComparison.Ordinal));
+    }
+
+    private static int GetIndent(string line)
+    {
+        return line.Length - line.TrimStart().Length;
     }
 
     private static void AssertPinnedAsset(

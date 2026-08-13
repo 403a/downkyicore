@@ -66,18 +66,21 @@ jobs:
 
   detect-production-manifest-change:
     name: Detect production manifest change
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     outputs:
       external_assets: ${{ steps.filter.outputs.external_assets }}
     steps:
       - name: Detect external asset manifest changes in the PR diff
         id: filter
+        if: github.event_name == 'pull_request'
         uses: dorny/paths-filter@v3
         with:
           filters: |
             external_assets:
               - 'script/assets/external-assets.json'
+      - name: Keep the release dependency chain runnable outside pull requests
+        if: github.event_name != 'pull_request'
+        run: echo 'Manifest diff detection is only required for pull requests.'
 
   external-assets-preflight:
     name: Production manifest preflight
