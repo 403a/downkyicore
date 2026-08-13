@@ -344,6 +344,11 @@ Release packaging downloads aria2 and FFmpeg from the scripts in `script/`.
 
 - `script/aria2.ps1` and `script/aria2.sh` manage aria2 assets.
 - `script/ffmpeg.ps1` and `script/ffmpeg.sh` manage FFmpeg and ffprobe assets.
+- FFmpeg upstream discovery and project-owned immutable mirroring are owned by
+  `.github/workflows/update-ffmpeg-assets.yml`; see
+  `docs/operations/ffmpeg-asset-mirroring.md`. Production entries must be
+  fixed project-owned release URLs, never BtbN/yt-dlp/martin-riedl URLs or
+  `latest` aliases.
 - Windows and Linux packages prefer FFmpeg builds with hardware encoders. Windows x86 uses the pinned yt-dlp FFmpeg build because the former compact archive omitted ffprobe.
 - macOS packages prefer builds that expose VideoToolbox when available.
 - Every script resolves the manifest, download directory and binary output

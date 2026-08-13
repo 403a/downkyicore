@@ -148,6 +148,7 @@ flowchart TD
     ReviewInvariants["test.review-invariant-corpus\nroot-cause failure corpus"]
     AriaTlsCI["workflow.aria2-tls-security\nsix RID real-binary gate"]
     Release["workflow.release-packaging\n.github/workflows/build.yml"]
+    FFmpegAssetUpdate["workflow.ffmpeg-asset-update\nimmutable mirror + manifest PR"]
     Nightly["workflow.system-baselines\nnightly cross-platform reports"]
     AnalyzerInventory["workflow.analyzer-inventory\nscript/analyzer-inventory.ps1"]
     LifecycleGate["workflow.assembly-lifecycle\nload + discovery + execution + teardown + exit"]
@@ -183,6 +184,8 @@ flowchart TD
     CI -->|runs deterministic corpus| ReviewInvariants
     ReviewInvariants -->|guards| Tests
     Release -->|runs rehearsal profile| LifecycleGate
+    FFmpegAssetUpdate -->|updates through PR| Release
+    FFmpegAssetUpdate -->|guards manifest assets| FFmpeg
     LifecycleOwners -->|governs| LifecycleGate
     LifecycleGate -->|guards| Tests
     LifecycleGate -->|guards| Host
@@ -2490,6 +2493,39 @@ hazards:
 tests:
   - test.review-invariant-corpus
   - github.actions
+```
+
+### workflow.ffmpeg-asset-update
+
+```yaml
+id: workflow.ffmpeg-asset-update
+type: workflow
+paths:
+  - .github/workflows/update-ffmpeg-assets.yml
+  - script/ffmpeg-assets.py
+  - script/assets/external-assets.json
+  - script/ffmpeg.ps1
+  - script/ffmpeg.sh
+  - docs/operations/ffmpeg-asset-mirroring.md
+responsibility: Discovers fixed upstream FFmpeg releases, validates them, mirrors verified archives into a project-owned immutable release, and opens a manifest pull request.
+inbound:
+  - github.schedule
+  - github.workflow_dispatch
+outbound:
+  - workflow.release-packaging
+  - external.ffmpeg
+contracts:
+  - Normal package builds read only the manifest and verify every archive SHA-256; they never resolve an upstream latest build.
+  - Discovery uses the publisher release API, rejects incomplete releases and floating tags, and preserves platform-specific upstream ownership.
+  - A manifest update is permitted only after all selected archives have passed layout, executable and capability validation and a new mirror release upload has succeeded.
+  - The workflow creates a pull request with a scoped automation token and never pushes main.
+  - Mirror tags and assets are append-only historical release inputs; production URLs use a fixed project-owned release tag and never latest.
+hazards:
+  - Missing mirror-repository or automation-token permissions must fail before a production manifest mutation.
+  - GitHub Release upload is not transactional; a failed initial upload can leave an unreferenced partial mirror release but cannot replace a referenced one.
+tests:
+  - script/tests/test_ffmpeg_assets.py
+  - workflow.release-packaging
 ```
 
 ### workflow.aria2-tls-security
