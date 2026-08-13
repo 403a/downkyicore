@@ -83,6 +83,7 @@ def verify_file(path: Path, expected: str) -> None:
 def github_api(path: str) -> Any:
     headers = {
         "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2026-03-10",
         "User-Agent": "downkyicore-ffmpeg-updater",
     }
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
@@ -492,6 +493,16 @@ def release_by_tag(repository: str, tag: str) -> dict[str, Any]:
     return release
 
 
+def validate_workflow_authority(ref_type: str, ref_name: str, manifest_base: str) -> None:
+    """Require the updater checkout and manifest PR base to name one branch."""
+    if ref_type != "branch":
+        raise AssetError("FFmpeg asset updates must run from a branch ref.")
+    if not ref_name or not manifest_base or ref_name != manifest_base:
+        raise AssetError(
+            f"FFmpeg updater authority mismatch: checkout {ref_name!r}, manifest base {manifest_base!r}."
+        )
+
+
 def collect_mirror_evidence(
     candidate: dict[str, Any], repository: str, tag: str, release: dict[str, Any], timestamp: str,
 ) -> dict[str, Any]:
@@ -500,6 +511,10 @@ def collect_mirror_evidence(
         raise AssetError(f"Mirror repository must be controlled by {MIRROR_OWNER}: {repository}.")
     if release.get("tag_name") != tag:
         raise AssetError(f"Mirror release read-back tag mismatch. Expected {tag!r}, got {release.get('tag_name')!r}.")
+    if release.get("immutable") is not True:
+        raise AssetError(
+            f"Mirror release read-back for {repository}@{tag} is not immutable; manifest was not changed."
+        )
     release_id = release.get("id")
     if not isinstance(release_id, int) or release_id <= 0:
         raise AssetError(f"Mirror release read-back for {repository}@{tag} has no valid release id.")
@@ -511,7 +526,7 @@ def collect_mirror_evidence(
     result: dict[str, Any] = {
         "repository": repository,
         "tag": tag,
-        "readBack": {"releaseId": release_id, "tag": tag, "assets": evidence_assets},
+        "readBack": {"releaseId": release_id, "tag": tag, "immutable": True, "assets": evidence_assets},
         "assets": {},
     }
     for rid, source in candidate["assets"].items():
@@ -598,6 +613,8 @@ def validate_mirror_evidence(candidate: dict[str, Any], mirror: dict[str, Any]) 
         raise AssetError("Mirror release read-back evidence is missing; manifest was not changed.")
     if read_back.get("tag") != mirror["tag"]:
         raise AssetError("Mirror release read-back tag does not match the mirror result; manifest was not changed.")
+    if read_back.get("immutable") is not True:
+        raise AssetError("Mirror release read-back is not immutable; manifest was not changed.")
     if not isinstance(read_back.get("releaseId"), int) or read_back["releaseId"] <= 0:
         raise AssetError("Mirror release read-back release id is missing; manifest was not changed.")
     for rid, source in candidate["assets"].items():
@@ -784,6 +801,11 @@ def parse_args() -> argparse.Namespace:
     preflight_parser = subparsers.add_parser("preflight")
     preflight_parser.add_argument("--manifest", required=True)
     preflight_parser.add_argument("--timeout", type=int, default=30)
+
+    authority = subparsers.add_parser("validate-workflow-authority")
+    authority.add_argument("--ref-type", required=True)
+    authority.add_argument("--ref-name", required=True)
+    authority.add_argument("--manifest-base", required=True)
     discover = subparsers.add_parser("discover")
     discover.add_argument("--manifest", required=True)
     discover.add_argument("--output", required=True)
@@ -832,6 +854,8 @@ def main() -> int:
             validate_manifest(load_json(Path(args.manifest)))
         elif args.command == "preflight":
             preflight(load_json(Path(args.manifest)), args.timeout)
+        elif args.command == "validate-workflow-authority":
+            validate_workflow_authority(args.ref_type, args.ref_name, args.manifest_base)
         elif args.command == "discover":
             command_discover(args)
         elif args.command == "download-candidate":

@@ -10,11 +10,24 @@ on:
         required: false
         default: false
         type: boolean
+  workflow_call:
+    inputs:
+      bootstrap:
+        required: false
+        default: false
+        type: boolean
+      manifest_base:
+        required: false
+        default: ''
+        type: string
 
 # This workflow never pushes to main.  The two scoped secrets below are used
 # only in the jobs that need them; the default token remains read-only.
 permissions:
   contents: read
+
+env:
+  MANIFEST_BASE_BRANCH: ${{ inputs.manifest_base || github.event.repository.default_branch }}
 
 jobs:
   discover:
@@ -24,6 +37,7 @@ jobs:
       no_op: ${{ steps.candidate.outputs.no_op }}
       matrix: ${{ steps.candidate.outputs.matrix }}
       mirror_tag: ${{ steps.candidate.outputs.mirror_tag }}
+      manifest_base: ${{ steps.authority.outputs.manifest_base }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -31,6 +45,15 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+      - name: Verify updater branch authority
+        id: authority
+        shell: bash
+        run: |
+          python script/ffmpeg-assets.py validate-workflow-authority \
+            --ref-type "$GITHUB_REF_TYPE" \
+            --ref-name "$GITHUB_REF_NAME" \
+            --manifest-base "$MANIFEST_BASE_BRANCH"
+          echo "manifest_base=$MANIFEST_BASE_BRANCH" >> "$GITHUB_OUTPUT"
       - name: Discover complete fixed releases through GitHub APIs
         id: candidate
         shell: bash
@@ -137,14 +160,29 @@ jobs:
             echo 'RUNTIME_ASSETS_TOKEN is required and must only have Contents: write on the runtime-assets repository.' >&2
             exit 1
           fi
+          immutable_enabled=$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2026-03-10' \
+            "repos/$RUNTIME_ASSETS_REPOSITORY/immutable-releases" \
+            --jq '.enabled')
+          if [[ "$immutable_enabled" != "true" ]]; then
+            echo "Immutable releases must be enabled for $RUNTIME_ASSETS_REPOSITORY before mirroring." >&2
+            exit 1
+          fi
           if gh release view '${{ needs.discover.outputs.mirror_tag }}' --repo "$RUNTIME_ASSETS_REPOSITORY" >/dev/null 2>&1; then
             echo "Refusing to reuse mirror release tag ${{ needs.discover.outputs.mirror_tag }}." >&2
             exit 1
           fi
-          gh release create '${{ needs.discover.outputs.mirror_tag }}' .ffmpeg-update/mirror/* \
+          gh release create '${{ needs.discover.outputs.mirror_tag }}' \
             --repo "$RUNTIME_ASSETS_REPOSITORY" \
             --title 'DownKyi FFmpeg ${{ needs.discover.outputs.mirror_tag }}' \
-            --notes-file .ffmpeg-update/candidates.json
+            --notes-file .ffmpeg-update/candidates.json \
+            --draft
+          gh release upload '${{ needs.discover.outputs.mirror_tag }}' .ffmpeg-update/mirror/* \
+            --repo "$RUNTIME_ASSETS_REPOSITORY"
+          gh release edit '${{ needs.discover.outputs.mirror_tag }}' \
+            --repo "$RUNTIME_ASSETS_REPOSITORY" \
+            --draft=false
       - name: Read back immutable mirror release evidence and update the manifest in the PR workspace
         shell: bash
         env:
@@ -173,7 +211,7 @@ jobs:
           token: ${{ secrets.DOWNKYI_AUTOMATION_TOKEN }}
           commit-message: "build(deps): update mirrored FFmpeg to ${{ needs.discover.outputs.mirror_tag }}"
           branch: automation/ffmpeg-${{ needs.discover.outputs.mirror_tag }}
-          base: release/v1.1.1-integration
+          base: ${{ needs.discover.outputs.manifest_base }}
           delete-branch: true
           title: "build(deps): update mirrored FFmpeg to ${{ needs.discover.outputs.mirror_tag }}"
           body-path: .ffmpeg-update/pr-body.md

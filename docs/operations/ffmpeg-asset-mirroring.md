@@ -23,11 +23,16 @@ operator-reviewed bootstrap instead of a fragile HTML parser.
 ## Immutable mirror policy
 
 The mirror repository is `crazysmile-PhD/downkyi-runtime-assets`. It must be a
-dedicated, project-owned repository before the first bootstrap. Each update
+dedicated, project-owned repository with GitHub Immutable Releases enabled
+before the first bootstrap. Immutability applies only to releases published
+after the setting is enabled. Each update
 creates one new GitHub Release named `ffmpeg-<fixed-upstream-version>` and
 uploads filenames that contain the RID, fixed upstream tag, and SHA-256 prefix.
-The workflow refuses to reuse a release tag. It never overwrites an asset,
+The workflow creates a draft, uploads every archive, and only then publishes
+the release. It refuses to reuse a release tag, never overwrites an asset,
 never uses `latest`, and the repository retention policy is `never-delete`.
+The manifest update is fail closed unless the release API reads the published
+release back with `immutable=true`.
 
 Every production asset entry must use a fixed URL below that repository's
 `releases/download/<tag>/` path, include an archive SHA-256, and retain
@@ -37,7 +42,16 @@ old DownKyi commits and must not be pruned.
 
 ## Updater flow
 
-`.github/workflows/update-ffmpeg-assets.yml` runs weekly or on manual dispatch:
+`.github/workflows/update-ffmpeg-assets.yml` runs weekly from the repository
+default branch. GitHub schedules always use the latest default-branch commit,
+and a directly dispatched workflow must exist on that branch. Before this
+workflow reaches `main`, bootstrap it through the existing **Build** workflow:
+select `release/v1.1.1-integration`, set `update_ffmpeg_assets=true`, and set
+`bootstrap_ffmpeg_assets=true`. The Build workflow is already registered on
+the default branch and calls the updater from the selected integration ref.
+The updater verifies that its checkout branch and manifest PR base are equal.
+
+The updater then:
 
 1. Discover the newest complete, non-`latest` GitHub release using the
    publisher API and its per-asset SHA-256 digest.
@@ -45,10 +59,13 @@ old DownKyi commits and must not be pruned.
    require non-empty `ffmpeg` and `ffprobe` files.
 3. On native runners run `ffmpeg -version`, `ffprobe -version`, and where
    applicable verify the required `h264_nvenc` encoder is compiled in.
-4. Only after every matrix validation job succeeds, create a new mirror release
-   and upload the exact verified archives.
+4. Only after every matrix validation job succeeds and repository release
+   immutability is confirmed, create a draft mirror release, upload the exact
+   verified archives, and publish it.
 5. Record the resulting fixed mirror URLs and provenance, validate them with
-   the preflight, then create a manifest PR. The workflow cannot push `main`.
+   the preflight, require immutable release read-back, then create a manifest
+   PR against the same branch that supplied the manifest. The workflow cannot
+   push `main`.
 
 A validation, download, checksum, extraction, capability, upload, or preflight
 failure stops before manifest mutation. A failed upload may leave an unreferenced
@@ -57,11 +74,14 @@ production manifest or replace a historical asset.
 
 ## Bootstrap and recovery
 
-Before enabling normal scheduled updates, create the dedicated repository and
-run **Update mirrored FFmpeg assets** with `bootstrap=true`. This imports all
-six current pinned sources, including the distinct win-x86/macOS sources, into
-one immutable mirror release and opens a PR. Do not manually edit the manifest
-to another BtbN daily URL.
+Before enabling normal scheduled updates, create the dedicated repository,
+enable GitHub Immutable Releases, and dispatch **Build** from
+`release/v1.1.1-integration` with `update_ffmpeg_assets=true` and
+`bootstrap_ffmpeg_assets=true`. This imports all six current pinned sources,
+including the distinct win-x86/macOS sources, into one immutable mirror release
+and opens a PR against that integration branch. After the updater reaches
+`main`, direct dispatches and the weekly schedule use `main` as both checkout
+and manifest base. Do not manually edit the manifest to another BtbN daily URL.
 
 If the bootstrap fails:
 

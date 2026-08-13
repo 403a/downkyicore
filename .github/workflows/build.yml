@@ -21,6 +21,17 @@ on:
       - '.github/workflows/build.yml'
       - '.github/workflows/update-ffmpeg-assets.yml'
   workflow_dispatch:
+    inputs:
+      update_ffmpeg_assets:
+        description: 'Run the FFmpeg mirror updater from the selected branch instead of the release build.'
+        required: false
+        default: false
+        type: boolean
+      bootstrap_ffmpeg_assets:
+        description: 'Import all six pinned RID sources during the first mirror run.'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   ffmpeg-tooling:
@@ -43,6 +54,16 @@ jobs:
       - name: Run FFmpeg asset guards
         run: python -m unittest script/tests/test_ffmpeg_assets.py -v
 
+  ffmpeg-asset-updater:
+    name: Update mirrored FFmpeg assets
+    needs: ffmpeg-tooling
+    if: ${{ inputs.update_ffmpeg_assets }}
+    uses: ./.github/workflows/update-ffmpeg-assets.yml
+    with:
+      bootstrap: ${{ inputs.bootstrap_ffmpeg_assets }}
+      manifest_base: ${{ github.ref_name }}
+    secrets: inherit
+
   detect-production-manifest-change:
     name: Detect production manifest change
     if: github.event_name == 'pull_request'
@@ -63,7 +84,7 @@ jobs:
     needs:
       - ffmpeg-tooling
       - detect-production-manifest-change
-    if: ${{ always() && needs.ffmpeg-tooling.result == 'success' && (github.event_name != 'pull_request' || needs.detect-production-manifest-change.outputs.external_assets == 'true') }}
+    if: ${{ always() && !inputs.update_ffmpeg_assets && needs.ffmpeg-tooling.result == 'success' && (github.event_name != 'pull_request' || needs.detect-production-manifest-change.outputs.external_assets == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

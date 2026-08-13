@@ -103,7 +103,7 @@ def release_readback_for(candidate: dict, repository: str, tag: str) -> dict:
                 "browser_download_url": ffmpeg_assets.mirror_url(repository, tag, name),
             })
             asset_id += 1
-    return {"id": 99, "tag_name": tag, "assets": assets}
+    return {"id": 99, "tag_name": tag, "immutable": True, "assets": assets}
 
 
 class AssetRequestHandler(http.server.BaseHTTPRequestHandler):
@@ -227,6 +227,13 @@ class FfmpegAssetsTests(unittest.TestCase):
         )
         self.assertIn("read-mirror-evidence", updater)
         self.assertNotIn("record-mirror", updater)
+        self.assertIn("workflow_call:", updater)
+        self.assertIn("validate-workflow-authority", updater)
+        self.assertIn("immutable-releases", updater)
+        self.assertIn("needs.discover.outputs.manifest_base", updater)
+        self.assertIn("update_ffmpeg_assets:", build)
+        self.assertIn("uses: ./.github/workflows/update-ffmpeg-assets.yml", build)
+        self.assertIn("manifest_base: ${{ github.ref_name }}", build)
         self.assertIn("- release/v1.1.1-integration", build)
         self.assertIn("uses: raven-actions/actionlint@v2", build)
         self.assertNotIn("shellcheck: false", build)
@@ -242,10 +249,26 @@ class FfmpegAssetsTests(unittest.TestCase):
         self.assertIn("- ffmpeg-tooling", build)
         self.assertIn("- detect-production-manifest-change", build)
         self.assertIn("needs.ffmpeg-tooling.result == 'success'", build)
-        self.assertIn("always() && needs.ffmpeg-tooling.result == 'success'", build)
+        self.assertIn("always() && !inputs.update_ffmpeg_assets", build)
+        self.assertIn("needs.ffmpeg-tooling.result == 'success'", build)
         self.assertIn("github.event_name != 'pull_request'", build)
         self.assertIn("needs.detect-production-manifest-change.outputs.external_assets == 'true'", build)
         self.assertIn("needs: external-assets-preflight", build)
+
+    def test_workflow_authority_requires_same_branch_checkout_and_manifest_base(self) -> None:
+        ffmpeg_assets.validate_workflow_authority(
+            "branch",
+            "release/v1.1.1-integration",
+            "release/v1.1.1-integration",
+        )
+        for ref_type, ref_name, manifest_base in (
+            ("tag", "v1.1.1", "main"),
+            ("branch", "main", "release/v1.1.1-integration"),
+            ("branch", "", "main"),
+        ):
+            with self.subTest(ref_type=ref_type, ref_name=ref_name, manifest_base=manifest_base):
+                with self.assertRaises(ffmpeg_assets.AssetError):
+                    ffmpeg_assets.validate_workflow_authority(ref_type, ref_name, manifest_base)
 
     def test_macos_candidates_use_distinct_native_runners(self) -> None:
         candidate = {"assets": {"osx-x64": {}, "osx-arm64": {}}}
@@ -265,6 +288,41 @@ class FfmpegAssetsTests(unittest.TestCase):
                 "tag": "ffmpeg-btbn-autobuild-2026-08-12-13-15",
                 "assets": {},
             })
+        self.assertEqual(before, manifest)
+
+    def test_mutable_mirror_release_cannot_produce_manifest_evidence(self) -> None:
+        repository = "crazysmile-PhD/downkyi-runtime-assets"
+        tag = "ffmpeg-btbn-autobuild-2026-08-12-13-15"
+        candidate = candidate_for()
+        release = release_readback_for(candidate, repository, tag)
+        release["immutable"] = False
+
+        with self.assertRaisesRegex(ffmpeg_assets.AssetError, "not immutable"):
+            ffmpeg_assets.collect_mirror_evidence(
+                candidate,
+                repository,
+                tag,
+                release,
+                "2026-08-13T00:00:00Z",
+            )
+
+    def test_apply_update_rejects_evidence_that_loses_immutable_proof(self) -> None:
+        manifest = valid_manifest()
+        before = copy.deepcopy(manifest)
+        candidate = candidate_for()
+        repository = "crazysmile-PhD/downkyi-runtime-assets"
+        tag = "ffmpeg-btbn-autobuild-2026-08-12-13-15"
+        mirror = ffmpeg_assets.collect_mirror_evidence(
+            candidate,
+            repository,
+            tag,
+            release_readback_for(candidate, repository, tag),
+            "2026-08-13T00:00:00Z",
+        )
+        mirror["readBack"]["immutable"] = False
+
+        with self.assertRaisesRegex(ffmpeg_assets.AssetError, "not immutable"):
+            ffmpeg_assets.apply_update(manifest, candidate, mirror)
         self.assertEqual(before, manifest)
 
     def test_readback_evidence_updates_only_the_selected_rid(self) -> None:
