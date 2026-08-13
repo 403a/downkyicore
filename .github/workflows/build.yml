@@ -66,13 +66,13 @@ jobs:
 
   detect-production-manifest-change:
     name: Detect production manifest change
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     outputs:
       external_assets: ${{ steps.filter.outputs.external_assets }}
     steps:
       - name: Detect external asset manifest changes in the PR diff
         id: filter
+        if: github.event_name == 'pull_request'
         uses: dorny/paths-filter@v3
         with:
           filters: |
