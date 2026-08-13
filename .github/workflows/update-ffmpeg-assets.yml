@@ -151,7 +151,7 @@ jobs:
           python script/ffmpeg-assets.py record-downloaded-sizes \
             --candidates .ffmpeg-update/candidates.json \
             --directory .ffmpeg-update/mirror
-      - name: Create a new immutable mirror release and upload every archive
+      - name: Create a new immutable mirror release or resume exact immutable evidence
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.RUNTIME_ASSETS_TOKEN }}
@@ -170,19 +170,19 @@ jobs:
             exit 1
           fi
           if gh release view '${{ needs.discover.outputs.mirror_tag }}' --repo "$RUNTIME_ASSETS_REPOSITORY" >/dev/null 2>&1; then
-            echo "Refusing to reuse mirror release tag ${{ needs.discover.outputs.mirror_tag }}." >&2
-            exit 1
+            echo 'An existing release will not be modified; exact immutable asset read-back is required before manifest mutation.'
+          else
+            gh release create '${{ needs.discover.outputs.mirror_tag }}' \
+              --repo "$RUNTIME_ASSETS_REPOSITORY" \
+              --title 'DownKyi FFmpeg ${{ needs.discover.outputs.mirror_tag }}' \
+              --notes-file .ffmpeg-update/candidates.json \
+              --draft
+            gh release upload '${{ needs.discover.outputs.mirror_tag }}' .ffmpeg-update/mirror/* \
+              --repo "$RUNTIME_ASSETS_REPOSITORY"
+            gh release edit '${{ needs.discover.outputs.mirror_tag }}' \
+              --repo "$RUNTIME_ASSETS_REPOSITORY" \
+              --draft=false
           fi
-          gh release create '${{ needs.discover.outputs.mirror_tag }}' \
-            --repo "$RUNTIME_ASSETS_REPOSITORY" \
-            --title 'DownKyi FFmpeg ${{ needs.discover.outputs.mirror_tag }}' \
-            --notes-file .ffmpeg-update/candidates.json \
-            --draft
-          gh release upload '${{ needs.discover.outputs.mirror_tag }}' .ffmpeg-update/mirror/* \
-            --repo "$RUNTIME_ASSETS_REPOSITORY"
-          gh release edit '${{ needs.discover.outputs.mirror_tag }}' \
-            --repo "$RUNTIME_ASSETS_REPOSITORY" \
-            --draft=false
       - name: Read back immutable mirror release evidence and update the manifest in the PR workspace
         shell: bash
         env:
@@ -209,6 +209,7 @@ jobs:
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.DOWNKYI_AUTOMATION_TOKEN }}
+          add-paths: script/assets/external-assets.json
           commit-message: "build(deps): update mirrored FFmpeg to ${{ needs.discover.outputs.mirror_tag }}"
           branch: automation/ffmpeg-${{ needs.discover.outputs.mirror_tag }}
           base: ${{ needs.discover.outputs.manifest_base }}

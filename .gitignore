@@ -10,6 +10,7 @@ BenchmarkDotNet.Artifacts/
 DownKyi.Core/Binary/*
 
 script/downloads
+.ffmpeg-update/
 __pycache__/
 *.pyc
 script/pupnet/output

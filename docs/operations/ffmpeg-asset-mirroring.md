@@ -29,8 +29,11 @@ after the setting is enabled. Each update
 creates one new GitHub Release named `ffmpeg-<fixed-upstream-version>` and
 uploads filenames that contain the RID, fixed upstream tag, and SHA-256 prefix.
 The workflow creates a draft, uploads every archive, and only then publishes
-the release. It refuses to reuse a release tag, never overwrites an asset,
+the release. It never modifies or overwrites an existing release or asset,
 never uses `latest`, and the repository retention policy is `never-delete`.
+If a downstream manifest-PR step fails after publication, a retry may resume
+only after the existing release reads back as immutable and every expected
+asset name, size, and digest exactly matches the verified candidate.
 The manifest update is fail closed unless the release API reads the published
 release back with `immutable=true`.
 
@@ -68,9 +71,11 @@ The updater then:
    push `main`.
 
 A validation, download, checksum, extraction, capability, upload, or preflight
-failure stops before manifest mutation. A failed upload may leave an unreferenced
-incomplete release for an operator to inspect, but it cannot update the
-production manifest or replace a historical asset.
+failure stops before manifest mutation. A failed upload may leave an
+unreferenced incomplete release for an operator to inspect, but it cannot
+update the production manifest or replace a historical asset. Manifest PR
+creation is path-scoped to `script/assets/external-assets.json`; downloaded
+archives and updater evidence remain ignored workspace data.
 
 ## Bootstrap and recovery
 
@@ -88,9 +93,11 @@ If the bootstrap fails:
 1. Keep the current manifest unchanged.
 2. Inspect the failed RID and source URL in the workflow output.
 3. Correct an upstream policy issue or create a fresh bootstrap candidate; do
-   not overwrite the partial mirror release/tag.
-4. Re-run the dispatch with a new fixed candidate. Review the generated PR and
-   require the release/package workflow before merging.
+   not overwrite the partial mirror release/tag. If the release was fully
+   published before a later step failed, a re-run may reuse it only as immutable
+   read-back evidence after every expected asset matches exactly.
+4. Re-run the dispatch. Review the generated PR and require the release/package
+   workflow before merging.
 
 To force a normal BtbN refresh, run the same workflow with `bootstrap=false`.
 If the selected fixed release is already represented in the manifest, it exits

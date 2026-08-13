@@ -230,6 +230,7 @@ class FfmpegAssetsTests(unittest.TestCase):
         workflow_directory = SCRIPT.parents[1] / ".github" / "workflows"
         updater = (workflow_directory / "update-ffmpeg-assets.yml").read_text(encoding="utf-8")
         build = (workflow_directory / "build.yml").read_text(encoding="utf-8")
+        gitignore = (SCRIPT.parents[1] / ".gitignore").read_text(encoding="utf-8")
         self.assertIn(
             'commit-message: "build(deps): update mirrored FFmpeg to ${{ needs.discover.outputs.mirror_tag }}"',
             updater,
@@ -239,6 +240,9 @@ class FfmpegAssetsTests(unittest.TestCase):
             updater,
         )
         self.assertIn("read-mirror-evidence", updater)
+        self.assertIn("An existing release will not be modified", updater)
+        self.assertIn("add-paths: script/assets/external-assets.json", updater)
+        self.assertIn(".ffmpeg-update/", gitignore.splitlines())
         self.assertNotIn("record-mirror", updater)
         self.assertIn("workflow_call:", updater)
         self.assertIn("validate-workflow-authority", updater)
