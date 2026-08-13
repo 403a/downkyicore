@@ -733,9 +733,13 @@ inbound:
   - viewmodel.login
 outbound:
   - core.bili-api
+  - infra.bilibili-http
   - core.legacy-settings-migration
 contracts:
-  - Caller cancellation reaches every network operation and is checked around compatibility file persistence.
+  - One isolated QR login session owns generate, poll and trusted HTTPS callback traversal; automatic redirects cannot bypass host validation.
+  - Poll/callback response cookies override legacy callback-query values. Only parent-domain cookies may leave the session because the compatibility provider emits one shared header.
+  - Login success is committed only after the complete candidate set is persisted, reloaded through the production cookie provider and `/nav` returns `isLogin=true`; cancellation or validation failure restores the previous login file.
+  - New response cookies retain their wire values while legacy JSON without a wire-value marker retains its historical encoding behavior.
   - Navigation user data maps to the existing `UserInfoSettings` schema without changing keys or login-file location.
   - WBI key extraction accepts absolute and protocol-relative addresses and strips query/fragment suffixes using ordinal parsing.
   - Missing or partial navigation WBI metadata cannot erase previously validated persisted keys.
@@ -1735,19 +1739,21 @@ type: infrastructure
 paths:
   - src/DownKyi.Application/Bilibili/IBilibiliApiClient.cs
   - src/DownKyi.Application/Bilibili/IBuvidProvider.cs
+  - src/DownKyi.Application/Bilibili/IBilibiliLoginSession.cs
   - src/DownKyi.Infrastructure/Bilibili/BilibiliApiClient.cs
   - src/DownKyi.Infrastructure/Bilibili/BilibiliHttpTransport.cs
   - src/DownKyi.Infrastructure/Bilibili/BilibiliBuvidProvider.cs
+  - src/DownKyi.Infrastructure/Bilibili/BilibiliLoginSession.cs
   - src/DownKyi.Infrastructure/Bilibili/BilibiliServiceCollectionExtensions.cs
   - src/DownKyi.Desktop/Services/Account/BilibiliCookieProvider.cs
-responsibility: Implements injected async Bilibili transport, credential and buvid composition, bounded cancellation-aware retries, response stream ownership, and atomic file downloads.
+responsibility: Implements injected async Bilibili transport, isolated QR login session ownership, credential and buvid composition, bounded cancellation-aware retries, response stream ownership, and atomic file downloads.
 inbound:
   - core.bili-api
 outbound:
   - external.bilibili
   - core.settings
 contracts:
-  - Host composition registers one `IBilibiliApiClient`, `IBuvidProvider`, and cookie provider through Microsoft DI.
+  - Host composition registers one `IBilibiliApiClient`, `IBuvidProvider`, cookie provider and `IBilibiliLoginSessionFactory` through Microsoft DI.
   - API callers receive the client explicitly; no static client, global Configure call, or service locator is permitted.
   - All HTTP, response reads, stream copies, and retry delays are asynchronous and cancellation-aware.
   - Retry is iterative, not recursive.
@@ -1757,6 +1763,7 @@ contracts:
   - HTTP 401/403 are non-retryable; HTTP 429 honors Retry-After with a bounded delay; retryable 5xx and transport failures remain bounded.
   - Concurrent buvid callers share one in-flight request; canceling one waiter cannot cancel the shared load.
   - Response/request ownership follows the returned stream, and failed file transfers remove the `.download` temporary file.
+  - The QR login named client disables automatic redirects and handler cookie ownership; its session manually validates every HTTPS hop, captures all response cookies, and never exports host-only cookies to the domain-agnostic compatibility provider.
   - Cookies, request headers, full sensitive URLs, and account data never enter diagnostics or fixtures.
 hazards:
   - Bilibili may change fingerprint and API envelopes; source-generated DTO fields must preserve exact wire names and nullable absence.
