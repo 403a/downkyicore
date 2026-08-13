@@ -213,7 +213,7 @@ class FfmpegAssetsTests(unittest.TestCase):
             with self.assertRaisesRegex(ffmpeg_assets.AssetError, "ffprobe"):
                 ffmpeg_assets.validate_candidate_archive(candidate, "linux-x64", directory, False, None)
 
-    def test_workflow_contracts_guard_yaml_syntax_and_release_package_trigger(self) -> None:
+    def test_workflow_contracts_guard_tooling_and_production_phases(self) -> None:
         workflow_directory = SCRIPT.parents[1] / ".github" / "workflows"
         updater = (workflow_directory / "update-ffmpeg-assets.yml").read_text(encoding="utf-8")
         build = (workflow_directory / "build.yml").read_text(encoding="utf-8")
@@ -229,6 +229,19 @@ class FfmpegAssetsTests(unittest.TestCase):
         self.assertNotIn("record-mirror", updater)
         self.assertIn("- release/v1.1.1-integration", build)
         self.assertIn("uses: raven-actions/actionlint@v2", build)
+        self.assertNotIn("shellcheck: false", build)
+        self.assertNotIn("pyflakes: false", build)
+        self.assertIn("fail-on-error: true", build)
+        self.assertIn("shellcheck: true", build)
+        self.assertIn("pyflakes: true", build)
+        self.assertIn("name: FFmpeg tooling / implementation gate", build)
+        self.assertIn("- '.github/workflows/build.yml'", build)
+        self.assertIn("uses: dorny/paths-filter@v3", build)
+        self.assertIn("- 'script/assets/external-assets.json'", build)
+        self.assertIn("name: Production manifest preflight", build)
+        self.assertIn("github.event_name != 'pull_request'", build)
+        self.assertIn("needs.detect-production-manifest-change.outputs.external_assets == 'true'", build)
+        self.assertIn("needs: external-assets-preflight", build)
 
     def test_macos_candidates_use_distinct_native_runners(self) -> None:
         candidate = {"assets": {"osx-x64": {}, "osx-arm64": {}}}
