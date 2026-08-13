@@ -78,9 +78,6 @@ jobs:
           filters: |
             external_assets:
               - 'script/assets/external-assets.json'
-      - name: Keep the release dependency chain runnable outside pull requests
-        if: github.event_name != 'pull_request'
-        run: echo 'Manifest diff detection is only required for pull requests.'
 
   external-assets-preflight:
     name: Production manifest preflight

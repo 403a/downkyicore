@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
 using System.Xml.Linq;
 
@@ -50,9 +51,6 @@ public sealed class ReleaseWorkflowArchitectureTests
                     id: filter
                     if: github.event_name == 'pull_request'
                     uses: dorny/paths-filter@v3
-                  - name: Preserve non-pull-request dependency success
-                    if: github.event_name != 'pull_request'
-                    run: echo release-chain-ready
             """;
         string[] invalidMutations =
         [
@@ -61,21 +59,29 @@ public sealed class ReleaseWorkflowArchitectureTests
                 "    if: github.event_name == 'pull_request'\n    runs-on: ubuntu-latest",
                 StringComparison.Ordinal),
             validWorkflow.Replace(
-                "if: github.event_name != 'pull_request'",
                 "if: github.event_name == 'pull_request'",
-                StringComparison.Ordinal),
-            validWorkflow.Replace(
-                "run: echo release-chain-ready",
-                "run:",
+                "if: github.event_name != 'pull_request'",
                 StringComparison.Ordinal),
             validWorkflow.Replace(
                 "uses: dorny/paths-filter@v3",
                 "run: echo not-a-diff-detector",
                 StringComparison.Ordinal),
             validWorkflow.Replace(
-                "run: echo release-chain-ready",
-                "continue-on-error: true\n        run: echo release-chain-ready",
-                StringComparison.Ordinal)
+                "uses: dorny/paths-filter@v3",
+                "continue-on-error: true\n        uses: dorny/paths-filter@v3",
+                StringComparison.Ordinal),
+            validWorkflow + """
+                  - name: Failing non-PR transition
+                    if: github.event_name != 'pull_request'
+                    run: exit 1
+                """,
+            validWorkflow + """
+                  - name: Failing multiline non-PR transition
+                    if: github.event_name != 'pull_request'
+                    run: |
+                      echo starting
+                      exit 1
+                """
         ];
 
         Assert.True(HasRunnableManifestDetectionDependency(validWorkflow));
@@ -244,6 +250,111 @@ public sealed class ReleaseWorkflowArchitectureTests
     }
 
     [Fact]
+    public void WindowsExternalAssetInstallersUseTheSharedBoundedRetryOwner()
+    {
+        var aria2Installer = File.ReadAllText(Path.Combine(RepositoryRoot, "script", "aria2.ps1"));
+        var ffmpegInstaller = File.ReadAllText(Path.Combine(RepositoryRoot, "script", "ffmpeg.ps1"));
+
+        Assert.All(new[] { aria2Installer, ffmpegInstaller }, source =>
+        {
+            Assert.Contains("download-external-asset.ps1", source, StringComparison.Ordinal);
+            Assert.Contains("Invoke-ExternalAssetDownload", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("Start-BitsTransfer", source, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void ExternalAssetDownloadRetriesTransientFailuresAndFailsClosed()
+    {
+        var helperPath = Path.Combine(RepositoryRoot, "script", "download-external-asset.ps1");
+        var command = $$"""
+            $ErrorActionPreference = 'Stop'
+            $ProgressPreference = 'SilentlyContinue'
+            . '{{helperPath.Replace("'", "''", StringComparison.Ordinal)}}'
+            $successPath = [IO.Path]::GetTempFileName()
+            $failurePath = [IO.Path]::GetTempFileName()
+            try {
+                $successAttempts = 0
+                Invoke-ExternalAssetDownload `
+                    -Uri 'https://example.invalid/immutable.zip' `
+                    -Destination $successPath `
+                    -MaximumAttempts 3 `
+                    -RetryDelaySeconds 0 `
+                    -TransferOperation {
+                        param($source, $destination)
+                        $script:successAttempts++
+                        if ($script:successAttempts -lt 3) {
+                            throw [IO.IOException]::new('injected transient transport failure')
+                        }
+                        [IO.File]::WriteAllText($destination, 'verified later by the manifest checksum')
+                    }
+                if ($successAttempts -ne 3 -or -not (Test-Path -LiteralPath $successPath)) {
+                    throw 'The bounded retry did not recover on the final allowed attempt.'
+                }
+
+                $failureAttempts = 0
+                $failedClosed = $false
+                try {
+                    Invoke-ExternalAssetDownload `
+                        -Uri 'https://example.invalid/immutable.zip' `
+                        -Destination $failurePath `
+                        -MaximumAttempts 3 `
+                        -RetryDelaySeconds 0 `
+                        -TransferOperation {
+                            param($source, $destination)
+                            $script:failureAttempts++
+                            [IO.File]::WriteAllText($destination, 'injected partial response')
+                            throw [IO.IOException]::new('injected persistent transport failure')
+                        }
+                }
+                catch [IO.IOException] {
+                    $failedClosed = $true
+                }
+                if (-not $failedClosed -or $failureAttempts -ne 3) {
+                    throw 'Retry exhaustion did not preserve the transport failure.'
+                }
+                if (Test-Path -LiteralPath $failurePath) {
+                    throw 'Retry exhaustion left an unverified partial asset behind.'
+                }
+            }
+            finally {
+                foreach ($path in @($successPath, $failurePath)) {
+                    if (Test-Path -LiteralPath $path) {
+                        Remove-Item -LiteralPath $path -Force
+                    }
+                }
+            }
+            exit 0
+            """;
+
+        var encodedCommand = Convert.ToBase64String(Encoding.Unicode.GetBytes(command));
+        using var process = Process.Start(new ProcessStartInfo
+        {
+            FileName = "pwsh",
+            ArgumentList =
+            {
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-EncodedCommand",
+                encodedCommand
+            },
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        });
+        Assert.NotNull(process);
+        Assert.True(process.WaitForExit(30_000), "The external-asset retry regression timed out.");
+
+        var standardOutput = process.StandardOutput.ReadToEnd();
+        var standardError = process.StandardError.ReadToEnd();
+        Assert.True(
+            process.ExitCode == 0,
+            $"External-asset retry regression failed. stdout={standardOutput} stderr={standardError}");
+    }
+
+    [Fact]
     public void MacPackageBuildRestoresTheRequestedRuntimeBeforePublishing()
     {
         var workflow = File.ReadAllText(
@@ -331,12 +442,8 @@ public sealed class ReleaseWorkflowArchitectureTests
             HasYamlKey(step, 8, "id: filter") &&
             HasYamlValuePrefix(step, 8, "uses:", "dorny/paths-filter@") &&
             !HasYamlKey(step, 8, "continue-on-error: true"));
-        var nonPullRequestSuccess = steps.Any(step =>
-            HasExactIf(step, "github.event_name != 'pull_request'") &&
-            HasExecutableRun(step) &&
-            !HasYamlKey(step, 8, "continue-on-error: true"));
 
-        return pullRequestDetector && nonPullRequestSuccess;
+        return pullRequestDetector && steps.Count == 1;
     }
 
     private static List<string> GetYamlBlock(
@@ -406,19 +513,6 @@ public sealed class ReleaseWorkflowArchitectureTests
         return block.Any(line =>
             GetIndent(line) == 8 &&
             string.Equals(line.Trim(), $"if: {expression}", StringComparison.Ordinal));
-    }
-
-    private static bool HasExecutableRun(IReadOnlyList<string> block)
-    {
-        return block.Any(line =>
-        {
-            if (GetIndent(line) != 8 || !line.TrimStart().StartsWith("run:", StringComparison.Ordinal))
-            {
-                return false;
-            }
-
-            return !string.IsNullOrWhiteSpace(line.Trim()["run:".Length..]);
-        });
     }
 
     private static bool HasYamlKey(IReadOnlyList<string> block, int indent, string key)
