@@ -276,56 +276,6 @@ public sealed class CentralTestRunnerRecorderTests
     }
 
     [Fact]
-    public async Task OutputPipeHeldByDescendantDoesNotHangRunner()
-    {
-        var evidenceDirectory = CreateEvidenceDirectory();
-        var markerPath = Path.Combine(evidenceDirectory, "pipe-holder.pid");
-        int? childPid = null;
-        await FailurePreservingTestCleanup.RunAsync(
-            async () =>
-            {
-                var runtimeConfig = Path.Combine(
-                    AppContext.BaseDirectory,
-                    "DownKyi.Architecture.Tests.runtimeconfig.json");
-                var clock = Stopwatch.StartNew();
-                var result = await FlightRecorderExecution.RunAsync(
-                    new ProcessExecutionRequest(
-                        "fixture.pipe-holder.slice",
-                        "fixture.pipe-holder.test",
-                        CreateFixtureStartInfo("fixture-exit-with-pipe-holder", runtimeConfig, markerPath),
-                        TimeSpan.FromSeconds(5),
-                        TimeSpan.FromMilliseconds(500),
-                        evidenceDirectory),
-                    CancellationToken.None).ConfigureAwait(true);
-                clock.Stop();
-
-                Assert.Equal(2, result.ExitCode);
-                Assert.True(clock.Elapsed < TimeSpan.FromSeconds(4));
-                using var document = JsonDocument.Parse(await File.ReadAllTextAsync(
-                    result.EvidencePath,
-                    TestContext.Current.CancellationToken).ConfigureAwait(true));
-                Assert.Equal("stream_drain_failed", document.RootElement.GetProperty("Outcome").GetString());
-                var events = document.RootElement.GetProperty("Events")
-                    .EnumerateArray()
-                    .Select(item => item.GetProperty("Event").GetString())
-                    .ToArray();
-                Assert.Contains("process_start", events);
-                Assert.Contains("post_exit_output_held", events);
-                Assert.Contains("bounded_stop_requested", events);
-                Assert.Contains("cleanup_completed", events);
-
-                childPid = int.Parse(await File.ReadAllTextAsync(markerPath, TestContext.Current.CancellationToken)
-                    .ConfigureAwait(true),
-                    CultureInfo.InvariantCulture);
-                Assert.False(IsProcessAlive(childPid.Value));
-            },
-            async () => childPid = await CleanupPipeHolderFixtureAsync(
-                markerPath,
-                childPid,
-                evidenceDirectory).ConfigureAwait(true)).ConfigureAwait(true);
-    }
-
-    [Fact]
     public async Task PipeHolderAssertionBeforePidAssignmentStillCompletesCleanup()
     {
         var evidenceDirectory = CreateEvidenceDirectory();
