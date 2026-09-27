@@ -71,35 +71,7 @@ internal sealed class BuiltinTransferBackend : ITransferBackend
         var localFileName = request.FileName;
         var expectedBytes = request.ExpectedBytes;
         var network = _settingsStore.Current.Network;
-        var requestConfiguration = new RequestConfiguration
-        {
-            Headers = new WebHeaderCollection
-            {
-                { "cookie", LoginHelper.GetLoginInfoCookiesString() }
-            },
-            UserAgent = network.UserAgent,
-            Referer = "https://www.bilibili.com"
-        };
-        if (network.IsHttpProxy == AllowStatus.Yes)
-        {
-            requestConfiguration.Proxy = new WebProxy(
-                network.HttpProxy,
-                network.HttpProxyListenPort);
-        }
-
-        var split = network.Split;
-        var configuration = new DownloadConfiguration
-        {
-            ChunkCount = split,
-            RequestConfiguration = requestConfiguration,
-            ParallelDownload = true,
-            ParallelCount = split,
-            MaxTryAgainOnFailure = 0,
-            MaximumMemoryBufferBytes = 50 * 1024 * 1024,
-            EnableAutoResumeDownload = true,
-            ClearPackageOnCompletionWithFailure = false,
-            FileExistPolicy = FileExistPolicy.IgnoreDownload
-        };
+        var configuration = CreateDownloadConfiguration(network);
 
         var targetFile = Path.Combine(path, localFileName);
         var totalBytesToReceive = expectedBytes;
@@ -281,6 +253,41 @@ internal sealed class BuiltinTransferBackend : ITransferBackend
 
     public void Dispose()
     {
+    }
+
+    internal static DownloadConfiguration CreateDownloadConfiguration(
+        NetworkApplicationSettings network)
+    {
+        ArgumentNullException.ThrowIfNull(network);
+        var requestConfiguration = new RequestConfiguration
+        {
+            Headers = new WebHeaderCollection
+            {
+                { "cookie", LoginHelper.GetLoginInfoCookiesString() }
+            },
+            UserAgent = network.UserAgent,
+            Referer = "https://www.bilibili.com"
+        };
+        if (network.IsHttpProxy == AllowStatus.Yes)
+        {
+            requestConfiguration.Proxy = new WebProxy(
+                network.HttpProxy,
+                network.HttpProxyListenPort);
+        }
+
+        var split = network.Split;
+        return new DownloadConfiguration
+        {
+            ChunkCount = split,
+            RequestConfiguration = requestConfiguration,
+            ParallelDownload = true,
+            ParallelCount = split,
+            MaxTryAgainOnFailure = 0,
+            MaximumMemoryBufferBytes = 50 * 1024 * 1024,
+            EnableAutoResumeDownload = true,
+            ClearPackageOnCompletionWithFailure = false,
+            FileExistPolicy = FileExistPolicy.IgnoreDownload
+        };
     }
 
     internal static DownloadTransferResult ClassifyFailure(
