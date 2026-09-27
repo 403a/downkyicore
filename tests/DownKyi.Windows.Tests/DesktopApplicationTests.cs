@@ -1,17 +1,14 @@
+using System.Runtime.Versioning;
 using DownKyi.Desktop;
 
-namespace DownKyi.Tests;
+namespace DownKyi.Windows.Tests;
 
+[SupportedOSPlatform("windows")]
 public sealed class DesktopApplicationTests
 {
     [Fact]
     public async Task WindowsUiOwnerRunsWorkInStaApartment()
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
         var callerThreadId = Environment.CurrentManagedThreadId;
         var uiThreadId = 0;
         var apartmentState = ApartmentState.Unknown;
@@ -29,11 +26,6 @@ public sealed class DesktopApplicationTests
     [Fact]
     public async Task WindowsUiOwnerPropagatesStartupFailure()
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            return;
-        }
-
         var expected = new InvalidOperationException("Synthetic UI startup failure.");
         var startup = DesktopApplication.RunOnWindowsStaThreadAsync(() => throw expected);
 

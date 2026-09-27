@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Runtime.Versioning;
 using System.Threading;
 using Avalonia;
@@ -39,35 +38,23 @@ public static class DesktopApplication
         }
     }
 
-    [SuppressMessage(
-        "Design",
-        "CA1031:Do not catch general exception types",
-        Justification = "The UI thread boundary must preserve every startup failure on the owning task.")]
     [SupportedOSPlatform("windows")]
     internal static Task RunOnWindowsStaThreadAsync(Action action)
     {
         ArgumentNullException.ThrowIfNull(action);
-        var completion = new TaskCompletionSource(
+        var uiTask = new Task(
+            action,
+            CancellationToken.None,
             TaskCreationOptions.RunContinuationsAsynchronously);
-        var uiThread = new Thread(() =>
-        {
-            try
-            {
-                action();
-                completion.TrySetResult();
-            }
-            catch (Exception exception)
-            {
-                completion.TrySetException(exception);
-            }
-        })
+        var uiThread = new Thread(
+            () => uiTask.RunSynchronously(TaskScheduler.Default))
         {
             IsBackground = false,
             Name = "DownKyi UI"
         };
         uiThread.SetApartmentState(ApartmentState.STA);
         uiThread.Start();
-        return completion.Task;
+        return uiTask;
     }
 
     public static AppBuilder BuildAvaloniaApp()
