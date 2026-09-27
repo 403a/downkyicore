@@ -196,13 +196,10 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
             return;
         }
 
-        var result = await AppDialogs.ShowAsync(
-            new AppDialogRequest(AppDialog.ParsingSelector)).ConfigureAwait(true);
-        if (result.Outcome == AppDialogOutcome.Accepted
-            && result.Parameters.TryGetValue("parseScope", out var scopeValue)
-            && scopeValue is ParseScope selectedScope)
+        var result = await ParsingSelectorDialog.ShowAsync(AppDialogs).ConfigureAwait(true);
+        if (result != null)
         {
-            await ExecuteParseAsync(selectedScope).ConfigureAwait(true);
+            await ExecuteParseAsync(result.Scope).ConfigureAwait(true);
         }
     }
 
