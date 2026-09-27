@@ -21,6 +21,11 @@ DownKyi Core 是基于哔哩下载姬 Windows 版与 Avalonia 的跨平台 B 站
 - macOS: `DownKyi-*-osx-arm64.dmg` 或 `DownKyi-*-osx-x64.dmg`
 - Linux: AppImage / deb / rpm
 
+Windows ZIP 必须完整解压到一个新目录后再运行；不要只复制压缩包窗口中的
+顶层文件。`DownKyi.exe` 旁必须保留 `aria2` 与 `ffmpeg` 子目录。若程序提示
+“下载系统无法启动”并报告缺少 `aria2/aria2c.exe`，请从官方 Release 重新下载
+对应 ZIP 并完整解压，不要单独补放执行文件。
+
 更新内容见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 功能
