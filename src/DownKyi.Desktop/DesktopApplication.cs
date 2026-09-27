@@ -1,3 +1,5 @@
+using System.Runtime.Versioning;
+using System.Threading;
 using Avalonia;
 using DownKyi.Platform;
 
@@ -16,7 +18,16 @@ public static class DesktopApplication
         var appBuilder = BuildAvaloniaApp();
         try
         {
-            appBuilder.StartWithClassicDesktopLifetime(args);
+            if (OperatingSystem.IsWindows())
+            {
+                await RunOnWindowsStaThreadAsync(
+                        () => appBuilder.StartWithClassicDesktopLifetime(args))
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                appBuilder.StartWithClassicDesktopLifetime(args);
+            }
         }
         finally
         {
@@ -25,6 +36,25 @@ public static class DesktopApplication
                 await application.DisposeAsync().ConfigureAwait(false);
             }
         }
+    }
+
+    [SupportedOSPlatform("windows")]
+    internal static Task RunOnWindowsStaThreadAsync(Action action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        var uiTask = new Task(
+            action,
+            CancellationToken.None,
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var uiThread = new Thread(
+            () => uiTask.RunSynchronously(TaskScheduler.Default))
+        {
+            IsBackground = false,
+            Name = "DownKyi UI"
+        };
+        uiThread.SetApartmentState(ApartmentState.STA);
+        uiThread.Start();
+        return uiTask;
     }
 
     public static AppBuilder BuildAvaloniaApp()
