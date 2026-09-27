@@ -110,7 +110,7 @@ pwsh ./script/audit-bilibili-authenticated-api.ps1 `
 - Download/retry：loopback fake HTTP tests，不連正式 Bilibili。
 - Media output：ffprobe seek/decode integration tests。
 - Logs：使用測試指定隔離目錄，檢查 redaction、flush、rotation 與 export。
-- System performance：依 `performance-baseline.md` 記錄 runtime、OS、architecture、dataset、backend 與 SHA。
+- System performance：依 `../performance-baseline.md` 記錄 runtime、OS、architecture、dataset、backend 與 SHA。
 
 ## 回滾
 
