@@ -73,6 +73,55 @@ public sealed class DownloadRetryPolicyTests
     }
 
     [Fact]
+    public async Task CoordinatorClearsBackendIdentityAfterTerminalInvalidMedia()
+    {
+        var directory = CreateTemporaryDirectory("terminal-invalid-media");
+        const string fileName = "media.tmp";
+        var target = Path.Combine(directory, fileName);
+        await File.WriteAllTextAsync(
+            target,
+            "invalid",
+            TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(
+            $"{target}.aria2",
+            "resume",
+            TestContext.Current.CancellationToken);
+        var identityUpdates = new List<string?>();
+        using var backend = new RecordingBackend(
+            DownloadTransferResult.Failed(
+                DownloadTransferFailureKind.InvalidMedia,
+                "download.transfer.invalid-media"));
+
+        try
+        {
+            var result = await CreateCoordinator(backend, maximumAttempts: 5).TransferAsync(
+                CreateRequestAt(
+                    directory,
+                    fileName,
+                    "persisted-gid",
+                    (value, _) =>
+                    {
+                        identityUpdates.Add(value);
+                        return Task.CompletedTask;
+                    },
+                    "https://primary.invalid/media"),
+                static _ => Task.FromResult<IReadOnlyList<string>>([]),
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(DownloadTransferOutcome.Failed, result.Outcome);
+            Assert.Equal(DownloadTransferFailureKind.InvalidMedia, result.FailureKind);
+            Assert.Equal(["persisted-gid"], backend.ResetIdentities);
+            Assert.Equal([null], identityUpdates);
+            Assert.False(File.Exists(target));
+            Assert.False(File.Exists($"{target}.aria2"));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task CoordinatorClearsPartialStateBeforeContactingBackupSource()
     {
         var directory = CreateTemporaryDirectory("source-switch");

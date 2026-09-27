@@ -161,6 +161,21 @@ internal sealed class DownloadTransferCoordinator
                     break;
                 case DownloadRetryAction.Stop:
                 default:
+                    if (lastResult.FailureKind == DownloadTransferFailureKind.InvalidMedia
+                        && backendIdentity != null)
+                    {
+                        var terminalResetFailure = await ResetTransferStateAsync(
+                            request,
+                            backendIdentity,
+                            SetBackendIdentityAsync,
+                            "download.transfer.cleanup-failed",
+                            cancellationToken).ConfigureAwait(true);
+                        if (terminalResetFailure != null)
+                        {
+                            return terminalResetFailure;
+                        }
+                    }
+
                     return lastResult;
             }
         }
@@ -181,6 +196,29 @@ internal sealed class DownloadTransferCoordinator
             return null;
         }
 
+        var resetFailure = await ResetTransferStateAsync(
+            request,
+            backendIdentity,
+            setBackendIdentityAsync,
+            "download.transfer.source-change-cleanup",
+            cancellationToken).ConfigureAwait(true);
+        if (resetFailure != null)
+        {
+            return resetFailure;
+        }
+
+        _logger.LogInformationMessage(
+            $"Download transfer source changed; backend={_backend.Name}; partialState=cleared.");
+        return null;
+    }
+
+    private async Task<DownloadTransferResult?> ResetTransferStateAsync(
+        DownloadTransferRequest request,
+        string? backendIdentity,
+        Func<string?, CancellationToken, Task> setBackendIdentityAsync,
+        string cleanupFailureCode,
+        CancellationToken cancellationToken)
+    {
         var resetResult = await _backend
             .ResetAsync(backendIdentity, cancellationToken)
             .ConfigureAwait(true);
@@ -199,12 +237,10 @@ internal sealed class DownloadTransferCoordinator
         {
             return DownloadTransferResult.Failed(
                 DownloadTransferFailureKind.Disk,
-                "download.transfer.source-change-cleanup");
+                cleanupFailureCode);
         }
 
         await setBackendIdentityAsync(null, cancellationToken).ConfigureAwait(true);
-        _logger.LogInformationMessage(
-            $"Download transfer source changed; backend={_backend.Name}; partialState=cleared.");
         return null;
     }
 

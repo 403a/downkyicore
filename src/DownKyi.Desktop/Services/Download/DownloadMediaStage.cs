@@ -184,9 +184,15 @@ internal sealed class DownloadMediaStage : IDownloadPipelineStage
             return DownloadStageResult.Success(Name);
         }
 
+        if (!TryValidateAndOrderDurls(source, out var orderedDurls))
+        {
+            return DownloadStageResult.Failure(
+                "download.media.durl-manifest",
+                "The segmented media manifest is invalid.");
+        }
+
         _presenter.ShowDownloadingVideo(context);
-        var downloads = source
-            .OrderBy(durl => durl.Order)
+        var downloads = orderedDurls
             .Select(durl => new PendingDurlDownload(durl))
             .ToArray();
 
@@ -442,8 +448,31 @@ internal sealed class DownloadMediaStage : IDownloadPipelineStage
 
     private static PlayUrlDashVideo? SelectDurl(PlayUrl playUrl, int order)
     {
-        var durl = playUrl.Durl.FirstOrDefault(candidate => candidate.Order == order);
+        if (!TryValidateAndOrderDurls(playUrl.Durl, out var durls))
+        {
+            return null;
+        }
+
+        var durl = durls.FirstOrDefault(candidate => candidate.Order == order);
         return durl == null ? null : CreateDurlDownloadDescriptor([durl]);
+    }
+
+    private static bool TryValidateAndOrderDurls(
+        IEnumerable<PlayUrlDurl> source,
+        out PlayUrlDurl[] orderedDurls)
+    {
+        var durls = source.ToArray();
+        if (durls.GroupBy(durl => durl.Order).Any(group => group.Count() > 1) ||
+            durls.Any(durl =>
+                string.IsNullOrWhiteSpace(durl.SourceAddress) &&
+                !(durl.BackupUrl?.Any(address => !string.IsNullOrWhiteSpace(address)) ?? false)))
+        {
+            orderedDurls = [];
+            return false;
+        }
+
+        orderedDurls = durls.OrderBy(durl => durl.Order).ToArray();
+        return true;
     }
 
     private static List<string> CreateAddresses(PlayUrlDashVideo media)
