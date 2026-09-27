@@ -25,7 +25,7 @@ PR 修正文件。
 | Logging | `ApplicationLogProvider` + Infrastructure logging owners | provider stress + Host tests | `docs/design-docs/logging-ownership-sink-adr.md` |
 | Desktop／DI／theme | Desktop composition + design tokens | architecture + XAML + packaged smoke | `ARCHITECTURE.md` |
 | Bilibili／WBI | API adapter + `IWbiKeyProvider` + fixtures | contract fixture + inventory gate | `docs/operations/bilibili-api-audit.md` |
-| Analyzer | strict build config + analyzer inventory | clean strict build + inventory | `docs/analyzer-baseline.md` |
+| Analyzer | strict build config + analyzer inventory | clean strict build + inventory | `script/analyzer-inventory.ps1` |
 | aria2／FFmpeg binary | `script/assets/external-assets.json` + installer scripts | digest + six-RID gates | `docs/operations/aria2-security.md` |
 | Release | `version.txt` + release workflow | exact-head release gates | `docs/operations/verification-and-rollback.md` |
 
