@@ -2,12 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using DownKyi.Application.Bilibili;
 using DownKyi.Application.Desktop;
 using DownKyi.Application.Diagnostics;
 using DownKyi.Application.Downloads;
+using DownKyi.Core.BiliApi;
 using DownKyi.Core.BiliApi.Sign;
 using DownKyi.Core.BiliApi.VideoStream;
 using DownKyi.Core.Settings;
@@ -171,17 +173,25 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
             IReadOnlyList<DownloadSettingsDialog.SubtitleTrack> subtitleTracks = [];
             if (subtitlePage != null)
             {
-                var player = await WbiRequestExecutor.ExecuteAsync(
-                    _wbiKeyProvider,
-                    (keys, unixTimeSeconds) => _client.PlayerV2Async(
-                        keys, unixTimeSeconds, subtitlePage.Avid, subtitlePage.Bvid,
-                        subtitlePage.Cid, cancellationToken),
-                    TimeProvider.System,
-                    cancellationToken).ConfigureAwait(false);
-                subtitleTracks = player?.Subtitle.Subtitles.Select(track =>
-                    new DownloadSettingsDialog.SubtitleTrack(
-                        track.Id, track.Lan, track.LanDoc, track.Type, track.SubtitleAddress))
-                    .ToArray() ?? [];
+                try
+                {
+                    var player = await WbiRequestExecutor.ExecuteAsync(
+                        _wbiKeyProvider,
+                        (keys, unixTimeSeconds) => _client.PlayerV2Async(
+                            keys, unixTimeSeconds, subtitlePage.Avid, subtitlePage.Bvid,
+                            subtitlePage.Cid, cancellationToken),
+                        TimeProvider.System,
+                        cancellationToken).ConfigureAwait(false);
+                    subtitleTracks = player?.Subtitle.Subtitles.Select(track =>
+                        new DownloadSettingsDialog.SubtitleTrack(
+                            track.Id, track.Lan, track.LanDoc, track.Type, track.SubtitleAddress))
+                        .ToArray() ?? [];
+                }
+                catch (Exception exception) when (exception is HttpRequestException or BilibiliApiResponseException
+                                                  || exception is OperationCanceledException && !cancellationToken.IsCancellationRequested)
+                {
+                    _logger.LogWarningMessage("Subtitle tracks could not be loaded; opening download settings without them.", exception);
+                }
             }
             var result = await _dialogService.ShowAsync(
                 DownloadSettingsDialog.CreateRequest(subtitleTracks),

@@ -185,23 +185,25 @@
                         Foreground="{DynamicResource BrushTextDark}"
                         Text="{DynamicResource DownloadSubtitle}" />
                     <Grid Grid.Column="1" Margin="20,0,0,0">
-                        <ItemsControl MaxHeight="160" ItemsSource="{Binding SubtitleTracks}"
-                                      IsEnabled="{Binding DownloadSubtitle}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="vmd:SubtitleTrackItem">
-                                    <Grid ColumnDefinitions="30,2*,*,60,90">
-                                        <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" />
-                                        <TextBlock Grid.Column="1" Text="{Binding DisplayLanguage}" />
-                                        <TextBlock Grid.Column="2" Text="{Binding Language}" />
-                                        <TextBlock Grid.Column="3" Text="{Binding Type}" />
-                                        <RadioButton Grid.Column="4" GroupName="DefaultSubtitle"
-                                                     Content="默认"
-                                                     IsEnabled="{Binding IsSelected}"
-                                                     IsChecked="{Binding IsDefault, Mode=TwoWay}" />
-                                    </Grid>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                        <ScrollViewer MaxHeight="160" VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding SubtitleTracks}"
+                                          IsEnabled="{Binding DownloadSubtitle}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vmd:SubtitleTrackItem">
+                                        <Grid ColumnDefinitions="30,2*,*,60,90">
+                                            <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" />
+                                            <TextBlock Grid.Column="1" Text="{Binding DisplayLanguage}" />
+                                            <TextBlock Grid.Column="2" Text="{Binding Language}" />
+                                            <TextBlock Grid.Column="3" Text="{Binding Type}" />
+                                            <RadioButton Grid.Column="4" GroupName="DefaultSubtitle"
+                                                         Content="默认"
+                                                         IsEnabled="{Binding IsSelected}"
+                                                         IsChecked="{Binding IsDefault, Mode=TwoWay}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
                     </Grid>
                 </Grid>
 

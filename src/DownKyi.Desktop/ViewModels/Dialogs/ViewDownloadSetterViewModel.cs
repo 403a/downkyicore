@@ -5,6 +5,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DownKyi.Application.Desktop;
 using DownKyi.Application.Diagnostics;
@@ -273,6 +274,7 @@ internal class ViewDownloadSetterViewModel : BaseDialogViewModel
             DownloadDanmaku = true;
             DownloadSubtitle = true;
             DownloadCover = true;
+            SelectAllSubtitleTracks();
         }
         else
         {
@@ -284,6 +286,19 @@ internal class ViewDownloadSetterViewModel : BaseDialogViewModel
         }
 
         SetVideoContent();
+    }
+
+    private void SelectAllSubtitleTracks()
+    {
+        foreach (var track in SubtitleTracks)
+        {
+            track.IsSelected = true;
+        }
+
+        if (SubtitleTracks.Count > 0 && !SubtitleTracks.Any(track => track.IsDefault))
+        {
+            SubtitleTracks[0].IsDefault = true;
+        }
     }
 
     // 音频选择事件
@@ -484,14 +499,18 @@ internal class ViewDownloadSetterViewModel : BaseDialogViewModel
     }
 }
 
-internal sealed class SubtitleTrackItem(
-    DownloadSettingsDialog.SubtitleTrack track, bool isSelected, bool isDefault)
+internal sealed partial class SubtitleTrackItem(
+    DownloadSettingsDialog.SubtitleTrack track, bool isSelected, bool isDefault) : ObservableObject
 {
+    [ObservableProperty]
+    private bool _isSelected = isSelected;
+
+    [ObservableProperty]
+    private bool _isDefault = isDefault;
+
     public long TrackId { get; } = track.TrackId;
     public string Language { get; } = track.Language;
     public string DisplayLanguage { get; } = track.DisplayLanguage;
     public int Type { get; } = track.Type;
     public string Url { get; } = track.Url;
-    public bool IsSelected { get; set; } = isSelected;
-    public bool IsDefault { get; set; } = isDefault;
 }

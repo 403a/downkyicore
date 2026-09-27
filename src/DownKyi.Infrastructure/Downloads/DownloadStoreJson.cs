@@ -150,10 +150,11 @@ internal static class DownloadStoreJson
         return Read(json, fieldName, root =>
         {
             var selectedIds = root.TryGetProperty(SelectedSubtitleTrackIds, out var selected)
-                ? selected.EnumerateArray().Select(item => item.GetInt64()).ToImmutableArray()
+                ? selected.Deserialize<long[]>()?.ToImmutableArray()
+                  ?? throw Corrupt(fieldName, "Selected subtitle track ids are null.")
                 : (ImmutableArray<long>?)null;
             var defaultId = root.TryGetProperty(DefaultSubtitleTrackId, out var defaultTrack)
-                ? defaultTrack.GetInt64()
+                ? defaultTrack.Deserialize<long>()
                 : (long?)null;
 
             if (defaultId is { } selectedDefault &&

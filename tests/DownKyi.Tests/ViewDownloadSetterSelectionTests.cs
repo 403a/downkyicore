@@ -86,6 +86,44 @@ public sealed class ViewDownloadSetterSelectionTests
         Assert.Equal([reentrantSelection, selectedDirectory], observedSelections);
     }
 
+    [Fact]
+    public void DownloadAllSelectsEverySubtitleTrackAndDefault()
+    {
+        using var settings = new TestSettingsStore();
+        var interaction = new TestDesktopInteractionContext();
+        var viewModel = new ViewDownloadSetterViewModel(
+            interaction.Notifications,
+            new StubFilePickerService(),
+            settings.Store,
+            NullLogger<ViewDownloadSetterViewModel>.Instance);
+        viewModel.OnDialogOpened(DownloadSettingsDialog.CreateRequest(
+        [
+            new(11, "zh", "中文", 0, "//zh"),
+            new(22, "en", "English", 1, "//en")
+        ]));
+        viewModel.DownloadAll = true;
+
+        viewModel.DownloadAllCommand.Execute(null);
+
+        Assert.All(viewModel.SubtitleTracks, track => Assert.True(track.IsSelected));
+        Assert.True(viewModel.SubtitleTracks[0].IsDefault);
+    }
+
+    [Fact]
+    public void SubtitleTrackSelectionRaisesBindingNotification()
+    {
+        var track = new SubtitleTrackItem(
+            new DownloadSettingsDialog.SubtitleTrack(11, "zh", "中文", 0, "//zh"),
+            isSelected: false,
+            isDefault: false);
+        var changed = new List<string?>();
+        track.PropertyChanged += (_, eventArgs) => changed.Add(eventArgs.PropertyName);
+
+        track.IsSelected = true;
+
+        Assert.Contains(nameof(track.IsSelected), changed);
+    }
+
     private sealed class StubFilePickerService : IFilePickerService
     {
         public Task<string?> SelectFolderAsync(CancellationToken cancellationToken = default) =>

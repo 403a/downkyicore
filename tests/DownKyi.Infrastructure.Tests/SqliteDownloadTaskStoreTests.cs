@@ -913,6 +913,31 @@ public sealed class SqliteDownloadTaskStoreTests : IDisposable
     }
 
     [Theory]
+    [InlineData("""{"downloadVideo":true,"selectedSubtitleTrackIds":"bad"}""")]
+    [InlineData("""{"downloadVideo":true,"selectedSubtitleTrackIds":["bad"]}""")]
+    [InlineData("""{"downloadVideo":true,"defaultSubtitleTrackId":"bad"}""")]
+    public async Task InvalidSubtitleSelectionIsQuarantinedWithoutHidingValidRecords(string payload)
+    {
+        using var store = CreateStore();
+        Assert.True((await store.AddAsync(
+            CreatePausedTask("valid-selection"),
+            TestContext.Current.CancellationToken)).IsSuccess);
+        Assert.True((await store.AddAsync(
+            CreatePausedTask("corrupt-selection"),
+            TestContext.Current.CancellationToken)).IsSuccess);
+        await CorruptRequestedAssetsAsync("corrupt-selection", payload);
+
+        var restored = Assert.Single(
+            await store.GetUnfinishedAsync(TestContext.Current.CancellationToken));
+        var quarantine = Assert.Single(
+            await store.GetQuarantinedRecordsAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal("valid-selection", restored.Id.Value);
+        Assert.Equal("corrupt-selection", quarantine.RecordId);
+        Assert.Equal("need_download_content", quarantine.FieldName);
+    }
+
+    [Theory]
     [InlineData("not-json")]
     [InlineData("""{"Version":1,"Title":"x","Plot":"x","Year":"2026","Genres":null,"Tags":[],"Actors":[],"BilibiliId":null,"Premiered":"","Ratings":[]}""")]
     public async Task CorruptModernNfoRequestIsQuarantined(string payload)
