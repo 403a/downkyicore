@@ -4,7 +4,7 @@
 - `aria2-security.md`：aria2 TLS、RPC secret、task header、舊設定遷移與六 RID 驗證政策。
 - `aria2-security-baseline.json`：aria2 binary 來源、TLS backend、信任來源與待驗證狀態。
 - `v1.1.2-release-notes.md`：immutable v1.1.2 recovery workflow 的固定發布說明輸入。
-- `bilibili-api-audit.md`：Bilibili 端點、envelope、認證需求、證據、替代方案與回歸測試。
+- `bilibili-api-audit.md`：Bilibili generated endpoint inventory、非推導 contract 例外與 live-audit 安全邊界。
 - `../maintenance.md`：依賴、analyzers、external binaries、package 與 release 維護。
 - `../performance-baseline.md`：系統效能基準欄位與比較規則。
 

@@ -98,7 +98,7 @@ pwsh ./script/validate-release-version.ps1 -GitRef "refs/tags/v$version"
 ```powershell
 pwsh ./script/audit-bilibili-authenticated-api.ps1 `
   -ConfirmAuthenticatedLive `
-  -OutputPath ./docs/operations/bilibili-authenticated-api-audit.json
+  -OutputPath ./artifacts/bilibili/authenticated-live.json
 ```
 
 腳本只從 `~/.codex/.env` 讀取 `BILIBILI_TEST_COOKIE`，不得把值放入命令列、檔案、log、fixture、commit 或 PR。`/x/web-interface/nav` 未同時滿足 code 0 與 `isLogin=true` 時，後續 probe 必須封鎖。
