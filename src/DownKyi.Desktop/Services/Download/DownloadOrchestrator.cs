@@ -23,7 +23,7 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
     private readonly int _workerCount;
     private readonly ILogger<DownloadOrchestrator> _logger;
     private readonly ConcurrentDictionary<DownloadTaskId, byte> _scheduledTasks = new();
-    private readonly ConcurrentDictionary<DownloadTaskId, CancellationTokenSource> _activeExecutions = new();
+    private readonly ConcurrentDictionary<DownloadTaskId, ActiveDownloadExecution> _activeExecutions = new();
     private Channel<DownloadTaskId>? _admissionQueue;
     private Channel<DownloadTaskId>? _downloadQueue;
     private Task _admissionWorker = Task.CompletedTask;
@@ -111,15 +111,26 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
             return false;
         }
 
+        await CancelAndWaitForCompletionAsync(execution)
+            .WaitAsync(WorkerShutdownTimeout, CancellationToken.None)
+            .ConfigureAwait(false);
+        return true;
+    }
+
+    private static async Task CancelAndWaitForCompletionAsync(
+        ActiveDownloadExecution execution)
+    {
         try
         {
             await execution.CancelAsync().ConfigureAwait(false);
-            return true;
         }
         catch (ObjectDisposedException)
         {
-            return false;
+            await execution.Completion.ConfigureAwait(false);
+            return;
         }
+
+        await execution.Completion.ConfigureAwait(false);
     }
 
     public async Task StopAsync(CancellationToken cancellationToken = default)
@@ -186,7 +197,7 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
         {
             await foreach (var taskId in reader.ReadAllAsync(shutdownToken).ConfigureAwait(false))
             {
-                CancellationTokenSource? execution = null;
+                ActiveDownloadExecution? execution = null;
                 var ownsExecution = false;
                 try
                 {
@@ -196,7 +207,7 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
                         continue;
                     }
 
-                    execution = CancellationTokenSource.CreateLinkedTokenSource(shutdownToken);
+                    execution = new ActiveDownloadExecution(shutdownToken);
                     ownsExecution = _activeExecutions.TryAdd(taskId, execution);
                     if (!ownsExecution)
                     {
@@ -231,19 +242,26 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
                 }
                 finally
                 {
-                    await ConfirmPauseAfterWorkerStopsAsync(taskId).ConfigureAwait(false);
-                    if (ownsExecution &&
-                        _activeExecutions.TryRemove(taskId, out var ownedExecution))
+                    try
                     {
-                        ownedExecution.Dispose();
-                    }
-                    else
-                    {
-                        execution?.Dispose();
-                    }
+                        await ConfirmPauseAfterWorkerStopsAsync(taskId).ConfigureAwait(false);
+                        if (ownsExecution &&
+                            _activeExecutions.TryRemove(taskId, out var ownedExecution))
+                        {
+                            ownedExecution.Dispose();
+                        }
+                        else
+                        {
+                            execution?.Dispose();
+                        }
 
-                    _scheduledTasks.TryRemove(taskId, out _);
-                    await RequeueIfNeededAsync(taskId, shutdownToken).ConfigureAwait(false);
+                        _scheduledTasks.TryRemove(taskId, out _);
+                        await RequeueIfNeededAsync(taskId, shutdownToken).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        execution?.Complete();
+                    }
                 }
             }
         }
@@ -328,5 +346,29 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
         _tokenSource?.Dispose();
         _tokenSource = null;
         _executor.Dispose();
+    }
+
+    private sealed class ActiveDownloadExecution : IDisposable
+    {
+        private readonly CancellationTokenSource _cancellation;
+        private readonly TaskCompletionSource _completion =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public ActiveDownloadExecution(CancellationToken shutdownToken)
+        {
+            _cancellation = CancellationTokenSource.CreateLinkedTokenSource(shutdownToken);
+        }
+
+        public CancellationToken Token => _cancellation.Token;
+
+        public bool IsCancellationRequested => _cancellation.IsCancellationRequested;
+
+        public Task Completion => _completion.Task;
+
+        public Task CancelAsync() => _cancellation.CancelAsync();
+
+        public void Complete() => _completion.TrySetResult();
+
+        public void Dispose() => _cancellation.Dispose();
     }
 }

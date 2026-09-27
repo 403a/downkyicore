@@ -45,6 +45,7 @@ internal sealed class DownloadTransferCoordinator
 
         var addressIndex = 0;
         var attemptsForAddress = 0;
+        var resumeCleanupRetryGrantedForAddress = false;
         var canRefreshAddresses = true;
         var backendIdentity = request.BackendIdentity;
         async Task SetBackendIdentityAsync(
@@ -91,12 +92,25 @@ internal sealed class DownloadTransferCoordinator
                 }
             }
 
-            var decision = _retryPolicy.Decide(
-                lastResult,
-                attempt,
-                attemptsForAddress,
-                addressIndex + 1 < addresses.Length,
-                canRefreshAddresses);
+            DownloadRetryDecision decision;
+            if (lastResult.FailureKind == DownloadTransferFailureKind.ResumeRejected
+                && !resumeCleanupRetryGrantedForAddress
+                && attempt < _retryPolicy.MaximumAttempts)
+            {
+                resumeCleanupRetryGrantedForAddress = true;
+                decision = new DownloadRetryDecision(
+                    DownloadRetryAction.RetrySameAddress,
+                    TimeSpan.Zero);
+            }
+            else
+            {
+                decision = _retryPolicy.Decide(
+                    lastResult,
+                    attempt,
+                    attemptsForAddress,
+                    addressIndex + 1 < addresses.Length,
+                    canRefreshAddresses);
+            }
             _logger.LogWarningMessage(
                 $"Download transfer attempt failed; " +
                 $"backend={_backend.Name}; " +
@@ -135,6 +149,7 @@ internal sealed class DownloadTransferCoordinator
 
                     addressIndex = nextAddressIndex;
                     attemptsForAddress = 0;
+                    resumeCleanupRetryGrantedForAddress = false;
                     break;
                 case DownloadRetryAction.RefreshAddresses:
                     var refreshedAddresses = NormalizeAddresses(
@@ -161,6 +176,7 @@ internal sealed class DownloadTransferCoordinator
                     addresses = refreshedAddresses;
                     addressIndex = 0;
                     attemptsForAddress = 0;
+                    resumeCleanupRetryGrantedForAddress = false;
                     canRefreshAddresses = false;
                     break;
                 case DownloadRetryAction.Stop:
