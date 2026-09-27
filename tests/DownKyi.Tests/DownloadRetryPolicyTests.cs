@@ -3,8 +3,6 @@ using System.Net.Http;
 using System.Net.Sockets;
 using System.Security.Authentication;
 using DownKyi.Services.Download;
-using DownKyi.TestInfrastructure;
-using Downloader.Exceptions;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DownKyi.Tests;
@@ -325,57 +323,6 @@ public sealed class DownloadRetryPolicyTests
     }
 
     [Fact]
-    public async Task RealBuiltinDownloaderRestartsBackupSourceFromByteZero()
-    {
-        var payload = Enumerable.Repeat((byte)'B', 128 * 1024).ToArray();
-        await using var primary = LoopbackHttpServer.CreateRequestAware(
-            request => CreateRangeResponse(payload, request.RangeStart, truncate: true));
-        await using var backup = LoopbackHttpServer.CreateRequestAware(
-            request => CreateRangeResponse(payload, request.RangeStart, truncate: false));
-        var directory = CreateTemporaryDirectory("builtin-source-switch");
-        const string fileName = "media.tmp";
-        using var settings = new TestSettingsStore();
-        settings.Store.Update(current => current with
-        {
-            Network = current.Network with
-            {
-                Split = 1,
-                HighSpeedDownloadMode = DownKyi.Core.Settings.AllowStatus.No
-            }
-        });
-        using var backend = new BuiltinTransferBackend(
-            settings.Store,
-            new DownloadDiagnosticLogger(
-                NullLogger<DownloadDiagnosticLogger>.Instance),
-            NullLogger<BuiltinTransferBackend>.Instance);
-
-        try
-        {
-            var result = await CreateCoordinator(backend, maximumAttempts: 5).TransferAsync(
-                CreateRequestAt(
-                    directory,
-                    fileName,
-                    backendIdentity: null,
-                    static (_, _) => Task.CompletedTask,
-                    primary.Url.AbsoluteUri,
-                    backup.Url.AbsoluteUri),
-                static _ => Task.FromResult<IReadOnlyList<string>>([]),
-                TestContext.Current.CancellationToken);
-
-            Assert.Equal(DownloadTransferOutcome.Succeeded, result.Outcome);
-            Assert.Contains(primary.Requests, request => request.RangeStart is > 0);
-            Assert.DoesNotContain(backup.Requests, request => request.RangeStart is > 0);
-            Assert.Equal(payload, await File.ReadAllBytesAsync(
-                Path.Combine(directory, fileName),
-                TestContext.Current.CancellationToken));
-        }
-        finally
-        {
-            Directory.Delete(directory, recursive: true);
-        }
-    }
-
-    [Fact]
     public async Task BuiltinBackendRejectsMultipleAddressesBeforeStartingDownloader()
     {
         using var settings = new TestSettingsStore();
@@ -392,16 +339,6 @@ public sealed class DownloadRetryPolicyTests
         Assert.Equal(DownloadTransferOutcome.Failed, result.Outcome);
         Assert.Equal(DownloadTransferFailureKind.Permanent, result.FailureKind);
         Assert.Equal("download.transfer.single-address-required", result.ErrorCode);
-    }
-
-    [Fact]
-    public void BuiltinBackendDisablesDownloaderRetryBudget()
-    {
-        using var settings = new TestSettingsStore();
-        var configuration = BuiltinTransferBackend.CreateDownloadConfiguration(
-            settings.Store.Current.Network);
-
-        Assert.Equal(0, configuration.MaxTryAgainOnFailure);
     }
 
     [Fact]
@@ -617,8 +554,8 @@ public sealed class DownloadRetryPolicyTests
     }
 
     [Theory]
-    [MemberData(nameof(TransientDownloaderFailures))]
-    public void BuiltinBackendClassifiesDownloaderTransportFailuresAsTransient(
+    [MemberData(nameof(TransientRangeFailures))]
+    public void BuiltinBackendClassifiesRangeTransportFailuresAsTransient(
         Exception exception)
     {
         var result = BuiltinTransferBackend.ClassifyFailure(
@@ -628,10 +565,9 @@ public sealed class DownloadRetryPolicyTests
         Assert.Equal(DownloadTransferFailureKind.TransientNetwork, result.FailureKind);
     }
 
-    public static TheoryData<Exception> TransientDownloaderFailures =>
+    public static TheoryData<Exception> TransientRangeFailures =>
         new()
         {
-            new IncompleteDownloadException("Sanitized incomplete transfer."),
             new HttpIOException(
                 HttpRequestError.ResponseEnded,
                 "Sanitized response failure."),
@@ -969,7 +905,6 @@ public sealed class DownloadRetryPolicyTests
             PublishProgress: static _ => { },
             PersistProgressAsync: static (_, _) => Task.CompletedTask,
             SetBackendIdentityAsync: setBackendIdentityAsync,
-            SetBuiltinDownloadService: static _ => { },
             CancellationToken.None,
             directory);
     }
@@ -981,27 +916,6 @@ public sealed class DownloadRetryPolicyTests
             $"downkyi-{purpose}-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
         return directory;
-    }
-
-    private static LoopbackResponse CreateRangeResponse(
-        byte[] payload,
-        long? rangeStart,
-        bool truncate)
-    {
-        var start = checked((int)(rangeStart ?? 0));
-        var responseBody = payload[start..];
-        var headers = rangeStart.HasValue
-            ? new Dictionary<string, string>
-            {
-                ["Content-Range"] = $"bytes {start}-{payload.Length - 1}/{payload.Length}"
-            }
-            : null;
-        return new LoopbackResponse(
-            rangeStart.HasValue ? HttpStatusCode.PartialContent : HttpStatusCode.OK,
-            ContentLength: responseBody.Length,
-            BytesToSend: truncate ? Math.Min(4096, responseBody.Length) : null,
-            Headers: headers,
-            BodyBytes: responseBody);
     }
 
     private sealed class RecordingBackend(

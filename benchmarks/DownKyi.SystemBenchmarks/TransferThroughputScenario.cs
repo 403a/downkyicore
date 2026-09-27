@@ -1,5 +1,7 @@
 using System.Diagnostics;
-using Downloader;
+using System.Net;
+using DownKyi.Services.Download;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DownKyi.SystemBenchmarks;
 
@@ -27,6 +29,7 @@ internal static class TransferThroughputScenario
                 .Select(index => DownloadAsync(
                     server.Address,
                     Path.Combine(scenarioDirectory, $"payload-{index:D2}.bin"),
+                    bytesPerTask,
                     cancellationToken))
                 .ToArray();
             await Task.WhenAll(downloads).ConfigureAwait(false);
@@ -64,21 +67,26 @@ internal static class TransferThroughputScenario
     private static async Task DownloadAsync(
         Uri source,
         string destination,
+        long expectedBytes,
         CancellationToken cancellationToken)
     {
-        var configuration = new DownloadConfiguration
+        using var handler = new SocketsHttpHandler
         {
-            ChunkCount = 8,
-            ParallelDownload = true,
-            ParallelCount = 8,
-            MaximumMemoryBufferBytes = 8 * 1024 * 1024,
-            EnableAutoResumeDownload = false,
-            ClearPackageOnCompletionWithFailure = true,
-            FileExistPolicy = FileExistPolicy.IgnoreDownload
+            AllowAutoRedirect = false,
+            AutomaticDecompression = DecompressionMethods.None,
+            MaxConnectionsPerServer = 8,
+            UseCookies = false,
+            UseProxy = false
         };
-        using var downloader = new Downloader.DownloadService(configuration);
-        await downloader
-            .DownloadFileTaskAsync(source.ToString(), destination, cancellationToken)
+        using var downloader = new BuiltinRangeDownloader(
+            handler,
+            source,
+            new AriaTaskHeaders([], "DownKyi-SystemBenchmark", CarriesCredentials: false),
+            parallelCount: 8,
+            static (_, _) => { },
+            NullLogger.Instance,
+            disposeHandler: false);
+        await downloader.DownloadAsync(destination, expectedBytes, cancellationToken)
             .ConfigureAwait(false);
     }
 }

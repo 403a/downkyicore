@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using DownKyi.Domain.Downloads;
-using Downloader;
 
 namespace DownKyi.Services.Download;
 
@@ -19,7 +18,6 @@ internal sealed record DownloadTransferRequest(
     Action<DownloadProgress> PublishProgress,
     Func<DownloadProgress, CancellationToken, Task> PersistProgressAsync,
     Func<string?, CancellationToken, Task> SetBackendIdentityAsync,
-    Action<DownloadService?> SetBuiltinDownloadService,
     CancellationToken CancellationToken,
     string? StagingDirectory = null);
 

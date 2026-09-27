@@ -193,7 +193,6 @@ public sealed class Aria2FinalValidationTests
             PublishProgress: static _ => { },
             PersistProgressAsync: static (_, _) => Task.CompletedTask,
             SetBackendIdentityAsync: static (_, _) => Task.CompletedTask,
-            SetBuiltinDownloadService: static _ => { },
             CancellationToken: TestContext.Current.CancellationToken,
             StagingDirectory: directory);
 
