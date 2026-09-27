@@ -286,7 +286,6 @@ $requiredKnowledgePaths = @(
     "ARCHITECTURE.md",
     "docs/design-docs",
     "docs/exec-plans",
-    "docs/product-specs",
     "docs/testing",
     "docs/operations"
 )

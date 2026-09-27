@@ -9,7 +9,7 @@
 
 </div>
 
-DownKyi Core 是基于哔哩下载姬 Windows 版与 Avalonia 的跨平台 B 站视频下载工具。项目使用 .NET 10、Avalonia 12、Microsoft Generic Host、Microsoft DI 与 CommunityToolkit MVVM，并重构了导航、下载状态、SQLite、HTTP、日志、aria2、FFmpeg 和应用生命周期。
+DownKyi Core 是基于哔哩下载姬 Windows 版与 Avalonia 的跨平台 B 站视频下载工具。项目使用 .NET 10、Avalonia 12、Microsoft Generic Host、Microsoft DI 与 CommunityToolkit MVVM。
 
 ## 下载
 
@@ -17,134 +17,61 @@ DownKyi Core 是基于哔哩下载姬 Windows 版与 Avalonia 的跨平台 B 站
 [![GitHub Release Date](https://img.shields.io/github/release-date/crazysmile-PhD/downkyicore)](https://github.com/crazysmile-PhD/downkyicore/releases/latest)
 [![GitHub downloads](https://img.shields.io/github/downloads/crazysmile-PhD/downkyicore/total)](https://github.com/crazysmile-PhD/downkyicore/releases/latest)
 
-- Windows: `DownKyi-*-win-x64.zip` 或 `DownKyi-*-win-x86.zip`
-- macOS: `DownKyi-*-osx-arm64.dmg` 或 `DownKyi-*-osx-x64.dmg`
-- Linux: AppImage / deb / rpm
+- Windows：`DownKyi-*-win-x64.zip` 或 `DownKyi-*-win-x86.zip`
+- macOS：`DownKyi-*-osx-arm64.dmg` 或 `DownKyi-*-osx-x64.dmg`
+- Linux：AppImage / deb / rpm
 
-Windows ZIP 必须完整解压到一个新目录后再运行；不要只复制压缩包窗口中的
-顶层文件。`DownKyi.exe` 旁必须保留 `aria2` 与 `ffmpeg` 子目录。若程序提示
-“下载系统无法启动”并报告缺少 `aria2/aria2c.exe`，请从官方 Release 重新下载
-对应 ZIP 并完整解压，不要单独补放执行文件。
+Windows ZIP 必须完整解压到新目录后再运行。`DownKyi.exe` 旁必须保留 `aria2` 与 `ffmpeg` 子目录；若程序报告缺少 `aria2/aria2c.exe`，请重新下载官方 Release 并完整解压，不要单独补放执行文件。
 
-更新内容见 [CHANGELOG.md](CHANGELOG.md)。
+版本变化见 [CHANGELOG.md](CHANGELOG.md)，安装包见 [GitHub Releases](https://github.com/crazysmile-PhD/downkyicore/releases)。
 
 ## 功能
 
-- 支持视频、合集、番剧、课程、收藏、历史记录、稍后再看等入口解析。
-- 支持音频、视频、封面、弹幕、普通字幕和 AI 字幕下载。
-- 支持 aria2 与内置下载器，并保留断点续传所需的临时文件与状态。
-- 下载中删除任务时会同步停止下载器并清理已产生的媒体、`.aria2`、`.download` 等临时文件。
-- 支持诊断日志导出，导出内容会脱敏 Cookie、token、邮箱、uid 和本机用户路径。
-- 默认使用 AppData / Application Support / XDG 配置目录保存数据，避免把用户数据写进程序目录。
+- 解析视频、合集、番剧、课程、收藏、历史记录和稍后再看等入口。
+- 下载音频、视频、封面、弹幕、普通字幕和 AI 字幕。
+- 支持 aria2 与内置下载器，并保留断点续传需要的状态。
+- 删除下载中任务时，同步停止下载器并清理已产生的媒体和临时文件。
+- 导出会脱敏 Cookie、token、邮箱、uid 和本机用户路径的诊断日志。
 
 ## 运行与数据目录
 
-发布包包含运行所需的 .NET、ffmpeg 和 aria2，不需要用户额外安装。Windows x64 与 Linux 使用 BtbN GPL FFmpeg build，macOS 使用同时提供 x64 / arm64 的静态 FFmpeg build；这些发布包会优先携带可用的硬件 encoder。Windows x86 仍保留兼容性 build，硬件加速不可用时会自动降级。
-
-FFmpeg 合并策略遵循“效能优先，但成功率更重要”：优先无损 stream copy；只有必须重新编码时才自动检测 NVENC / QSV / AMF / VAAPI / VideoToolbox；如果 GPU encoder 不存在、驱动不可用或参数失败，程序会记录原因并回退到低 CPU 软编码。
+发布包已包含 .NET、FFmpeg 和 aria2，不需要另外安装运行环境。FFmpeg 优先无损 stream copy；必须转码时会探测可用的硬件 encoder，失败则记录原因并回退到软件编码。
 
 默认数据目录：
 
-- Windows: `%APPDATA%\DownKyi`
-- macOS: `~/Library/Application Support/DownKyi`
-- Linux: `$XDG_CONFIG_HOME/DownKyi`，未设置时通常是 `~/.config/DownKyi`
+- Windows：`%APPDATA%\DownKyi`
+- macOS：`~/Library/Application Support/DownKyi`
+- Linux：`$XDG_CONFIG_HOME/DownKyi`，未设置时通常为 `~/.config/DownKyi`
 
 常用子目录：
 
-- `Media`: 默认下载目录
-- `Logs`: 应用日志和诊断日志
-- `Storage`: SQLite 下载数据库
-- `Config`: 设置与登录信息
-- `Cache`: 图片和运行缓存
-- `Aria`: aria2 session/log
+- `Media`：默认下载目录
+- `Logs`：应用和诊断日志
+- `Storage`：SQLite 下载数据库
+- `Config`：设置与登录信息
+- `Cache`：图片和运行缓存
+- `Aria`：aria2 session 与日志
 
-可选模式：
+设置 `DOWNKYI_DATA_DIR` 可指定数据根目录。设置 `DOWNKYI_PORTABLE=1`，或在程序目录放置 `portable`、`.portable`、`DownKyi.portable`，可启用便携模式。
 
-- 设置 `DOWNKYI_DATA_DIR` 可指定完整数据根目录。
-- 设置 `DOWNKYI_PORTABLE=1`，或在程序目录放置 `portable` / `.portable` / `DownKyi.portable`，可启用便携模式。
+## 登录
 
-### 使用浏览器 Cookie 登录
-
-无法使用手机客户端扫码时，可以在登录页面粘贴已登录 Bilibili 页面请求中的 `Cookie` header。DownKyi 会把浏览器 Cookie 作为候选登录凭据，使用与二维码登录相同的保存和登录验证流程；验证失败、网络异常或取消时会恢复原有登录凭据。
-
-浏览器 Cookie 值会按已经编码的传输形式保存，例如 `SESSDATA` 中的 `%2F` 不会再次编码。正式 `Login` 文件由程序管理，无需手动修改。
-
-## 工作流程
-
-```mermaid
-flowchart TD
-    A["用户输入 BV/AV/番剧/收藏/历史入口"] --> B["SearchService 判断入口类型"]
-    B --> C["VideoInfoService / BangumiInfoService / CheeseInfoService"]
-    C --> D["IWbiKeyProvider 按需取得签名密钥"]
-    D --> E["BiliApi 请求视频详情、分 P、合集章节"]
-    E --> F["ViewModel 批次更新列表"]
-    F --> G{"解析范围"}
-    G -->|选中项| H["解析选中视频流"]
-    G -->|当前章节| I["解析当前章节"]
-    G -->|全部| J["顺序解析全部视频"]
-    H --> K["VideoStreamApi.GetVideoPlayUrl"]
-    I --> K
-    J --> K
-    K --> L["选择画质、音质、编码"]
-    L --> M["AddToDownloadService 建立下载任务"]
-    M --> N["DownloadTaskAdmissionService 建立 Domain task"]
-    N --> O["IDownloadTaskApplicationService 写入 SQLite"]
-    O --> P["DownloadTaskQueueGateway 直接排入 task id"]
-    P --> Q["DownloadOrchestrator 背景执行任务"]
-```
-
-```mermaid
-flowchart TD
-    A["DownloadOrchestrator 有界队列"] --> B["DownloadPipeline 解析播放地址"]
-    B --> C{"ITransferBackend"}
-    C -->|aria2 / 自定义 aria2| D["Aria2TransferBackend"]
-    C -->|内置| E["BuiltinTransferBackend"]
-    D --> F["DownloadTaskStateWriter 保存 gid、临时文件、进度"]
-    E --> F
-    F --> G["DownloadArtifactWriter 处理封面 / 弹幕 / 字幕 / NFO"]
-    G --> H["字幕 JSON 转 SRT"]
-    G --> I["弹幕 protobuf 转 ASS"]
-    G --> J["FFmpeg 合并：一般媒体可 copy，多段 DURL 重编码并 GPU/CPU fallback"]
-    H --> K["输出 Media 文件"]
-    I --> K
-    J --> K
-    K --> L["任务完成，写入 downloaded 表"]
-```
-## 使用说明
-- 软件自带.NET10、ffmpeg、aria2运行环境、无需自行安装
-- 默认下载路径:
-  - Windows: `%APPDATA%\DownKyi\Media`
-  - macOS: ~/Library/Application Support/DownKyi/Media
-  - linux: ~/.config/DownKyi/Media
+无法扫码时，可在登录页面粘贴已登录 Bilibili 请求中的 `Cookie` header。程序会沿用二维码登录的保存和验证流程；验证失败、网络异常或取消时恢复原有凭据。Cookie 会保持已经编码的传输形式，正式 `Login` 文件由程序管理，无需手动编辑。
 
 ## 诊断
 
-软件内可在关于页面打开日志目录或导出诊断日志。诊断日志用于快速排查：
-
-- 网络请求失败、超时、状态码异常
-- 下载器启动、暂停、续传、清理失败
-- 字幕、弹幕、封面、音视频合并异常
-- 退出时 aria2 或后台任务未按预期关闭
-
-导出的诊断日志会过滤大量普通调试噪音，并自动遮蔽敏感信息。
+关于页面可打开日志目录或导出诊断日志，用于排查网络请求、下载器启停和续传、字幕／弹幕／封面处理、音视频合并以及退出清理。导出过程会过滤普通调试噪音并遮蔽敏感信息。
 
 ## 开发者入口
 
-需要 .NET 10 SDK。
+开发需要 .NET 10 SDK。按问题类型进入唯一 owner：
 
-开始修改前先阅读：
-
-- `AGENTS.md`：Agent 与贡献者入口、禁止事项和常用命令。
-- `ARCHITECTURE.md`：目前可执行拓扑与目标拓扑；两者尚未完全一致。
-- `src/DownKyi.Desktop/Composition/DesktopComposition.cs`：Desktop 根组装；从这里进入相关模块的局部 composition、契约与构造函数。
-- `docs/refactoring-live-plan.md`：只包含尚未完成的工作和发布阻塞项。
-- `docs/design-docs/module-boundary-naming-audit.md`：可重现的模块边界与命名审查。
-
-```powershell
-dotnet restore
-dotnet build .\DownKyi.sln -c Release --no-restore --no-incremental
-pwsh .\script\test-solution.ps1 -Configuration Release -NoRestore -NoBuild
-```
+- [AGENTS.md](AGENTS.md)：修改协议、导航顺序和禁止事项。
+- [ARCHITECTURE.md](ARCHITECTURE.md)：当前拓扑、边界、invariant 与可执行防线。
+- [docs/maintenance.md](docs/maintenance.md)：按领域组织的维护卡。
+- [docs/testing/README.md](docs/testing/README.md)：测试基础设施和失败分类。
+- [docs/operations/verification-and-rollback.md](docs/operations/verification-and-rollback.md)：正式验证与回滚命令。
+- [GitHub Issue #137](https://github.com/crazysmile-PhD/downkyicore/issues/137)：当前 workboard；历史执行结果以 Git、PR 与关闭的 Issue 为准。
 
 本机运行：
 
@@ -152,58 +79,12 @@ pwsh .\script\test-solution.ps1 -Configuration Release -NoRestore -NoBuild
 dotnet run --project .\DownKyi\DownKyi.csproj
 ```
 
-开发时建议同时跑：
+## 免责声明
 
-```powershell
-pwsh .\script\audit-module-boundaries.ps1 `
-  -OutputPath artifacts\architecture\module-boundary-audit.json
-dotnet format .\DownKyi.sln --verify-no-changes --no-restore
-dotnet package list --project .\DownKyi.sln --vulnerable --include-transitive
-dotnet package list --project .\DownKyi.sln --deprecated
-git diff --check
-```
-
-项目结构：
-
-- `DownKyi`: 只保留最小程序启动入口。
-- `src/DownKyi.Desktop`: Avalonia App、Views、ViewModels、UI projections、平台服务、Host composition 与下载 runtime。
-- `src/DownKyi.Application`: 下载 commands/queries、coordinators、desktop/lifecycle/logging contracts。
-- `src/DownKyi.Domain`: `DownloadTask` aggregate、合法状态转换、value objects 与 typed results。
-- `src/DownKyi.Infrastructure`: SQLite task store、Bilibili HTTP/buvid、clock、logging sink/retention/export。
-- `DownKyi.Core`: headless Bilibili API、设置、aria2/FFmpeg/filesystem compatibility、字幕与弹幕处理。
-- `tests/DownKyi.Core.Tests`: Core 层网络与工具逻辑测试。
-- `tests/DownKyi.Tests`: UI 外围可抽取逻辑、下载流程与文件完整性测试。
-- `script`: release workflow 使用的 aria2、FFmpeg、PupNet 和平台打包脚本。
-- `docs/maintenance.md`: 依赖更新、外部 binary checksum、release tag 和回归 checklist。
-- `ARCHITECTURE.md`: 当前依赖方向、兼容性不变量与局部 composition 入口。
-
-注意：Desktop/UI、Bilibili HTTP、SQLite 与 logging ownership 已实际迁移，不是空壳专案。aria2、FFmpeg、filesystem compatibility 仍主要位于 `DownKyi.Core`；剩余边界与风险以 `ARCHITECTURE.md` 和 `docs/refactoring-live-plan.md` 为准。
-
-主要数据流：
-
-1. `SearchService` 识别输入入口。
-2. 对应 `*InfoService` 读取 B 站详情、分 P、番剧或课程信息。
-3. `VideoStream` 解析音视频、字幕和弹幕资源。
-4. `AddToDownloadService` 经 admission service 建立 Domain task，由 Application service 写入 SQLite。
-5. task id 直接进入 queue gateway；`DownloadOrchestrator` 以有界 worker 调用 typed stages 和选定的 transfer backend。
-6. FFmpeg 对一般兼容媒体可使用 stream copy；多段 DURL 会重编码并验证 seek，GPU 失败时回退 CPU。
-
-发布由 GitHub Actions 触发 tag 完成：
-
-```powershell
-git tag -a v1.0.x -m "v1.0.x"
-git push origin main
-git push origin v1.0.x
-```
-
-当前 Windows 发布包使用正常 self-contained zip。由于 Avalonia、Xaml.Behaviors、反射序列化与原生媒体/SQLite 组件仍需完整保留，项目暂不发布 Windows `-trimmed` 包。
-
-外部 binary 由 `script/aria2.*` 与 `script/ffmpeg.*` 固定来源、版本和 checksum。更新时请同步维护脚本与 `docs/maintenance.md`，并确认发布包仍包含跨平台 fallback。
-
-## 免责申明
-
-1. 本软件只提供视频解析，不提供任何资源上传、存储到服务器的功能。
-2. 本软件仅解析来自 B 站的内容；一般媒体尽量避免不必要的重编码，但多段影片、格式修复或硬体加速流程可能进行转码、拼接与索引重建。
-3. 本软件解析得到的所有内容均来自 B 站 UP 主上传、分享，其版权均归原作者所有。内容提供者、上传者应对其提供、上传的内容承担全部责任。
-4. 本软件提供的所有内容，仅可用作学习交流使用，未经原作者授权，禁止用于其他用途。请在下载 24 小时内删除。为尊重作者版权，请前往资源的原始发布网站观看，支持原创。
+1. 本软件只提供视频解析，不提供资源上传或服务器存储功能。
+2. 本软件仅解析来自 B 站的内容；格式修复、分段拼接或硬件加速流程可能进行转码和索引重建。
+3. 解析内容的版权归原作者所有，内容提供者与上传者应承担相应责任。
+4. 所有内容仅供学习交流；未经授权不得用于其他用途，请支持原始发布者与原创内容。
 5. 因使用本软件产生的版权问题，软件作者概不负责。
+
+许可与第三方归属见 [LICENSE](LICENSE) 和 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。

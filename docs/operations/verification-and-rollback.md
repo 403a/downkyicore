@@ -87,7 +87,8 @@ sidecar，並檢查 manifest、版本、必要 binary、Fluent theme 與使用�
 正式 tag 前及 workflow 中均執行：
 
 ```powershell
-pwsh ./script/validate-release-version.ps1 -GitRef refs/tags/v1.1.1
+$version = (Get-Content ./version.txt -Raw).Trim()
+pwsh ./script/validate-release-version.ps1 -GitRef "refs/tags/v$version"
 ```
 
 這個檢查要求 tag 與 `version.txt` 完全一致；不得移動或重用既有 tag。

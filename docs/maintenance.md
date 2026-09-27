@@ -42,22 +42,9 @@ PR 修正文件。
 
 ## 標準品質閘門
 
-Focused test 先用 `script/test-project.ps1`。完整正式閘門：
-
-```powershell
-dotnet restore ./DownKyi.sln
-dotnet build ./DownKyi.sln -c Release --no-restore --no-incremental `
-  -p:TreatWarningsAsErrors=true `
-  -p:CodeAnalysisTreatWarningsAsErrors=true `
-  -p:EnableNETAnalyzers=true `
-  -p:AnalysisMode=All `
-  -p:EnforceCodeStyleInBuild=true
-pwsh ./script/test-solution.ps1 -Configuration Release -NoRestore -NoBuild
-dotnet format ./DownKyi.sln --verify-no-changes --no-restore
-dotnet package list --project ./DownKyi.sln --vulnerable --include-transitive
-dotnet package list --project ./DownKyi.sln --deprecated
-git diff --check
-```
+迭代時先用 `script/test-project.ps1` 跑 focused test。完整正式命令、執行順序、
+證據記錄與回滾方式只由
+`docs/operations/verification-and-rollback.md` 維護；所有步驟在同一工作樹依序執行。
 
 `CompileUsingReferenceAssemblies=false` 是跨平台 hosted-build 穩定性政策。沒有 exact-SDK
 cross-platform stress proof，不得移除。
@@ -190,7 +177,8 @@ Loopback cancellation test 必須先同步到 server 已收到 request；固定 
 
 - URL／checksum 唯一 owner：`script/assets/external-assets.json`；只用 immutable tag／URL。
 - Installer 必須從 repository root 與 `script/` 都能執行。
-- aria2 provenance 記錄 official base、DownKyi source/patch/build commit、archive/binary digest。
+- aria2 provenance 必須可追溯 official base、DownKyi source／patch／build commit、
+  archive／binary digest；欄位 owner 見 `docs/operations/aria2-security.md`。
 - Runtime 在 process start 前驗 sidecar digest，再透過 RPC 驗 required feature。
 - Packaged local aria2：ephemeral loopback port、fresh 256-bit secret、restricted config、
   `--stop-with-process`；Windows 再加 kill-on-close Job Object。
@@ -199,29 +187,26 @@ Loopback cancellation test 必須先同步到 server 已收到 request；固定 
 - Remote aria2 不由 App start/stop；non-loopback 必須 HTTPS 且需要
   `downkyi-secure-redirect-v2`。Generic aria2／Motrix 不受支援。
 
-更新 checklist：
-
-- [ ] 固定 source/base/build commits，mechanically regenerate canonical patch。
-- [ ] 驗 patch digest、`git apply --check`、applied tree equality、`git diff --check`。
-- [ ] 建六個 RID，記錄 archive + binary SHA-256。
-- [ ] 從 repo root 跑 installer 並驗 sidecar。
-- [ ] 六 RID `aria2-tls-security` 全過並檢查 sanitized reports。
-- [ ] 驗 FFmpeg／ffprobe 與適用平台 hardware encoder；GPU 缺失仍可 CPU fallback。
+更新時固定 source／base／build commits 並機械產生 canonical patch；驗證 patch、
+applied tree 與六 RID archive／binary digest。再由 repository root 驗 installer、
+sidecar、六 RID TLS gate 與 sanitized reports。FFmpeg／ffprobe 還須驗目標平台 encoder，
+沒有 GPU 時仍須保留 CPU fallback。
 
 詳細 supply-chain 與 residual risk：`docs/operations/aria2-security.md`、
 `docs/operations/ffmpeg-asset-mirroring.md`。
 
 ## Release 卡
 
-- [ ] `version.txt` 與 `v<version>` 完全一致。
-- [ ] 在 exact release commit 手動跑 build workflow；所有 OS release/package gates 通過。
-- [ ] Publish manifest 含 DownKyi、aria2、FFmpeg、ffprobe、版本與 SHA-256。
-- [ ] macOS 二選一：完整 Developer ID/notarization/stapling/Gatekeeper；或明確標示的
-  ad-hoc + strict bundle/DMG/copy/launch 驗證。不得宣稱 ad-hoc 是 trusted distribution。
-- [ ] Signing 是最後一步；sign 後不得再改 bundle content／permission。
-- [ ] 驗證完成 DMG 內的 exact app，不只驗中間 signing command。
-- [ ] 跑標準品質閘門，review README + CHANGELOG。
-- [ ] 先 push `main`，再 push tag；發布後核對 packages、`.sha256` 與 manifests。
+- `version.txt`、tag 與 manifest version 必須一致；既有 tag 不得移動或重用。
+- 發布證據只對 exact final commit 有效；build、package、CodeQL 與平台 gates
+  不得由舊 head 或局部重跑代替。
+- Publish manifest 必須覆蓋 DownKyi、aria2、FFmpeg、ffprobe、版本與 SHA-256；
+  發布後重新讀取 packages、sidecars 與 manifests。
+- macOS signing 是最後 trust boundary；sign 後不得再改 bundle。ad-hoc 產物必須明示
+  trust 限制，不能宣稱 Developer ID／notarization／Gatekeeper 保證。
+- 完整命令與發布／回滾順序見 `docs/operations/verification-and-rollback.md`。
+- Review `README.md` 與 `CHANGELOG.md`，先 push `main` 再 push tag；發布後才以遠端
+  packages、sidecars 與 manifests 的 read-back 作完成證據。
 
 `script/validate-publish-output.ps1` 是共同 package-content gate；禁止以單一平台的
 file-exists check 取代。
