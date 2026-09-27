@@ -1,8 +1,8 @@
 using System;
-using System.Collections.Generic;
 using CommunityToolkit.Mvvm.Input;
 using DownKyi.Application.Desktop;
 using DownKyi.Core.Settings;
+using DownKyi.Services;
 using DownKyi.Utils;
 
 namespace DownKyi.ViewModels.Dialogs;
@@ -50,14 +50,7 @@ internal class ViewParsingSelectorViewModel : BaseDialogViewModel
     /// </summary>
     private void ExecuteParseSelectedItemCommand()
     {
-        SetParseScopeSetting(ParseScope.SelectedItem);
-
-        var parameters = new Dictionary<string, object?>(StringComparer.Ordinal)
-        {
-            { "parseScope", ParseScope.SelectedItem }
-        };
-
-        CloseDialog(AppDialogOutcome.Accepted, parameters);
+        Accept(ParseScope.SelectedItem);
     }
 
     // 解析当前页视频事件
@@ -70,14 +63,7 @@ internal class ViewParsingSelectorViewModel : BaseDialogViewModel
     /// </summary>
     private void ExecuteParseCurrentSectionCommand()
     {
-        SetParseScopeSetting(ParseScope.CurrentSection);
-
-        var parameters = new Dictionary<string, object?>(StringComparer.Ordinal)
-        {
-            { "parseScope", ParseScope.CurrentSection }
-        };
-
-        CloseDialog(AppDialogOutcome.Accepted, parameters);
+        Accept(ParseScope.CurrentSection);
     }
 
     // 解析所有视频事件
@@ -90,17 +76,17 @@ internal class ViewParsingSelectorViewModel : BaseDialogViewModel
     /// </summary>
     private void ExecuteParseAllCommand()
     {
-        SetParseScopeSetting(ParseScope.All);
-
-        var parameters = new Dictionary<string, object?>(StringComparer.Ordinal)
-        {
-            { "parseScope", ParseScope.All }
-        };
-
-        CloseDialog(AppDialogOutcome.Accepted, parameters);
+        Accept(ParseScope.All);
     }
 
     #endregion
+
+    private void Accept(ParseScope parseScope)
+    {
+        var parameters = ParsingSelectorDialog.Encode(new ParsingSelectorResult(parseScope));
+        SetParseScopeSetting(parseScope);
+        CloseDialog(AppDialogOutcome.Accepted, parameters);
+    }
 
     /// <summary>
     /// 写入设置
