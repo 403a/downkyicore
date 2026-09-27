@@ -200,8 +200,6 @@ git push origin v1.0.x
 
 外部 binary 由 `script/aria2.*` 与 `script/ffmpeg.*` 固定来源、版本和 checksum。更新时请同步维护脚本与 `docs/maintenance.md`，并确认发布包仍包含跨平台 fallback。
 
-Avalonia 的默认语言资源位于 `src/DownKyi.Desktop/Languages/Default.axaml`。资源 URI、XAML smoke test 与发布构建共同验证该路径，禁止恢复历史误拼 `Languanges`。
-
 ## 免责申明
 
 1. 本软件只提供视频解析，不提供任何资源上传、存储到服务器的功能。
