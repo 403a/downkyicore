@@ -5,6 +5,7 @@ using Avalonia.VisualTree;
 using DownKyi.Application.Desktop;
 using DownKyi.Commands;
 using DownKyi.Core.Settings;
+using DownKyi.Services;
 using DownKyi.Services.Video;
 using DownKyi.ViewModels;
 using DownKyi.ViewModels.UiState;
@@ -166,6 +167,90 @@ public sealed class VideoDetailCommandStateTests
 
         Assert.False(downloadCoordinator.LastIsAll);
         Assert.Same(viewModel.UiState.VideoInfoView, downloadCoordinator.LastVideoInfo);
+    }
+
+    [Avalonia.Headless.XUnit.AvaloniaFact]
+    public async Task ParsingSelectorAcceptedScopesDispatchExactlyTheTypedSelection()
+    {
+        DesktopTestResources.EnsureProductThemeResources();
+        foreach (var scope in new[]
+        {
+            ParseScope.SelectedItem,
+            ParseScope.CurrentSection,
+            ParseScope.All
+        })
+        {
+            var settingsPath = Path.Combine(
+                Path.GetTempPath(),
+                $"downkyi-video-detail-selector-{Guid.NewGuid():N}.json");
+            using var settings = new SettingsStore(settingsPath);
+            settings.Update(current => current with
+            {
+                Basic = current.Basic with { ParseScope = ParseScope.None }
+            });
+            using var workflow = new VideoDetailWorkflowCoordinatorStub();
+            var parameters = new Dictionary<string, object?>(
+                ParsingSelectorDialog.Encode(new ParsingSelectorResult(scope)))
+            {
+                ["metadata"] = "ignored"
+            };
+            var dialogService = new DialogServiceStub(new AppDialogResult(
+                AppDialogOutcome.Accepted,
+                parameters));
+            using var viewModel = new ViewVideoDetailViewModel(
+                new DesktopInteractionContextStub(dialogService),
+                new ClipboardServiceStub(),
+                settings,
+                workflow,
+                new VideoDetailDownloadCoordinatorStub(),
+                NullLogger<ViewVideoDetailViewModel>.Instance);
+            var completion = WaitUntilExecutableAfterDisabled(viewModel.ParseAllVideoCommand);
+
+            viewModel.ParseAllVideoCommand.Execute(null);
+            await workflow.PageStreamsStarted.Task
+                .WaitAsync(TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+
+            Assert.Equal(scope, workflow.LastParseScope);
+
+            workflow.ReleasePageStreams();
+            await completion.WaitAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        }
+    }
+
+    [Avalonia.Headless.XUnit.AvaloniaFact]
+    public async Task ParsingSelectorInvalidAcceptedResultFailsBeforeDispatch()
+    {
+        DesktopTestResources.EnsureProductThemeResources();
+        var settingsPath = Path.Combine(
+            Path.GetTempPath(),
+            $"downkyi-video-detail-selector-invalid-{Guid.NewGuid():N}.json");
+        using var settings = new SettingsStore(settingsPath);
+        settings.Update(current => current with
+        {
+            Basic = current.Basic with { ParseScope = ParseScope.None }
+        });
+        using var workflow = new VideoDetailWorkflowCoordinatorStub();
+        var dialogService = new DialogServiceStub(new AppDialogResult(
+            AppDialogOutcome.Accepted,
+            new Dictionary<string, object?>
+            {
+                ["metadata"] = "missing required scope"
+            }));
+        using var viewModel = new ViewVideoDetailViewModel(
+            new DesktopInteractionContextStub(dialogService),
+            new ClipboardServiceStub(),
+            settings,
+            workflow,
+            new VideoDetailDownloadCoordinatorStub(),
+            NullLogger<ViewVideoDetailViewModel>.Instance);
+        var completion = WaitUntilExecutableAfterDisabled(viewModel.ParseAllVideoCommand);
+
+        viewModel.ParseAllVideoCommand.Execute(null);
+        await completion.WaitAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        Assert.Null(workflow.LastParseScope);
+        Assert.False(workflow.PageStreamsStarted.Task.IsCompleted);
     }
 
     [Avalonia.Headless.XUnit.AvaloniaFact]
@@ -353,11 +438,16 @@ public sealed class VideoDetailCommandStateTests
 
     private sealed class DesktopInteractionContextStub : IDesktopInteractionContext
     {
+        public DesktopInteractionContextStub(IAppDialogService? dialogs = null)
+        {
+            Dialogs = dialogs ?? new DialogServiceStub();
+        }
+
         public IUserNotificationService Notifications { get; } = new NotificationServiceStub();
 
         public IAppNavigationService Navigation { get; } = new NavigationServiceStub();
 
-        public IAppDialogService Dialogs { get; } = new DialogServiceStub();
+        public IAppDialogService Dialogs { get; }
     }
 
     private sealed class ClipboardServiceStub : IClipboardService
@@ -385,6 +475,8 @@ public sealed class VideoDetailCommandStateTests
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public int OperationStartCount => Volatile.Read(ref _version);
+
+        public ParseScope? LastParseScope { get; private set; }
 
         public VideoDetailOperation StartOperation()
         {
@@ -437,6 +529,7 @@ public sealed class VideoDetailCommandStateTests
             VideoDetailOperation operation)
         {
             var pages = sections.SelectMany(section => section.VideoPages).ToArray();
+            LastParseScope = parseScope;
             PageStreamsStarted.TrySetResult();
             await _releasePageStreams.Task.ConfigureAwait(true);
             return pages.Select(page => new VideoStreamParseResult(page, null)).ToArray();
@@ -504,13 +597,16 @@ public sealed class VideoDetailCommandStateTests
         }
     }
 
-    private sealed class DialogServiceStub : IAppDialogService
+    private sealed class DialogServiceStub(AppDialogResult? result = null) : IAppDialogService
     {
         public Task<AppDialogResult> ShowAsync(
             AppDialogRequest request,
             CancellationToken cancellationToken = default)
         {
-            throw new NotSupportedException();
+            cancellationToken.ThrowIfCancellationRequested();
+            return result == null
+                ? throw new NotSupportedException()
+                : Task.FromResult(result);
         }
     }
 
