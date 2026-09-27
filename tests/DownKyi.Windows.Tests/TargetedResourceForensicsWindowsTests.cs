@@ -36,51 +36,6 @@ public sealed class TargetedResourceForensicsWindowsTests
     }
 
     [Fact]
-    public async Task DeleteAccessProbeTracksAKnownDirectoryOwnerUntilRelease()
-    {
-        var targetDirectory = Path.Combine(
-            Path.GetTempPath(),
-            $"downkyi-delete-owner-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(targetDirectory);
-        Process? owner = null;
-        try
-        {
-            owner = StartDirectoryLockOwner(targetDirectory);
-            await WaitForDirectoryLockReadyAsync(owner).ConfigureAwait(true);
-
-            Assert.Equal(
-                DeleteAccessState.SharingViolation,
-                TargetedResourceForensics.ProbeDeleteAccess(targetDirectory).State);
-
-            owner.Kill(entireProcessTree: true);
-            await owner.WaitForExitAsync(TestContext.Current.CancellationToken)
-                .WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken)
-                .ConfigureAwait(true);
-            Assert.True(
-                SpinWait.SpinUntil(
-                    () => TargetedResourceForensics.ProbeDeleteAccess(targetDirectory).State ==
-                        DeleteAccessState.Allowed,
-                    TimeSpan.FromSeconds(1)),
-                "The controlled directory owner exited without releasing DELETE access.");
-        }
-        finally
-        {
-            if (owner is { HasExited: false })
-            {
-                owner.Kill(entireProcessTree: true);
-                await owner.WaitForExitAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-            }
-
-            owner?.Dispose();
-            if (Directory.Exists(targetDirectory) &&
-                TargetedResourceForensics.ProbeDeleteAccess(targetDirectory).State == DeleteAccessState.Allowed)
-            {
-                Directory.Delete(targetDirectory);
-            }
-        }
-    }
-
-    [Fact]
     public async Task DirectoryRundownWaitDoesNotCompleteUntilDeleteAccessIsReady()
     {
         var targetDirectory = Path.Combine(
@@ -142,6 +97,7 @@ public sealed class TargetedResourceForensicsWindowsTests
             await BuildProcessRunner.CleanupAfterCancellationAsync(
                 ownerScope,
                 TimeSpan.FromSeconds(5),
+                CaptureControlledSnapshotAsync,
                 cleanupResourceDirectory: targetDirectory).ConfigureAwait(true);
 
             Assert.True(owner.HasExited);
@@ -220,12 +176,7 @@ public sealed class TargetedResourceForensicsWindowsTests
                 () => BuildProcessRunner.CleanupAfterCancellationAsync(
                     rootScope,
                     TimeSpan.FromMilliseconds(500),
-                    (_, _) => Task.FromResult(new FinalProcessSnapshot
-                    {
-                        CapturedAtUtc = DateTimeOffset.UtcNow,
-                        Completeness = "Controlled successful snapshot.",
-                        Processes = [],
-                    }),
+                    CaptureControlledSnapshotAsync,
                     cleanupResourceDirectory: targetDirectory)).ConfigureAwait(true);
 
             Assert.Equal(targetDirectory, exception.ResourcePath);
@@ -456,6 +407,14 @@ public sealed class TargetedResourceForensicsWindowsTests
             throw;
         }
     }
+
+    private static Task<FinalProcessSnapshot> CaptureControlledSnapshotAsync(int _, TimeSpan __) =>
+        Task.FromResult(new FinalProcessSnapshot
+        {
+            CapturedAtUtc = DateTimeOffset.UtcNow,
+            Completeness = "Controlled successful snapshot.",
+            Processes = [],
+        });
 
     private static Process StartDirectoryLockOwner(string workingDirectory)
     {

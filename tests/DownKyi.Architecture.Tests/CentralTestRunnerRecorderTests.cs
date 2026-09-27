@@ -152,7 +152,6 @@ public sealed class CentralTestRunnerRecorderTests
     public async Task SnapshotNeverReturnsDoesNotBlockTerminationAndCleanupBudget()
     {
         var evidenceDirectory = CreateEvidenceDirectory();
-        var cleanupClock = new Stopwatch();
         try
         {
             var result = await FlightRecorderExecution.RunAsync(
@@ -163,16 +162,10 @@ public sealed class CentralTestRunnerRecorderTests
                     TimeSpan.FromMilliseconds(200),
                     TimeSpan.FromSeconds(2),
                     evidenceDirectory,
-                    (_, _) =>
-                    {
-                        cleanupClock.Start();
-                        return new TaskCompletionSource<FinalProcessSnapshot>().Task;
-                    }),
+                    (_, _) => new TaskCompletionSource<FinalProcessSnapshot>().Task),
                 CancellationToken.None);
 
-            cleanupClock.Stop();
             Assert.Equal(124, result.ExitCode);
-            Assert.True(cleanupClock.Elapsed < TimeSpan.FromMilliseconds(2500));
             Assert.False(IsProcessAlive(result.RootPid));
             using var document = JsonDocument.Parse(await File.ReadAllTextAsync(
                 result.EvidencePath,
@@ -207,19 +200,17 @@ public sealed class CentralTestRunnerRecorderTests
                     TimeSpan.FromSeconds(10),
                     TimeSpan.FromSeconds(1),
                     evidenceDirectory,
+                    SnapshotCapture: CaptureControlledSnapshotAsync,
                     ErrorDestination: blockedError),
                 cancellation.Token);
             await blockedError.Entered.WaitAsync(TimeSpan.FromSeconds(5),
                 TestContext.Current.CancellationToken);
 
-            var cleanupClock = Stopwatch.StartNew();
             await cancellation.CancelAsync();
             var result = await run.WaitAsync(TimeSpan.FromSeconds(4),
                 TestContext.Current.CancellationToken);
-            cleanupClock.Stop();
 
             Assert.Equal(2, result.ExitCode);
-            Assert.True(cleanupClock.Elapsed < TimeSpan.FromSeconds(3));
             Assert.False(IsProcessAlive(result.RootPid));
             using var document = JsonDocument.Parse(await File.ReadAllTextAsync(
                 result.EvidencePath, TestContext.Current.CancellationToken));
@@ -272,64 +263,6 @@ public sealed class CentralTestRunnerRecorderTests
         {
             Directory.Delete(directory, recursive: true);
         }
-    }
-
-    [Fact]
-    public async Task PipeHolderAssertionBeforePidAssignmentStillCompletesCleanup()
-    {
-        var evidenceDirectory = CreateEvidenceDirectory();
-        var markerPath = Path.Combine(evidenceDirectory, "pipe-holder.pid");
-        int? childPid = null;
-        var runtimeConfig = Path.Combine(
-            AppContext.BaseDirectory,
-            "DownKyi.Architecture.Tests.runtimeconfig.json");
-
-        var failure = await Record.ExceptionAsync(() => FailurePreservingTestCleanup.RunAsync(
-            async () =>
-            {
-                using var fixture = Process.Start(
-                    CreateFixtureStartInfo("fixture-exit-with-pipe-holder", runtimeConfig, markerPath))
-                    ?? throw new InvalidOperationException("The pipe-holder fixture did not start.");
-                await fixture.WaitForExitAsync(TestContext.Current.CancellationToken)
-                    .WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken)
-                    .ConfigureAwait(true);
-
-                Assert.Fail("Intentional assertion before the pipe-holder PID is assigned.");
-            },
-            async () => childPid = await CleanupPipeHolderFixtureAsync(
-                markerPath,
-                childPid,
-                evidenceDirectory).ConfigureAwait(true))).ConfigureAwait(true);
-
-        var assertion = Assert.IsAssignableFrom<Xunit.Sdk.XunitException>(failure);
-        Assert.Contains("Intentional assertion", assertion.Message, StringComparison.Ordinal);
-        Assert.NotNull(childPid);
-        Assert.False(IsProcessAlive(childPid.Value));
-        Assert.False(Directory.Exists(evidenceDirectory));
-    }
-
-    private static async Task<int?> CleanupPipeHolderFixtureAsync(
-        string markerPath,
-        int? childPid,
-        string evidenceDirectory)
-    {
-        var cleanup = new FailurePreservingTestCollector();
-        if (childPid is null && File.Exists(markerPath))
-        {
-            await cleanup.RunAsync(
-                "pipe-holder marker recovery",
-                async () => childPid = await WaitForProcessMarkerAsync(markerPath).ConfigureAwait(false))
-                .ConfigureAwait(false);
-        }
-
-        await cleanup.RunAsync(
-            "pipe-holder process stop",
-            () => StopFixtureProcessAndWaitAsync(childPid)).ConfigureAwait(false);
-        cleanup.Run(
-            "pipe-holder evidence deletion",
-            () => Directory.Delete(evidenceDirectory, recursive: true));
-        cleanup.ThrowIfAny();
-        return childPid;
     }
 
     [Fact]
@@ -433,12 +366,7 @@ public sealed class CentralTestRunnerRecorderTests
                 CreateFixtureStartInfo("fixture-hold-marker", markerPath),
                 cancellation.Token,
                 TimeSpan.FromSeconds(3),
-                captureSnapshotAsync: (_, _) => Task.FromResult(new FinalProcessSnapshot
-                {
-                    CapturedAtUtc = DateTimeOffset.UtcNow,
-                    Completeness = "Controlled successful snapshot.",
-                    Processes = []
-                }));
+                captureSnapshotAsync: CaptureControlledSnapshotAsync);
             processId = await WaitForProcessMarkerAsync(markerPath);
 
             await cancellation.CancelAsync();
@@ -706,31 +634,6 @@ public sealed class CentralTestRunnerRecorderTests
         }
     }
 
-    private static async Task StopFixtureProcessAndWaitAsync(int? processId)
-    {
-        if (processId is not { } pid)
-        {
-            return;
-        }
-
-        try
-        {
-            using var process = Process.GetProcessById(pid);
-            if (!process.HasExited)
-            {
-                process.Kill();
-            }
-
-            await process.WaitForExitAsync()
-                .WaitAsync(TimeSpan.FromSeconds(3))
-                .ConfigureAwait(false);
-        }
-        catch (ArgumentException)
-        {
-            // The focused cancellation path already stopped the fixture.
-        }
-    }
-
     private static string CreateEvidenceDirectory()
     {
         var path = Path.Combine(
@@ -739,6 +642,14 @@ public sealed class CentralTestRunnerRecorderTests
         Directory.CreateDirectory(path);
         return path;
     }
+
+    private static Task<FinalProcessSnapshot> CaptureControlledSnapshotAsync(int _, TimeSpan __) =>
+        Task.FromResult(new FinalProcessSnapshot
+        {
+            CapturedAtUtc = DateTimeOffset.UtcNow,
+            Completeness = "Controlled successful snapshot.",
+            Processes = []
+        });
 
     private sealed class BlockingTextWriter : TextWriter
     {

@@ -121,7 +121,7 @@ internal static class BuildProcessRunner
         ExceptionDispatchInfo? snapshotFailure = null;
         try
         {
-            await Task.Run(() => captureSnapshot(scope.RootPid, deadline.SnapshotWindow))
+            await captureSnapshot(scope.RootPid, deadline.SnapshotWindow)
                 .WaitAsync(deadline.SnapshotWindow).ConfigureAwait(false);
         }
         catch (Exception exception)

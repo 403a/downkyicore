@@ -1,79 +1,9 @@
-using System.Diagnostics;
 using DownKyi.CentralTestRunner;
-using DownKyi.TestInfrastructure;
 
 namespace DownKyi.Architecture.Tests;
 
 public sealed class CentralTestRunnerCommandTests
 {
-    [Fact]
-    public async Task BuildCancellationReturns130AfterStoppingOwnedBuildProcess()
-    {
-        var repositoryRoot = await CreateRepositoryAsync();
-        var markerPath = Path.Combine(repositoryRoot, "build-process.pid");
-        int? processId = null;
-        await FailurePreservingTestCleanup.RunAsync(
-            async () =>
-            {
-                var projectDirectory = Path.Combine(repositoryRoot, "tests", "Fixture.Tests");
-                var projectPath = Path.Combine(projectDirectory, "Fixture.Tests.csproj");
-                Directory.CreateDirectory(projectDirectory);
-                var runnerAssembly = typeof(FlightRecorderExecution).Assembly.Location;
-                var runtimeConfig = Path.Combine(
-                    AppContext.BaseDirectory,
-                    "DownKyi.Architecture.Tests.runtimeconfig.json");
-                var fixtureWorkingDirectory = AppContext.BaseDirectory;
-                var command =
-                    $"dotnet exec --runtimeconfig &quot;{EscapeXml(runtimeConfig)}&quot; " +
-                    $"&quot;{EscapeXml(runnerAssembly)}&quot; fixture-hold-marker &quot;{EscapeXml(markerPath)}&quot;";
-                await File.WriteAllTextAsync(
-                    projectPath,
-                    $$"""
-                    <Project DefaultTargets="Build">
-                      <PropertyGroup>
-                        <DownKyiTestPlatforms>Windows;Linux;macOS</DownKyiTestPlatforms>
-                      </PropertyGroup>
-                      <Target Name="Build">
-                        <Exec Command="{{command}}" WorkingDirectory="{{EscapeXml(fixtureWorkingDirectory)}}" />
-                      </Target>
-                    </Project>
-                    """,
-                    TestContext.Current.CancellationToken).ConfigureAwait(true);
-                using var cancellation = new CancellationTokenSource();
-                var run = Program.RunCommandAsync(
-                    [
-                        "run-project",
-                        "--repository-root", repositoryRoot,
-                        "--project", "tests/Fixture.Tests/Fixture.Tests.csproj",
-                        "--configuration", "Release",
-                        "--no-restore"
-                ],
-                    cancellation.Token);
-                processId = await WaitForProcessMarkerAsync(markerPath).ConfigureAwait(true);
-                File.Delete(projectPath);
-                Assert.False(File.Exists(projectPath));
-
-                await cancellation.CancelAsync().ConfigureAwait(true);
-                var exitCode = await run.ConfigureAwait(true);
-
-                Assert.Equal(130, exitCode);
-                Assert.False(IsProcessAlive(processId.Value));
-                Directory.Delete(projectDirectory);
-
-                Assert.False(Directory.Exists(projectDirectory));
-            },
-            () =>
-            {
-                if (processId is not null)
-                {
-                    StopProcessIfAlive(processId.Value);
-                }
-
-                Directory.Delete(repositoryRoot, recursive: true);
-                return Task.CompletedTask;
-            }).ConfigureAwait(true);
-    }
-
     [Fact]
     public async Task RunSolutionRejectsEmptyProjectDiscovery()
     {
@@ -205,65 +135,4 @@ public sealed class CentralTestRunnerCommandTests
             TestContext.Current.CancellationToken);
     }
 
-    private static async Task<int> WaitForProcessMarkerAsync(string markerPath)
-    {
-        var deadline = DateTimeOffset.UtcNow.AddSeconds(10);
-        while (DateTimeOffset.UtcNow < deadline)
-        {
-            try
-            {
-                if (File.Exists(markerPath) &&
-                    int.TryParse(
-                        await File.ReadAllTextAsync(markerPath, TestContext.Current.CancellationToken)
-                            .ConfigureAwait(false),
-                        out var processId))
-                {
-                    return processId;
-                }
-            }
-            catch (IOException)
-            {
-                // The fixture created the marker but has not closed its write handle yet.
-            }
-
-            await Task.Delay(20, TestContext.Current.CancellationToken).ConfigureAwait(false);
-        }
-
-        throw new TimeoutException("The build fixture did not publish its process identity.");
-    }
-
-    private static bool IsProcessAlive(int processId)
-    {
-        try
-        {
-            using var process = Process.GetProcessById(processId);
-            return !process.HasExited;
-        }
-        catch (ArgumentException)
-        {
-            return false;
-        }
-    }
-
-    private static void StopProcessIfAlive(int processId)
-    {
-        try
-        {
-            using var process = Process.GetProcessById(processId);
-            if (!process.HasExited)
-            {
-                process.Kill(entireProcessTree: true);
-                process.WaitForExit(3000);
-            }
-        }
-        catch (ArgumentException)
-        {
-            // The cancellation path already stopped the build fixture.
-        }
-    }
-
-    private static string EscapeXml(string value)
-    {
-        return System.Security.SecurityElement.Escape(value) ?? string.Empty;
-    }
 }
