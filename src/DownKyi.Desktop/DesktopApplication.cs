@@ -1,3 +1,6 @@
+using System.Diagnostics.CodeAnalysis;
+using System.Runtime.Versioning;
+using System.Threading;
 using Avalonia;
 using DownKyi.Platform;
 
@@ -16,7 +19,16 @@ public static class DesktopApplication
         var appBuilder = BuildAvaloniaApp();
         try
         {
-            appBuilder.StartWithClassicDesktopLifetime(args);
+            if (OperatingSystem.IsWindows())
+            {
+                await RunOnWindowsStaThreadAsync(
+                        () => appBuilder.StartWithClassicDesktopLifetime(args))
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                appBuilder.StartWithClassicDesktopLifetime(args);
+            }
         }
         finally
         {
@@ -25,6 +37,37 @@ public static class DesktopApplication
                 await application.DisposeAsync().ConfigureAwait(false);
             }
         }
+    }
+
+    [SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "The UI thread boundary must preserve every startup failure on the owning task.")]
+    [SupportedOSPlatform("windows")]
+    internal static Task RunOnWindowsStaThreadAsync(Action action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        var completion = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var uiThread = new Thread(() =>
+        {
+            try
+            {
+                action();
+                completion.TrySetResult();
+            }
+            catch (Exception exception)
+            {
+                completion.TrySetException(exception);
+            }
+        })
+        {
+            IsBackground = false,
+            Name = "DownKyi UI"
+        };
+        uiThread.SetApartmentState(ApartmentState.STA);
+        uiThread.Start();
+        return completion.Task;
     }
 
     public static AppBuilder BuildAvaloniaApp()

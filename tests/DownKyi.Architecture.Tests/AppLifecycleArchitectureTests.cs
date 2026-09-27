@@ -5,9 +5,25 @@ public sealed class AppLifecycleArchitectureTests
     private static readonly string RepositoryRoot = FindRepositoryRoot();
 
     [Fact]
+    public void WindowsDesktopStartupHasOneExplicitStaUiThreadOwner()
+    {
+        var programSource = ReadSource("DownKyi", "Program.cs");
+        var desktopSource = ReadSource("src", "DownKyi.Desktop", "DesktopApplication.cs");
+
+        Assert.Contains("public static Task Main", programSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("[STAThread]", programSource, StringComparison.Ordinal);
+        Assert.Contains("OperatingSystem.IsWindows()", desktopSource, StringComparison.Ordinal);
+        Assert.Contains("RunOnWindowsStaThreadAsync", desktopSource, StringComparison.Ordinal);
+        Assert.Contains("SetApartmentState(ApartmentState.STA)", desktopSource,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("OleInitialize", desktopSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ExitPathDoesNotSynchronouslyWaitForAsyncCleanup()
     {
         var appSource = ReadSource("src", "DownKyi.Desktop", "App.axaml.cs");
+        var desktopSource = ReadSource("src", "DownKyi.Desktop", "DesktopApplication.cs");
         var lifecycleSource = ReadSource(
             "src", "DownKyi.Desktop",
             "Platform",
@@ -16,6 +32,8 @@ public sealed class AppLifecycleArchitectureTests
         Assert.DoesNotContain(".GetAwaiter().GetResult()", appSource, StringComparison.Ordinal);
         Assert.DoesNotContain(".Wait()", appSource, StringComparison.Ordinal);
         Assert.DoesNotContain("Task.Run", appSource, StringComparison.Ordinal);
+        Assert.DoesNotContain(".GetAwaiter().GetResult()", desktopSource, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Wait()", desktopSource, StringComparison.Ordinal);
         Assert.Contains("AvaloniaApplicationLifecycle", appSource, StringComparison.Ordinal);
         Assert.Contains("host.StopAsync(CancellationToken.None)", lifecycleSource, StringComparison.Ordinal);
         Assert.Contains("_settingsStore.FlushAsync", lifecycleSource, StringComparison.Ordinal);
