@@ -384,6 +384,61 @@ public sealed class DownloadRetryPolicyTests
         }
     }
 
+    [Theory]
+    [InlineData("sidecar")]
+    [InlineData("error-payload")]
+    public async Task BuiltinBackendRejectsInvalidCompletedTargetBeforeResolvingAddress(
+        string invalidKind)
+    {
+        using var settings = new TestSettingsStore();
+        using var backend = new BuiltinTransferBackend(
+            settings.Store,
+            new DownloadDiagnosticLogger(
+                NullLogger<DownloadDiagnosticLogger>.Instance),
+            NullLogger<BuiltinTransferBackend>.Instance);
+        var directory = CreateTemporaryDirectory("invalid-completed-target");
+        const string fileName = "media.bin";
+        var target = Path.Combine(directory, fileName);
+        var payload = invalidKind == "error-payload"
+            ? "<html>expired media response</html>"u8.ToArray()
+            : new byte[] { 1, 2, 3, 4 };
+        try
+        {
+            await File.WriteAllBytesAsync(
+                target,
+                payload,
+                TestContext.Current.CancellationToken);
+            if (invalidKind == "sidecar")
+            {
+                await File.WriteAllTextAsync(
+                    $"{target}.download",
+                    "unfinished",
+                    TestContext.Current.CancellationToken);
+            }
+
+            var request = CreateRequestAt(
+                directory,
+                fileName,
+                backendIdentity: null,
+                static (_, _) => Task.CompletedTask,
+                "https://unresolvable.invalid/media") with
+            {
+                ExpectedBytes = payload.Length,
+                CancellationToken = TestContext.Current.CancellationToken
+            };
+
+            var result = await backend.TransferAsync(request);
+
+            Assert.Equal(DownloadTransferOutcome.Failed, result.Outcome);
+            Assert.Equal(DownloadTransferFailureKind.ResumeRejected, result.FailureKind);
+            Assert.Equal("download.transfer.resume-rejected", result.ErrorCode);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task CoordinatorRefreshesExpiredAddressesOnlyOnce()
     {

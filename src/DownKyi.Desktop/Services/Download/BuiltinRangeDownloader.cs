@@ -487,6 +487,13 @@ internal sealed class BuiltinRangeDownloader : IDisposable
                 "The completed built-in download does not match the expected length.");
         }
 
+        var integrity = DownloadFileIntegrity.Check(targetFile, expectedBytes);
+        if (!integrity.IsUsable)
+        {
+            throw new BuiltinResumeRejectedException(
+                integrity.Reason ?? "The completed built-in download is not usable.");
+        }
+
         result = new BuiltinRangeDownloadResult(actualBytes, expectedBytes);
         return true;
     }

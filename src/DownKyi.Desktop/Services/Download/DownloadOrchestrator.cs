@@ -111,6 +111,15 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
             return false;
         }
 
+        await CancelAndWaitForCompletionAsync(execution)
+            .WaitAsync(WorkerShutdownTimeout, CancellationToken.None)
+            .ConfigureAwait(false);
+        return true;
+    }
+
+    private static async Task CancelAndWaitForCompletionAsync(
+        ActiveDownloadExecution execution)
+    {
         try
         {
             await execution.CancelAsync().ConfigureAwait(false);
@@ -118,11 +127,10 @@ internal sealed class DownloadOrchestrator : IDownloadRuntime
         catch (ObjectDisposedException)
         {
             await execution.Completion.ConfigureAwait(false);
-            return true;
+            return;
         }
 
         await execution.Completion.ConfigureAwait(false);
-        return true;
     }
 
     public async Task StopAsync(CancellationToken cancellationToken = default)
