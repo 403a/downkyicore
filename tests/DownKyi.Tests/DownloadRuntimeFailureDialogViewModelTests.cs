@@ -1,5 +1,6 @@
 using DownKyi.Application.Desktop;
 using DownKyi.Application.Diagnostics;
+using DownKyi.Core.Aria2cNet.Server;
 using DownKyi.ViewModels.Dialogs;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -39,6 +40,33 @@ public sealed class DownloadRuntimeFailureDialogViewModelTests
         Assert.Equal("Download system failed to initialize", GetQueryValue(launcher.Uri!, "title"));
         Assert.Equal(viewModel.DiagnosticText, GetQueryValue(launcher.Uri!, "body"));
         Assert.Single(notifications.Messages);
+    }
+
+    [Fact]
+    public void DialogPreservesActionablePackagedAria2RecoveryGuidance()
+    {
+        var executablePath = Path.Combine(
+            Path.GetTempPath(),
+            $"downkyi-missing-aria2-{Guid.NewGuid():N}",
+            "aria2c.exe");
+        var failure = Assert.Throws<FileNotFoundException>(
+            () => AriaBinaryIntegrityVerifier.Verify(executablePath));
+        var viewModel = new DownloadRuntimeFailureDialogViewModel(
+            new RedactingLogService(),
+            new RecordingClipboardService(),
+            new RecordingPlatformLauncher(),
+            new RecordingNotificationService(),
+            NullLogger<DownloadRuntimeFailureDialogViewModel>.Instance);
+
+        viewModel.OnDialogOpened(new AppDialogRequest(
+            AppDialog.DownloadRuntimeFailure,
+            new Dictionary<string, object?> { ["failure"] = failure }));
+
+        Assert.Contains("Re-extract the complete release archive", viewModel.DiagnosticText,
+            StringComparison.Ordinal);
+        Assert.Contains("'aria2/aria2c.exe'", viewModel.DiagnosticText,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(executablePath, viewModel.DiagnosticText, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -13,7 +13,9 @@ internal static class AriaBinaryIntegrityVerifier
         if (!File.Exists(executablePath))
         {
             throw new FileNotFoundException(
-                "The packaged aria2 executable is missing.",
+                "The application files are incomplete: the packaged aria2 executable is missing. " +
+                "Re-extract the complete release archive while preserving all subdirectories, " +
+                $"then confirm that 'aria2/{Path.GetFileName(executablePath)}' exists.",
                 executablePath);
         }
 

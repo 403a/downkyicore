@@ -15,6 +15,25 @@ public sealed class AriaServerProcessTests
     }
 
     [Fact]
+    public void PackagedBinaryIntegrityExplainsHowToRestoreAMissingExecutable()
+    {
+        using var fixture = AriaBinaryFixture.Create("trusted aria2 binary");
+        File.Delete(fixture.ExecutablePath);
+
+        var exception = Assert.Throws<FileNotFoundException>(
+            () => AriaBinaryIntegrityVerifier.Verify(fixture.ExecutablePath));
+
+        Assert.Contains("application files are incomplete", exception.Message,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("complete release archive", exception.Message,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("preserving all subdirectories", exception.Message,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("aria2/aria2c-test", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(fixture.ExecutablePath, exception.FileName);
+    }
+
+    [Fact]
     public void PackagedBinaryIntegrityRejectsAReplacedExecutable()
     {
         using var fixture = AriaBinaryFixture.Create("trusted aria2 binary");
