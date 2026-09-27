@@ -42,6 +42,7 @@ internal static class DownloadComposition
         services.AddSingleton<IDownloadManagerCoordinator, DownloadManagerCoordinator>();
         services.AddSingleton<DownloadDuplicatePolicy>();
         services.AddSingleton<DownloadMovieMetadataBuilder>();
+        services.AddSingleton<DownloadContentConflictResolver>();
         services.AddSingleton<IAddToDownloadServiceFactory, AddToDownloadServiceFactory>();
 
         services.AddSingleton<AriaServer>();

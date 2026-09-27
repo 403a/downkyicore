@@ -21,10 +21,15 @@ internal interface IVideoDetailDownloadCoordinator
 internal sealed class VideoDetailDownloadCoordinator : IVideoDetailDownloadCoordinator
 {
     private readonly IAddToDownloadServiceFactory _serviceFactory;
+    private readonly DownloadContentConflictResolver _contentConflictResolver;
 
-    public VideoDetailDownloadCoordinator(IAddToDownloadServiceFactory serviceFactory)
+    public VideoDetailDownloadCoordinator(
+        IAddToDownloadServiceFactory serviceFactory,
+        DownloadContentConflictResolver contentConflictResolver)
     {
         _serviceFactory = serviceFactory ?? throw new ArgumentNullException(nameof(serviceFactory));
+        _contentConflictResolver = contentConflictResolver
+            ?? throw new ArgumentNullException(nameof(contentConflictResolver));
     }
 
     public Task<int?> AddAsync(
@@ -54,8 +59,16 @@ internal sealed class VideoDetailDownloadCoordinator : IVideoDetailDownloadCoord
                 var preparedDownload = await addService
                     .PrepareAsync(videoInfoView, videoSections, isAll, cancellationToken)
                     .ConfigureAwait(false);
+                var finalizedDownload = await _contentConflictResolver
+                    .ResolveAsync(
+                        selection.RequestedContent,
+                        preparedDownload,
+                        isAll,
+                        new DownloadContentConflictChoices(),
+                        cancellationToken)
+                    .ConfigureAwait(true);
                 return await addService
-                    .AddToDownload(selection, preparedDownload, isAll, cancellationToken)
+                    .AddToDownload(selection.Directory, finalizedDownload, cancellationToken)
                     .ConfigureAwait(false);
             },
             cancellationToken);

@@ -15,7 +15,7 @@ public sealed class VideoDetailDownloadCoordinatorTests
     public async Task PreCanceledAddDoesNotCreateDownloadService()
     {
         var factory = new RecordingFactory();
-        var coordinator = new VideoDetailDownloadCoordinator(factory);
+        var coordinator = CreateCoordinator(factory);
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync();
 
@@ -33,7 +33,7 @@ public sealed class VideoDetailDownloadCoordinatorTests
     public async Task UnsupportedInputDoesNotCreateDownloadService()
     {
         var factory = new RecordingFactory();
-        var coordinator = new VideoDetailDownloadCoordinator(factory);
+        var coordinator = CreateCoordinator(factory);
 
         var result = await coordinator.AddAsync(
             "not-a-video",
@@ -51,7 +51,7 @@ public sealed class VideoDetailDownloadCoordinatorTests
     {
         var session = new RecordingSession();
         var factory = new RecordingFactory(session);
-        var coordinator = new VideoDetailDownloadCoordinator(factory);
+        var coordinator = CreateCoordinator(factory);
 
         var result = await coordinator.AddAsync(
             "BV17x411w7KC",
@@ -70,7 +70,7 @@ public sealed class VideoDetailDownloadCoordinatorTests
     public async Task ExistingVideoDataIsPreparedBeforeTheExplicitSelectionIsAdded()
     {
         var session = new RecordingSession(admissionAllowed: true);
-        var coordinator = new VideoDetailDownloadCoordinator(new RecordingFactory(session));
+        var coordinator = CreateCoordinator(new RecordingFactory(session));
         var video = new VideoInfoView();
         IList<VideoSection> sections = [new VideoSection()];
 
@@ -85,8 +85,8 @@ public sealed class VideoDetailDownloadCoordinatorTests
         Assert.Equal(1, session.PrepareCount);
         Assert.Equal(1, session.AddCount);
         Assert.Same(video, session.CreatedPreparedDownload!.Video);
-        Assert.Same(session.Selection, session.ReceivedSelection);
-        Assert.Same(session.CreatedPreparedDownload, session.ReceivedPreparedDownload);
+        Assert.Equal(session.Selection.Directory, session.ReceivedDirectory);
+        Assert.Same(video, session.ReceivedFinalizedDownload!.Video);
     }
 
     private sealed class RecordingFactory(IAddToDownloadSession? session = null)
@@ -117,11 +117,11 @@ public sealed class VideoDetailDownloadCoordinatorTests
             @"D:\Downloads",
             DownloadContentSelection.None with { Video = true });
 
-        public DownloadAddSelection? ReceivedSelection { get; private set; }
+        public string? ReceivedDirectory { get; private set; }
 
         public PreparedDownload? CreatedPreparedDownload { get; private set; }
 
-        public PreparedDownload? ReceivedPreparedDownload { get; private set; }
+        public FinalizedDownload? ReceivedFinalizedDownload { get; private set; }
 
         public Task<bool> EnsureAdmissionAsync(CancellationToken cancellationToken = default)
         {
@@ -156,16 +156,28 @@ public sealed class VideoDetailDownloadCoordinatorTests
             throw new NotSupportedException();
 
         public Task<int> AddToDownload(
-            DownloadAddSelection selection,
-            PreparedDownload preparedDownload,
-            bool isAll = false,
+            string directory,
+            FinalizedDownload finalizedDownload,
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             AddCount++;
-            ReceivedSelection = selection;
-            ReceivedPreparedDownload = preparedDownload;
+            ReceivedDirectory = directory;
+            ReceivedFinalizedDownload = finalizedDownload;
             return Task.FromResult(1);
         }
+    }
+
+    private static VideoDetailDownloadCoordinator CreateCoordinator(
+        IAddToDownloadServiceFactory factory) => new(
+            factory,
+            new DownloadContentConflictResolver(new UnexpectedDialogService()));
+
+    private sealed class UnexpectedDialogService : DownKyi.Application.Desktop.IAppDialogService
+    {
+        public Task<DownKyi.Application.Desktop.AppDialogResult> ShowAsync(
+            DownKyi.Application.Desktop.AppDialogRequest request,
+            CancellationToken cancellationToken = default) => throw new InvalidOperationException(
+                $"Unexpected dialog: {request.Dialog}.");
     }
 }

@@ -24,8 +24,7 @@ internal interface IAddToDownloadSession
         CancellationToken cancellationToken = default);
 
     Task<int> AddToDownload(
-        DownloadAddSelection selection,
-        PreparedDownload preparedDownload,
-        bool isAll = false,
+        string directory,
+        FinalizedDownload finalizedDownload,
         CancellationToken cancellationToken = default);
 }

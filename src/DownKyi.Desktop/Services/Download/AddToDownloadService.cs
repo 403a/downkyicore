@@ -211,34 +211,22 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
     }
 
     public async Task<int> AddToDownload(
-        DownloadAddSelection selection,
-        PreparedDownload preparedDownload,
-        bool isAll = false,
+        string directory,
+        FinalizedDownload finalizedDownload,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(selection);
-        ArgumentNullException.ThrowIfNull(preparedDownload);
+        ArgumentException.ThrowIfNullOrEmpty(directory);
+        ArgumentNullException.ThrowIfNull(finalizedDownload);
         cancellationToken.ThrowIfCancellationRequested();
 
         var settings = _settingsStore.Current;
         var addedCount = 0;
         Lazy<Task<List<DownloadedItem>>>? completedCandidates = null;
-        foreach (var preparedSection in preparedDownload.Sections)
+        foreach (var finalizedSection in finalizedDownload.Sections)
         {
-            foreach (var preparedPage in preparedSection.Pages)
+            foreach (var finalizedPage in finalizedSection.Pages)
             {
-                var page = preparedPage.Page;
-                if ((!isAll && !page.IsSelected) || page.PlayUrl == null)
-                {
-                    continue;
-                }
-
-                if (page.VideoQuality == null)
-                {
-                    continue;
-                }
-
-                var videoQuality = page.VideoQuality;
+                var page = finalizedPage.Page;
                 completedCandidates ??= new Lazy<Task<List<DownloadedItem>>>(() =>
                     _duplicatePolicy.LoadCompletedCandidatesAsync(
                         settings.Basic.RepeatDownloadStrategy,
@@ -246,7 +234,7 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
                 if (await _duplicatePolicy
                     .ShouldSkipAsync(
                         page,
-                        videoQuality,
+                        finalizedPage.VideoQuality,
                         settings.Basic.RepeatDownloadStrategy,
                         cancellationToken,
                         completedCandidates)
@@ -256,18 +244,18 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
                 }
 
                 var downloadingItem = DownloadTaskDraftFactory.Create(
-                    selection.Directory,
-                    preparedDownload.Video,
-                    preparedSection.Section,
-                    preparedDownload.Sections.Count,
+                    directory,
+                    finalizedDownload.Video,
+                    finalizedSection.Section,
+                    finalizedDownload.Sections.Count,
                     page,
-                    videoQuality,
+                    finalizedPage.VideoQuality,
                     settings,
-                    selection.RequestedContent);
-                if (settings.Video.Content.GenerateMovieMetadata && selection.RequestedContent.Video)
+                    finalizedPage.RequestedContent);
+                if (settings.Video.Content.GenerateMovieMetadata && finalizedPage.RequestedContent.Video)
                 {
                     downloadingItem.Metadata = await _metadataBuilder
-                        .BuildAsync(preparedDownload.Video, page, cancellationToken)
+                        .BuildAsync(finalizedDownload.Video, page, cancellationToken)
                         .ConfigureAwait(true);
                 }
 
