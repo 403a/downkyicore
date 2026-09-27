@@ -189,14 +189,7 @@ internal class ViewDownloadSetterViewModel : BaseDialogViewModel
         DownloadSubtitle = videoContent.DownloadSubtitle;
         DownloadCover = videoContent.DownloadCover;
 
-        if (DownloadAudio && DownloadVideo && DownloadDanmaku && DownloadSubtitle && DownloadCover)
-        {
-            DownloadAll = true;
-        }
-        else
-        {
-            DownloadAll = false;
-        }
+        UpdateDownloadAll();
 
         // 历史下载目录
         DirectoryList = new ObservableCollection<string>(videoSettings.HistoryVideoRootPaths);
@@ -311,16 +304,7 @@ internal class ViewDownloadSetterViewModel : BaseDialogViewModel
     /// </summary>
     private void ExecuteDownloadAudioCommand()
     {
-        if (!DownloadAudio)
-        {
-            DownloadAll = false;
-        }
-
-        if (DownloadAudio && DownloadVideo && DownloadDanmaku && DownloadSubtitle && DownloadCover)
-        {
-            DownloadAll = true;
-        }
-
+        UpdateDownloadAll();
         SetVideoContent();
     }
 
@@ -334,16 +318,7 @@ internal class ViewDownloadSetterViewModel : BaseDialogViewModel
     /// </summary>
     private void ExecuteDownloadVideoCommand()
     {
-        if (!DownloadVideo)
-        {
-            DownloadAll = false;
-        }
-
-        if (DownloadAudio && DownloadVideo && DownloadDanmaku && DownloadSubtitle && DownloadCover)
-        {
-            DownloadAll = true;
-        }
-
+        UpdateDownloadAll();
         SetVideoContent();
     }
 
@@ -357,16 +332,7 @@ internal class ViewDownloadSetterViewModel : BaseDialogViewModel
     /// </summary>
     private void ExecuteDownloadDanmakuCommand()
     {
-        if (!DownloadDanmaku)
-        {
-            DownloadAll = false;
-        }
-
-        if (DownloadAudio && DownloadVideo && DownloadDanmaku && DownloadSubtitle && DownloadCover)
-        {
-            DownloadAll = true;
-        }
-
+        UpdateDownloadAll();
         SetVideoContent();
     }
 
@@ -380,16 +346,7 @@ internal class ViewDownloadSetterViewModel : BaseDialogViewModel
     /// </summary>
     private void ExecuteDownloadSubtitleCommand()
     {
-        if (!DownloadSubtitle)
-        {
-            DownloadAll = false;
-        }
-
-        if (DownloadAudio && DownloadVideo && DownloadDanmaku && DownloadSubtitle && DownloadCover)
-        {
-            DownloadAll = true;
-        }
-
+        UpdateDownloadAll();
         SetVideoContent();
     }
 
@@ -403,17 +360,17 @@ internal class ViewDownloadSetterViewModel : BaseDialogViewModel
     /// </summary>
     private void ExecuteDownloadCoverCommand()
     {
-        if (!DownloadCover)
-        {
-            DownloadAll = false;
-        }
-
-        if (DownloadAudio && DownloadVideo && DownloadDanmaku && DownloadSubtitle && DownloadCover)
-        {
-            DownloadAll = true;
-        }
-
+        UpdateDownloadAll();
         SetVideoContent();
+    }
+
+    private void UpdateDownloadAll()
+    {
+        DownloadAll = DownloadAudio && DownloadVideo && DownloadDanmaku && DownloadSubtitle && DownloadCover;
+        if (DownloadAll)
+        {
+            SelectAllSubtitleTracks();
+        }
     }
 
     // 确认下载事件

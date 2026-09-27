@@ -110,6 +110,45 @@ public sealed class ViewDownloadSetterSelectionTests
     }
 
     [Fact]
+    public void SelectingEveryContentOptionSelectsEverySubtitleTrackAndDefault()
+    {
+        using var settings = new TestSettingsStore();
+        var interaction = new TestDesktopInteractionContext();
+        var viewModel = new ViewDownloadSetterViewModel(
+            interaction.Notifications,
+            new StubFilePickerService(),
+            settings.Store,
+            NullLogger<ViewDownloadSetterViewModel>.Instance)
+        {
+            DownloadAudio = false,
+            DownloadVideo = false,
+            DownloadDanmaku = false,
+            DownloadSubtitle = false,
+            DownloadCover = false
+        };
+        viewModel.OnDialogOpened(DownloadSettingsDialog.CreateRequest(
+        [
+            new(11, "zh", "中文", 0, "//zh"),
+            new(22, "en", "English", 1, "//en")
+        ]));
+
+        viewModel.DownloadAudio = true;
+        viewModel.DownloadAudioCommand.Execute(null);
+        viewModel.DownloadVideo = true;
+        viewModel.DownloadVideoCommand.Execute(null);
+        viewModel.DownloadDanmaku = true;
+        viewModel.DownloadDanmakuCommand.Execute(null);
+        viewModel.DownloadSubtitle = true;
+        viewModel.DownloadSubtitleCommand.Execute(null);
+        viewModel.DownloadCover = true;
+        viewModel.DownloadCoverCommand.Execute(null);
+
+        Assert.True(viewModel.DownloadAll);
+        Assert.All(viewModel.SubtitleTracks, track => Assert.True(track.IsSelected));
+        Assert.True(viewModel.SubtitleTracks[0].IsDefault);
+    }
+
+    [Fact]
     public void SubtitleTrackSelectionRaisesBindingNotification()
     {
         var track = new SubtitleTrackItem(
