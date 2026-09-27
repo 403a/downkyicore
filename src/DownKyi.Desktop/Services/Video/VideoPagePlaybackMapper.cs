@@ -54,22 +54,19 @@ internal static class VideoPagePlaybackMapper
 
         if (playUrl.Dash != null)
         {
-            // 如果video列表或者audio列表没有内容，则返回false
-            if (playUrl.Dash.Video == null)
-            {
-                return;
-            }
-
-            if (playUrl.Dash.Video.Count == 0)
-            {
-                return;
-            }
-
             // 音质
             page.AudioQualityFormatList = GetAudioQualityFormatList(playUrl, defaultAudioQuality);
             if (page.AudioQualityFormatList.Count > 0)
             {
                 page.AudioQualityFormat = page.AudioQualityFormatList[0];
+            }
+
+            // 时长
+            page.Duration = Format.FormatDuration(playUrl.Dash.Duration);
+
+            if (playUrl.Dash.Video is not { Count: > 0 })
+            {
+                return;
             }
 
             // 画质 & 视频编码
@@ -78,9 +75,6 @@ internal static class VideoPagePlaybackMapper
             {
                 page.VideoQuality = page.VideoQualityList[0];
             }
-
-            // 时长
-            page.Duration = Format.FormatDuration(playUrl.Dash.Duration);
 
             return;
         }

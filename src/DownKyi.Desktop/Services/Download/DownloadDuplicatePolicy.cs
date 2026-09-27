@@ -32,13 +32,12 @@ internal sealed class DownloadDuplicatePolicy
 
     public async Task<bool> ShouldSkipAsync(
         VideoPage page,
-        VideoQuality videoQuality,
+        VideoQuality? videoQuality,
         RepeatDownloadStrategy strategy,
         CancellationToken cancellationToken,
         Lazy<Task<List<DownloadedItem>>>? completedCandidates = null)
     {
         ArgumentNullException.ThrowIfNull(page);
-        ArgumentNullException.ThrowIfNull(videoQuality);
         cancellationToken.ThrowIfCancellationRequested();
 
         if (ShouldSkipActiveDownload(page, videoQuality))
@@ -92,7 +91,7 @@ internal sealed class DownloadDuplicatePolicy
         return new List<DownloadedItem>(downloadedItems);
     }
 
-    private bool ShouldSkipActiveDownload(VideoPage page, VideoQuality videoQuality)
+    private bool ShouldSkipActiveDownload(VideoPage page, VideoQuality? videoQuality)
     {
         foreach (var item in _downloadLists.Downloading)
         {
@@ -153,12 +152,12 @@ internal sealed class DownloadDuplicatePolicy
     private static bool IsSameVideo(
         DownloadBaseItem item,
         VideoPage page,
-        VideoQuality videoQuality)
+        VideoQuality? videoQuality)
     {
         var downloadBase = item.DownloadBase;
         var isSameVideo = downloadBase.Cid == page.Cid
-            && item.Resolution.Id == videoQuality.Quality
-            && item.VideoCodecName == videoQuality.SelectedVideoCodec;
+            && item.Resolution.Id == (videoQuality?.Quality ?? 0)
+            && item.VideoCodecName == (videoQuality?.SelectedVideoCodec ?? string.Empty);
         if (page.PlayUrl?.Dash != null)
         {
             isSameVideo = isSameVideo && item.AudioCodec.Name == page.AudioQualityFormat;

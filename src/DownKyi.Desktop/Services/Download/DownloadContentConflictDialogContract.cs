@@ -36,7 +36,7 @@ internal static class DownloadContentConflictDialogContract
         };
     }
 
-    public static async Task<DownloadContentConflictDecision> ShowAsync(
+    public static async Task<DownloadContentConflictDecision?> ShowAsync(
         IAppDialogService dialogService,
         DownloadContentConflictPrompt prompt,
         CancellationToken cancellationToken = default)
@@ -47,9 +47,7 @@ internal static class DownloadContentConflictDialogContract
             .ConfigureAwait(true);
         if (result.Outcome != AppDialogOutcome.Accepted)
         {
-            return new DownloadContentConflictDecision(
-                DownloadContentConflictAction.SkipPage,
-                ApplyToAll: false);
+            return null;
         }
 
         if (!result.Parameters.TryGetValue(DecisionParameter, out var value)

@@ -90,7 +90,9 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
             foreach (var page in section.VideoPages)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if ((isAll || page.IsSelected) && page.PlayUrl != null && page.VideoQuality == null)
+                if ((isAll || page.IsSelected)
+                    && DownloadMediaCapabilities.From(page.PlayUrl).Video
+                    && page.VideoQuality == null)
                 {
                     await RetryMissingVideoQualityAsync(
                         _playbackService,
@@ -144,7 +146,7 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
                     .GetVideoStreamAsync(item, cancellationToken)
                     .ConfigureAwait(false);
                 VideoPagePlaybackMapper.ApplyPlayUrl(playUrl, item, settings);
-                if (item.PlayUrl != null && item.VideoQuality == null)
+                if (DownloadMediaCapabilities.From(item.PlayUrl).Video && item.VideoQuality == null)
                 {
                     await RetryMissingVideoQualityAsync(
                         videoInfoService,
@@ -234,7 +236,7 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
                 if (await _duplicatePolicy
                     .ShouldSkipAsync(
                         page,
-                        finalizedPage.VideoQuality,
+                        page.VideoQuality,
                         settings.Basic.RepeatDownloadStrategy,
                         cancellationToken,
                         completedCandidates)
@@ -249,7 +251,7 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
                     finalizedSection.Section,
                     finalizedDownload.Sections.Count,
                     page,
-                    finalizedPage.VideoQuality,
+                    page.VideoQuality,
                     settings,
                     finalizedPage.RequestedContent);
                 if (settings.Video.Content.GenerateMovieMetadata && finalizedPage.RequestedContent.Video)

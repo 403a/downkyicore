@@ -83,18 +83,18 @@ public sealed class DownloadContentConflictResolverTests
         var resolver = new DownloadContentConflictResolver(dialogs);
         var choices = new DownloadContentConflictChoices();
 
-        var first = await resolver.ResolveAsync(
+        var first = Assert.IsType<FinalizedDownload>(await resolver.ResolveAsync(
             DownloadContentSelection.All,
             CreatePreparedDownload(CreatePage(video: true, audio: false)),
             isAll: false,
             choices,
-            TestContext.Current.CancellationToken);
-        var second = await resolver.ResolveAsync(
+            TestContext.Current.CancellationToken));
+        var second = Assert.IsType<FinalizedDownload>(await resolver.ResolveAsync(
             DownloadContentSelection.All,
             CreatePreparedDownload(CreatePage(video: true, audio: false)),
             isAll: false,
             choices,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken));
 
         Assert.False(Assert.Single(Assert.Single(first.Sections).Pages).RequestedContent.Audio);
         Assert.False(Assert.Single(Assert.Single(second.Sections).Pages).RequestedContent.Audio);
@@ -120,12 +120,12 @@ public sealed class DownloadContentConflictResolverTests
             isAll: false,
             choices,
             TestContext.Current.CancellationToken);
-        var audioOnly = await resolver.ResolveAsync(
+        var audioOnly = Assert.IsType<FinalizedDownload>(await resolver.ResolveAsync(
             DownloadContentSelection.All,
             CreatePreparedDownload(CreatePage(video: false, audio: true)),
             isAll: false,
             choices,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken));
 
         Assert.Empty(Assert.Single(audioOnly.Sections).Pages);
         Assert.Equal(2, dialogs.Requests.Count);
@@ -145,15 +145,53 @@ public sealed class DownloadContentConflictResolverTests
         Assert.Empty(dialogs.Requests);
     }
 
-    private static Task<FinalizedDownload> ResolveAsync(
-        RecordingDialogService dialogs,
-        DownloadContentSelection requested,
-        PreparedDownload prepared) => new DownloadContentConflictResolver(dialogs).ResolveAsync(
-            requested,
-            prepared,
+    [Fact]
+    public async Task AudioOnlyPageDoesNotRequireVideoQuality()
+    {
+        var dialogs = new RecordingDialogService(
+            new DownloadContentConflictDecision(
+                DownloadContentConflictAction.UseAvailableMedia,
+                ApplyToAll: false));
+        var page = CreatePage(video: false, audio: true);
+        page.VideoQuality = null!;
+
+        var finalized = await ResolveAsync(
+            dialogs,
+            DownloadContentSelection.All,
+            CreatePreparedDownload(page));
+
+        var finalizedPage = Assert.Single(Assert.Single(finalized.Sections).Pages);
+        Assert.Same(page, finalizedPage.Page);
+        Assert.Equal(
+            DownloadContentSelection.All with { Video = false },
+            finalizedPage.RequestedContent);
+    }
+
+    [Fact]
+    public async Task CanceledDialogCancelsConflictResolution()
+    {
+        var resolver = new DownloadContentConflictResolver(new CanceledDialogService());
+
+        var finalized = await resolver.ResolveAsync(
+            DownloadContentSelection.All,
+            CreatePreparedDownload(CreatePage(video: true, audio: false)),
             isAll: false,
             new DownloadContentConflictChoices(),
             TestContext.Current.CancellationToken);
+
+        Assert.Null(finalized);
+    }
+
+    private static async Task<FinalizedDownload> ResolveAsync(
+        RecordingDialogService dialogs,
+        DownloadContentSelection requested,
+        PreparedDownload prepared) => Assert.IsType<FinalizedDownload>(
+            await new DownloadContentConflictResolver(dialogs).ResolveAsync(
+                requested,
+                prepared,
+                isAll: false,
+                new DownloadContentConflictChoices(),
+                TestContext.Current.CancellationToken).ConfigureAwait(true));
 
     private static PreparedDownload CreatePreparedDownload(VideoPage page) => PreparedDownload.Create(
         new VideoInfoView(),
@@ -199,6 +237,19 @@ public sealed class DownloadContentConflictResolverTests
             return Task.FromResult(new AppDialogResult(
                 AppDialogOutcome.Accepted,
                 DownloadContentConflictDialogContract.Encode(decision)));
+        }
+    }
+
+    private sealed class CanceledDialogService : IAppDialogService
+    {
+        public Task<AppDialogResult> ShowAsync(
+            AppDialogRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(new AppDialogResult(
+                AppDialogOutcome.Canceled,
+                new Dictionary<string, object?>()));
         }
     }
 }

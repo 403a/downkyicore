@@ -1,4 +1,5 @@
 using DownKyi.Application.Bilibili;
+using DownKyi.Application.Desktop;
 using DownKyi.Application.Downloads;
 using DownKyi.Core.BiliApi.VideoStream;
 using DownKyi.Core.BiliApi.VideoStream.Models;
@@ -163,6 +164,32 @@ public sealed class ContentDownloadCoordinatorTests
         Assert.Equal(1, session.PrepareCount);
     }
 
+    [Fact]
+    public async Task CancelingConflictDialogStopsBeforeLaterBatchItems()
+    {
+        var session = new RecordingSession(
+            @"D:\Downloads",
+            preparedDownload: CreateAudioOnlyPreparedDownload());
+        var infoServiceFactory = new RecordingInfoServiceFactory();
+        var coordinator = CreateCoordinator(
+            new RecordingFactory(session),
+            infoServiceFactory,
+            new CanceledDialogService());
+
+        var result = await coordinator.AddAsync(
+            [
+                new ContentDownloadItem("BV17x411w7KC", DownloadInfoKind.Video, true),
+                new ContentDownloadItem("BV1xx411c7mD", DownloadInfoKind.Video, true)
+            ],
+            onlySelected: true,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, result);
+        Assert.Equal(1, session.PrepareCount);
+        Assert.Equal(0, session.AddCount);
+        Assert.Single(infoServiceFactory.CreatedKinds);
+    }
+
     private sealed class RecordingFactory(IAddToDownloadSession session) : IAddToDownloadServiceFactory
     {
         public int CreateCount { get; private set; }
@@ -181,7 +208,8 @@ public sealed class ContentDownloadCoordinatorTests
     private sealed class RecordingSession(
         string? directory,
         bool admissionAllowed = true,
-        Action<int>? afterAdd = null) : IAddToDownloadSession
+        Action<int>? afterAdd = null,
+        PreparedDownload? preparedDownload = null) : IAddToDownloadSession
     {
         public int AdmissionCheckCount { get; private set; }
 
@@ -226,7 +254,7 @@ public sealed class ContentDownloadCoordinatorTests
             cancellationToken.ThrowIfCancellationRequested();
             Assert.NotNull(videoInfoService);
             PrepareCount++;
-            return Task.FromResult<PreparedDownload?>(PreparedDownload.Create(
+            return Task.FromResult<PreparedDownload?>(preparedDownload ?? PreparedDownload.Create(
                 new VideoInfoView(),
                 [new VideoSection()]));
         }
@@ -247,10 +275,32 @@ public sealed class ContentDownloadCoordinatorTests
 
     private static ContentDownloadCoordinator CreateCoordinator(
         IAddToDownloadServiceFactory factory,
-        IContentInfoServiceFactory infoServiceFactory) => new(
+        IContentInfoServiceFactory infoServiceFactory,
+        IAppDialogService? dialogService = null) => new(
             factory,
             infoServiceFactory,
-            new DownloadContentConflictResolver(new UnexpectedDialogService()));
+            new DownloadContentConflictResolver(dialogService ?? new UnexpectedDialogService()));
+
+    private static PreparedDownload CreateAudioOnlyPreparedDownload()
+    {
+        var page = new VideoPage
+        {
+            IsSelected = true,
+            Name = "audio-only",
+            PlayUrl = new PlayUrl
+            {
+                Dash = new PlayUrlDash
+                {
+                    Video = [],
+                    Audio = [new PlayUrlDashVideo()]
+                }
+            }
+        };
+        page.VideoQuality = null!;
+        return PreparedDownload.Create(
+            new VideoInfoView(),
+            [new VideoSection { VideoPages = [page] }]);
+    }
 
     private sealed class UnexpectedDialogService : DownKyi.Application.Desktop.IAppDialogService
     {
@@ -258,6 +308,19 @@ public sealed class ContentDownloadCoordinatorTests
             DownKyi.Application.Desktop.AppDialogRequest request,
             CancellationToken cancellationToken = default) => throw new InvalidOperationException(
                 $"Unexpected dialog: {request.Dialog}.");
+    }
+
+    private sealed class CanceledDialogService : IAppDialogService
+    {
+        public Task<AppDialogResult> ShowAsync(
+            AppDialogRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(new AppDialogResult(
+                AppDialogOutcome.Canceled,
+                new Dictionary<string, object?>()));
+        }
     }
 
     private sealed class RecordingInfoServiceFactory : IContentInfoServiceFactory

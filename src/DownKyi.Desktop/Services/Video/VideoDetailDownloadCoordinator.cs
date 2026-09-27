@@ -67,6 +67,11 @@ internal sealed class VideoDetailDownloadCoordinator : IVideoDetailDownloadCoord
                         new DownloadContentConflictChoices(),
                         cancellationToken)
                     .ConfigureAwait(true);
+                if (finalizedDownload == null)
+                {
+                    return 0;
+                }
+
                 return await addService
                     .AddToDownload(selection.Directory, finalizedDownload, cancellationToken)
                     .ConfigureAwait(false);

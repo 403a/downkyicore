@@ -58,6 +58,21 @@ public sealed class DownloadContentConflictDialogViewModelTests
                 TestContext.Current.CancellationToken));
     }
 
+    [Fact]
+    public async Task CanceledResultIsNotConvertedIntoSkipPage()
+    {
+        var dialogs = new StubDialogService(new AppDialogResult(
+            AppDialogOutcome.Canceled,
+            new Dictionary<string, object?>()));
+
+        var decision = await DownloadContentConflictDialogContract.ShowAsync(
+            dialogs,
+            CreatePrompt(),
+            TestContext.Current.CancellationToken);
+
+        Assert.Null(decision);
+    }
+
     private static DownloadContentConflictPrompt CreatePrompt() => new(
         "page",
         new DownloadContentConflict(

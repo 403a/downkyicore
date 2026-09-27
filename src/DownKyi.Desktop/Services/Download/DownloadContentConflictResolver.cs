@@ -67,7 +67,7 @@ internal sealed class DownloadContentConflictResolver
         _dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
     }
 
-    public async Task<FinalizedDownload> ResolveAsync(
+    public async Task<FinalizedDownload?> ResolveAsync(
         DownloadContentSelection requestedContent,
         PreparedDownload preparedDownload,
         bool isAll,
@@ -86,7 +86,7 @@ internal sealed class DownloadContentConflictResolver
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var page = preparedPage.Page;
-                if ((!isAll && !page.IsSelected) || page.PlayUrl == null || page.VideoQuality == null)
+                if ((!isAll && !page.IsSelected) || page.PlayUrl == null)
                 {
                     continue;
                 }
@@ -94,29 +94,38 @@ internal sealed class DownloadContentConflictResolver
                 var conflict = DownloadContentConflict.Find(
                     requestedContent,
                     preparedPage.AvailableMedia);
-                if (conflict == null)
+                var finalContent = requestedContent;
+                if (conflict != null)
                 {
-                    pages.Add(new FinalizedDownloadPage(page, page.VideoQuality, requestedContent));
+                    if (!conflict.HasAvailableMedia)
+                    {
+                        continue;
+                    }
+
+                    var action = await ResolveActionAsync(
+                        page.Name,
+                        conflict,
+                        choices,
+                        cancellationToken).ConfigureAwait(true);
+                    if (action == null)
+                    {
+                        return null;
+                    }
+
+                    if (action == DownloadContentConflictAction.SkipPage)
+                    {
+                        continue;
+                    }
+
+                    finalContent = conflict.AvailableContent;
+                }
+
+                if (finalContent.Video && page.VideoQuality == null)
+                {
                     continue;
                 }
 
-                if (!conflict.HasAvailableMedia)
-                {
-                    continue;
-                }
-
-                var action = await ResolveActionAsync(
-                    page.Name,
-                    conflict,
-                    choices,
-                    cancellationToken).ConfigureAwait(true);
-                if (action == DownloadContentConflictAction.UseAvailableMedia)
-                {
-                    pages.Add(new FinalizedDownloadPage(
-                        page,
-                        page.VideoQuality,
-                        conflict.AvailableContent));
-                }
+                pages.Add(new FinalizedDownloadPage(page, finalContent));
             }
 
             sections.Add(new FinalizedDownloadSection(preparedSection.Section, pages));
@@ -125,7 +134,7 @@ internal sealed class DownloadContentConflictResolver
         return new FinalizedDownload(preparedDownload.Video, sections);
     }
 
-    private async Task<DownloadContentConflictAction> ResolveActionAsync(
+    private async Task<DownloadContentConflictAction?> ResolveActionAsync(
         string pageName,
         DownloadContentConflict conflict,
         DownloadContentConflictChoices choices,
@@ -140,6 +149,11 @@ internal sealed class DownloadContentConflictResolver
             _dialogService,
             new DownloadContentConflictPrompt(pageName, conflict),
             cancellationToken).ConfigureAwait(true);
+        if (decision == null)
+        {
+            return null;
+        }
+
         if (decision.ApplyToAll)
         {
             choices.Remember(conflict, decision.Action);
