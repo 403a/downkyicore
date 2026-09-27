@@ -191,6 +191,19 @@ internal sealed partial class Aria2TransferBackend : ITransferBackend
 
             if (downloadResult == DownloadResult.SUCCESS)
             {
+                var finalFile = Path.Combine(request.Directory, request.FileName);
+                var integrity = DownloadFileIntegrity.Check(
+                    finalFile,
+                    request.ExpectedBytes);
+                if (!integrity.IsUsable)
+                {
+                    _logger.LogInformationMessage(
+                        integrity.Reason ?? "Downloaded media file is not usable.");
+                    return DownloadTransferResult.Failed(
+                        DownloadTransferFailureKind.InvalidMedia,
+                        "download.transfer.invalid-media");
+                }
+
                 return DownloadTransferResult.Succeeded();
             }
 

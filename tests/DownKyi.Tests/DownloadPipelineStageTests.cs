@@ -1,4 +1,5 @@
 using DownKyi.Application.Downloads;
+using DownKyi.Core.BiliApi.VideoStream;
 using DownKyi.Core.BiliApi.VideoStream.Models;
 using DownKyi.Core.Settings;
 using DownKyi.Domain.Downloads;
@@ -243,6 +244,173 @@ public sealed class DownloadPipelineStageTests
         Assert.True(result.IsSuccess);
         var request = Assert.Single(fixture.Backend.Requests);
         Assert.Equal("https://example.invalid/video", Assert.Single(request.Urls));
+    }
+
+    [Fact]
+    public async Task MediaStageRejectsDuplicateDurlOrdersBeforeAnyTransfer()
+    {
+        var playUrl = new PlayUrl
+        {
+            Durl =
+            [
+                new PlayUrlDurl
+                {
+                    Order = 7,
+                    SourceAddress = "https://example.invalid/segment-7-primary"
+                },
+                new PlayUrlDurl
+                {
+                    Order = 7,
+                    SourceAddress = "https://example.invalid/segment-7-duplicate"
+                }
+            ]
+        };
+        using var fixture = await MediaStageFixture.CreateAsync(
+            playUrl,
+            downloadAudio: false,
+            downloadVideo: true).ConfigureAwait(true);
+
+        var result = await fixture.Stage.ExecuteAsync(
+            fixture.Context,
+            TestContext.Current.CancellationToken);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("download.media.durl-manifest", result.Error?.Code);
+        Assert.Empty(fixture.Backend.Requests);
+    }
+
+    [Fact]
+    public async Task MediaStageRejectsAddresslessDurlBeforeEarlierSegmentTransfer()
+    {
+        var playUrl = new PlayUrl
+        {
+            Durl =
+            [
+                new PlayUrlDurl
+                {
+                    Order = 1,
+                    SourceAddress = "https://example.invalid/segment-1"
+                },
+                new PlayUrlDurl
+                {
+                    Order = 2,
+                    SourceAddress = "  ",
+                    BackupUrl = ["", "  "]
+                }
+            ]
+        };
+        using var fixture = await MediaStageFixture.CreateAsync(
+            playUrl,
+            downloadAudio: false,
+            downloadVideo: true).ConfigureAwait(true);
+
+        var result = await fixture.Stage.ExecuteAsync(
+            fixture.Context,
+            TestContext.Current.CancellationToken);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("download.media.durl-manifest", result.Error?.Code);
+        Assert.Empty(fixture.Backend.Requests);
+    }
+
+    [Fact]
+    public async Task MediaStageTransfersValidatedDurlsInOrder()
+    {
+        var playUrl = new PlayUrl
+        {
+            Durl =
+            [
+                new PlayUrlDurl
+                {
+                    Order = 9,
+                    SourceAddress = "https://example.invalid/segment-9"
+                },
+                new PlayUrlDurl
+                {
+                    Order = 2,
+                    SourceAddress = "https://example.invalid/segment-2"
+                },
+                new PlayUrlDurl
+                {
+                    Order = 5,
+                    SourceAddress = "",
+                    BackupUrl = ["https://example.invalid/segment-5"]
+                }
+            ]
+        };
+        using var fixture = await MediaStageFixture.CreateAsync(
+            playUrl,
+            downloadAudio: false,
+            downloadVideo: true).ConfigureAwait(true);
+
+        var result = await fixture.Stage.ExecuteAsync(
+            fixture.Context,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(
+            [
+                "https://example.invalid/segment-2",
+                "https://example.invalid/segment-5",
+                "https://example.invalid/segment-9"
+            ],
+            fixture.Backend.Requests.Select(request => Assert.Single(request.Urls)));
+    }
+
+    [Fact]
+    public async Task MediaStageRejectsMalformedRefreshedDurlManifestBeforeRetryTransfer()
+    {
+        var playUrl = new PlayUrl
+        {
+            Durl =
+            [
+                new PlayUrlDurl
+                {
+                    Order = 1,
+                    SourceAddress = "https://example.invalid/original-segment"
+                }
+            ]
+        };
+        var refreshRequestCount = 0;
+        var apiClient = new TestBilibiliApiClient
+        {
+            GetStringAsyncHandler = (_, _) =>
+            {
+                refreshRequestCount++;
+                return Task.FromResult(
+                    """
+                    {
+                      "code": 0,
+                      "message": "success",
+                      "data": {
+                        "durl": [
+                          { "order": 1, "url": "https://example.invalid/refreshed-a" },
+                          { "order": 1, "url": "https://example.invalid/refreshed-b" }
+                        ]
+                      }
+                    }
+                    """);
+            }
+        };
+        using var fixture = await MediaStageFixture.CreateAsync(
+            playUrl,
+            downloadAudio: false,
+            downloadVideo: true,
+            apiClient: apiClient,
+            backendResults:
+            [
+                DownloadTransferResult.Failed(
+                    DownloadTransferFailureKind.ExpiredAddress,
+                    "download.transfer.http-403")
+            ]).ConfigureAwait(true);
+
+        var result = await fixture.Stage.ExecuteAsync(
+            fixture.Context,
+            TestContext.Current.CancellationToken);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(1, refreshRequestCount);
+        Assert.Single(fixture.Backend.Requests);
     }
 
     [Fact]
@@ -594,7 +762,9 @@ public sealed class DownloadPipelineStageTests
             PlayUrl playUrl,
             bool downloadAudio,
             bool downloadVideo,
-            int selectedAudioId = 30280)
+            int selectedAudioId = 30280,
+            TestBilibiliApiClient? apiClient = null,
+            params DownloadTransferResult[] backendResults)
         {
             var directory = Path.Combine(
                 Path.GetTempPath(),
@@ -611,11 +781,22 @@ public sealed class DownloadPipelineStageTests
                 historyService,
                 new SystemClock());
             var settings = new TestSettingsStore();
+            if (apiClient != null)
+            {
+                settings.Store.Update(current => current with
+                {
+                    Video = current.Video with { VideoParseType = 0 }
+                });
+            }
+
             var stateWriter = new DownloadTaskStateWriter(tasks);
             var taskId = new DownloadTaskId($"media-stage-{Guid.NewGuid():N}");
             var downloadBase = new DownloadBase
             {
                 Id = taskId.Value,
+                Bvid = "BV1fixture",
+                Avid = 1,
+                Cid = 2,
                 FilePath = Path.Combine(directory, "output"),
                 NeedDownloadContent = new DownloadContentSelection(
                     Audio: downloadAudio,
@@ -634,6 +815,7 @@ public sealed class DownloadPipelineStageTests
                 {
                     Id = taskId.Value,
                     DownloadBase = downloadBase,
+                    PlayStreamType = PlayStreamType.Video,
                     DownloadStatus = DownloadStatus.WaitForDownload
                 },
                 PlayUrl = playUrl
@@ -648,7 +830,8 @@ public sealed class DownloadPipelineStageTests
                 downloading,
                 settings.Store.Current);
             context.DownloadDirectory = directory;
-            var backend = new RecordingMediaBackend();
+            context.StagingDirectory = directory;
+            var backend = new RecordingMediaBackend(backendResults);
             var stage = new DownloadMediaStage(
                 projections,
                 stateWriter,
@@ -660,7 +843,7 @@ public sealed class DownloadPipelineStageTests
                 new DownloadPlaybackResolver(
                     new TestWbiKeyProvider(),
                     TimeProvider.System,
-                    new TestBilibiliApiClient()),
+                    apiClient ?? new TestBilibiliApiClient()),
                 new DownloadActivityPresenter(projections, stateWriter),
                 NullLogger<DownloadMediaStage>.Instance);
             return new MediaStageFixture(
@@ -694,8 +877,11 @@ public sealed class DownloadPipelineStageTests
         }
     }
 
-    private sealed class RecordingMediaBackend : ITransferBackend
+    private sealed class RecordingMediaBackend(
+        params DownloadTransferResult[] results) : ITransferBackend
     {
+        private readonly Queue<DownloadTransferResult> _results = new(results);
+
         public List<DownloadTransferRequest> Requests { get; } = [];
 
         public string Name => "recording-media";
@@ -723,11 +909,19 @@ public sealed class DownloadPipelineStageTests
         public async Task<DownloadTransferResult> TransferAsync(DownloadTransferRequest request)
         {
             Requests.Add(request);
+            var result = _results.Count > 0
+                ? _results.Dequeue()
+                : DownloadTransferResult.Succeeded();
+            if (result.Outcome != DownloadTransferOutcome.Succeeded)
+            {
+                return result;
+            }
+
             await File.WriteAllBytesAsync(
                 Path.Combine(request.Directory, request.FileName),
                 [1, 2, 3],
                 request.CancellationToken).ConfigureAwait(true);
-            return DownloadTransferResult.Succeeded();
+            return result;
         }
 
         public void Dispose()
