@@ -28,7 +28,7 @@ internal static class DownloadTaskRecordMapper
     private static DownloadTask ReadCore(SqliteDataReader reader)
     {
         var id = new DownloadTaskId(reader.GetString(reader.GetOrdinal("id")));
-        var requestedAssets = DownloadStoreJson.ReadBooleanMap(
+        var requestedContent = DownloadStoreJson.ReadContentSelection(
             reader.GetString(reader.GetOrdinal("need_download_content")),
             "need_download_content");
         var transferFiles = reader.IsDBNull(reader.GetOrdinal("download_files"))
@@ -55,7 +55,7 @@ internal static class DownloadTaskRecordMapper
             GetString(reader, "page_cover_url"),
             reader.GetInt32(reader.GetOrdinal("zone_id")));
         var plan = new DownloadPlan(
-            DownloadContentSelection.FromLegacyMap(requestedAssets),
+            requestedContent,
             transferFiles,
             reader.IsDBNull(reader.GetOrdinal("play_stream_type"))
                 ? 0

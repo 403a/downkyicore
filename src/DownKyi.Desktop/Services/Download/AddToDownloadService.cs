@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using DownKyi.Application.Bilibili;
@@ -32,7 +33,8 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
     private readonly IAppDialogService _dialogService;
     private readonly ILogger<AddToDownloadService> _logger;
     private readonly IInfoService _playbackService;
-
+    private readonly IWbiKeyProvider _wbiKeyProvider;
+    private readonly IBilibiliApiClient _client;
     public AddToDownloadService(
         PlayStreamType streamType,
         DownloadTaskAdmissionService admission,
@@ -55,9 +57,8 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
         _dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         ArgumentNullException.ThrowIfNull(tagProvider);
-        ArgumentNullException.ThrowIfNull(wbiKeyProvider);
-        ArgumentNullException.ThrowIfNull(client);
-
+        _wbiKeyProvider = wbiKeyProvider ?? throw new ArgumentNullException(nameof(wbiKeyProvider));
+        _client = client ?? throw new ArgumentNullException(nameof(client));
         _playbackService = streamType switch
         {
             PlayStreamType.Video => new VideoInfoService(
@@ -70,12 +71,10 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
             _ => throw new ArgumentOutOfRangeException(nameof(streamType), streamType, null)
         };
     }
-
     public Task<bool> EnsureAdmissionAsync(CancellationToken cancellationToken = default)
     {
         return _admissionPresenter.EnsureAdmissionAsync(cancellationToken);
     }
-
     public async Task<PreparedDownload> PrepareAsync(
         VideoInfoView videoInfoView,
         IList<VideoSection> videoSections,
@@ -84,7 +83,6 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
     {
         ArgumentNullException.ThrowIfNull(videoInfoView);
         ArgumentNullException.ThrowIfNull(videoSections);
-
         foreach (var section in videoSections)
         {
             foreach (var page in section.VideoPages)
@@ -99,24 +97,20 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
                 }
             }
         }
-
         return PreparedDownload.Create(videoInfoView, videoSections);
     }
-
     public async Task<PreparedDownload?> PrepareAsync(
         IInfoService videoInfoService,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(videoInfoService);
         cancellationToken.ThrowIfCancellationRequested();
-
         var videoInfoView = videoInfoService.GetVideoView(cancellationToken);
         if (videoInfoView == null)
         {
             _logger.LogDebugMessage("VideoInfoView is null.");
             return null;
         }
-
         var videoSections = videoInfoService.GetVideoSections(true, cancellationToken);
         if (videoSections == null)
         {
@@ -132,7 +126,6 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
                 }
             ];
         }
-
         var settings = _settingsStore.Current;
         foreach (var section in videoSections)
         {
@@ -153,11 +146,10 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
                 }
             }
         }
-
         return PreparedDownload.Create(videoInfoView, videoSections);
     }
-
     public async Task<DownloadAddSelection?> SelectDownloadAsync(
+        VideoPage? subtitlePage = null,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -176,23 +168,34 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
         }
         else
         {
-            var result = await _dialogService.ShowAsync(
-                new AppDialogRequest(AppDialog.DownloadSettings),
-                cancellationToken).ConfigureAwait(true);
-            if (result.Outcome == AppDialogOutcome.Accepted)
+            IReadOnlyList<DownloadSettingsDialog.SubtitleTrack> subtitleTracks = [];
+            if (subtitlePage != null)
             {
-                directory = result.Parameters.TryGetValue("directory", out var directoryValue)
-                    ? directoryValue as string ?? string.Empty
-                    : string.Empty;
-                requestedContent = ReadDownloadContent(result.Parameters);
+                var player = await WbiRequestExecutor.ExecuteAsync(
+                    _wbiKeyProvider,
+                    (keys, unixTimeSeconds) => _client.PlayerV2Async(
+                        keys, unixTimeSeconds, subtitlePage.Avid, subtitlePage.Bvid,
+                        subtitlePage.Cid, cancellationToken),
+                    TimeProvider.System,
+                    cancellationToken).ConfigureAwait(false);
+                subtitleTracks = player?.Subtitle.Subtitles.Select(track =>
+                    new DownloadSettingsDialog.SubtitleTrack(
+                        track.Id, track.Lan, track.LanDoc, track.Type, track.SubtitleAddress))
+                    .ToArray() ?? [];
+            }
+            var result = await _dialogService.ShowAsync(
+                DownloadSettingsDialog.CreateRequest(subtitleTracks),
+                cancellationToken).ConfigureAwait(true);
+            if (DownloadSettingsDialog.DecodeResult(result) is { } dialogSelection)
+            {
+                directory = dialogSelection.Directory;
+                requestedContent = dialogSelection.RequestedContent;
             }
         }
-
         if (string.IsNullOrEmpty(directory))
         {
             return null;
         }
-
         if (!Directory.Exists(Directory.GetDirectoryRoot(directory)))
         {
             var alert = new AlertService(_dialogService);
@@ -201,15 +204,12 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
                 .ConfigureAwait(true);
             return null;
         }
-
         if (!Directory.Exists(directory))
         {
             Directory.CreateDirectory(directory);
         }
-
         return new DownloadAddSelection(directory, requestedContent);
     }
-
     public async Task<int> AddToDownload(
         DownloadAddSelection selection,
         PreparedDownload preparedDownload,
@@ -219,7 +219,6 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
         ArgumentNullException.ThrowIfNull(selection);
         ArgumentNullException.ThrowIfNull(preparedDownload);
         cancellationToken.ThrowIfCancellationRequested();
-
         var settings = _settingsStore.Current;
         var addedCount = 0;
         Lazy<Task<List<DownloadedItem>>>? completedCandidates = null;
@@ -232,12 +231,10 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
                 {
                     continue;
                 }
-
                 if (page.VideoQuality == null)
                 {
                     continue;
                 }
-
                 var videoQuality = page.VideoQuality;
                 completedCandidates ??= new Lazy<Task<List<DownloadedItem>>>(() =>
                     _duplicatePolicy.LoadCompletedCandidatesAsync(
@@ -254,7 +251,6 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
                 {
                     continue;
                 }
-
                 var downloadingItem = DownloadTaskDraftFactory.Create(
                     selection.Directory,
                     preparedDownload.Video,
@@ -270,7 +266,6 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
                         .BuildAsync(preparedDownload.Video, page, cancellationToken)
                         .ConfigureAwait(true);
                 }
-
                 try
                 {
                     await _admission
@@ -325,18 +320,4 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
         }
     }
 
-    private static DownloadContentSelection ReadDownloadContent(
-        IReadOnlyDictionary<string, object?> parameters)
-    {
-        var values = new Dictionary<string, bool>(StringComparer.Ordinal);
-        foreach (var (key, value) in parameters)
-        {
-            if (value is bool selected)
-            {
-                values[key] = selected;
-            }
-        }
-
-        return DownloadContentSelection.FromLegacyMap(values);
-    }
 }

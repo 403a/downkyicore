@@ -36,7 +36,7 @@
             <Grid
                 Grid.Row="1"
                 MinWidth="600"
-                Margin="15,10" RowDefinitions="*,*,*,*">
+                Margin="15,10" RowDefinitions="*,*,*,Auto,*">
 
                 <Grid Grid.Row="0" Margin="0,30,0,0" ColumnDefinitions="*,*,*,*,*">
 
@@ -177,7 +177,35 @@
                         IsChecked="{Binding DownloadCover, Mode=TwoWay}" />
                 </Grid>
 
-                <Grid Grid.Row="3" Margin="0,30,0,0" ColumnDefinitions="*,*,100,100">
+                <Grid Grid.Row="3" Margin="0,20,0,0" ColumnDefinitions="auto,*"
+                      IsVisible="{Binding HasSubtitleTracks}">
+                    <TextBlock
+                        Grid.Column="0"
+                        VerticalAlignment="Top"
+                        Foreground="{DynamicResource BrushTextDark}"
+                        Text="{DynamicResource DownloadSubtitle}" />
+                    <Grid Grid.Column="1" Margin="20,0,0,0">
+                        <ItemsControl MaxHeight="160" ItemsSource="{Binding SubtitleTracks}"
+                                      IsEnabled="{Binding DownloadSubtitle}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vmd:SubtitleTrackItem">
+                                    <Grid ColumnDefinitions="30,2*,*,60,90">
+                                        <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding DisplayLanguage}" />
+                                        <TextBlock Grid.Column="2" Text="{Binding Language}" />
+                                        <TextBlock Grid.Column="3" Text="{Binding Type}" />
+                                        <RadioButton Grid.Column="4" GroupName="DefaultSubtitle"
+                                                     Content="默认"
+                                                     IsEnabled="{Binding IsSelected}"
+                                                     IsChecked="{Binding IsDefault, Mode=TwoWay}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Grid>
+                </Grid>
+
+                <Grid Grid.Row="4" Margin="0,30,0,0" ColumnDefinitions="*,*,100,100">
 
                     <CheckBox
                         Grid.Column="0"

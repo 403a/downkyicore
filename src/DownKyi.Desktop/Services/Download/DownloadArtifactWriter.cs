@@ -210,13 +210,16 @@ internal sealed partial class DownloadArtifactWriter
         DownloadTaskId taskId,
         DownloadTaskMetadata metadata,
         string outputBasePath,
+        DownloadContentSelection content,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(taskId);
         ArgumentNullException.ThrowIfNull(metadata);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputBasePath);
+        ArgumentNullException.ThrowIfNull(content);
 
         var srtFiles = new List<string>();
+        string? defaultSubtitleSource = null;
         Exception? parseFailure = null;
         IReadOnlyList<SubRipText> subRipTexts;
         try
@@ -230,7 +233,8 @@ internal sealed partial class DownloadArtifactWriter
                     metadata.Media.Bvid,
                     metadata.Media.Cid,
                     e => parseFailure ??= e,
-                    cancellationToken),
+                    cancellationToken,
+                    content.SelectedSubtitleTrackIds is { } selectedIds ? selectedIds : null),
                 TimeProvider.System,
                 cancellationToken).ConfigureAwait(false);
         }
@@ -288,6 +292,10 @@ internal sealed partial class DownloadArtifactWriter
                 }
 
                 srtFiles.Add(srtFile);
+                if (subRip.TrackId == content.DefaultSubtitleTrackId)
+                {
+                    defaultSubtitleSource = srtFile;
+                }
             }
             catch (IOException e)
             {
@@ -313,7 +321,7 @@ internal sealed partial class DownloadArtifactWriter
                 DefaultSubtitleTransferKey,
                 defaultSubtitleFile,
                 cancellationToken).ConfigureAwait(false);
-            File.Copy(srtFiles[0], defaultSubtitleFile, true);
+            File.Copy(defaultSubtitleSource ?? srtFiles[0], defaultSubtitleFile, true);
             if (!DownloadFileIntegrity.Check(defaultSubtitleFile).IsUsable)
             {
                 return ArtifactFailure(

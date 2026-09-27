@@ -13,6 +13,7 @@ using DownKyi.Core.Settings;
 using DownKyi.Core.Utils;
 using DownKyi.Domain.Downloads;
 using DownKyi.Images;
+using DownKyi.Services.Download;
 using DownKyi.Utils;
 using Microsoft.Extensions.Logging;
 
@@ -57,6 +58,10 @@ internal class ViewDownloadSetterViewModel : BaseDialogViewModel
 
 
     public ObservableCollection<string> DirectoryList { get; private set; }
+
+    public ObservableCollection<SubtitleTrackItem> SubtitleTracks { get; } = [];
+
+    public bool HasSubtitleTracks => SubtitleTracks.Count > 0;
 
 
     private string _directory = string.Empty;
@@ -206,6 +211,19 @@ internal class ViewDownloadSetterViewModel : BaseDialogViewModel
         IsDefaultDownloadDirectory = videoSettings.IsUseSaveVideoRootPath == AllowStatus.Yes;
 
         #endregion
+    }
+
+    public override void OnDialogOpened(AppDialogRequest request)
+    {
+        var tracks = DownloadSettingsDialog.ReadSubtitleTracks(request);
+
+        for (var index = 0; index < tracks.Count; index++)
+        {
+            SubtitleTracks.Add(new SubtitleTrackItem(
+                tracks[index], DownloadSubtitle, DownloadSubtitle && index == 0));
+        }
+
+        OnPropertyChanged(nameof(HasSubtitleTracks));
     }
 
     #region 命令申明
@@ -417,17 +435,18 @@ internal class ViewDownloadSetterViewModel : BaseDialogViewModel
         });
 
         // 返回数据
-        var parameters = new DownloadContentSelection(
-                DownloadAudio,
-                DownloadVideo,
-                DownloadDanmaku,
-                DownloadSubtitle,
-                DownloadCover)
-            .ToLegacyMap()
-            .ToDictionary(entry => entry.Key, entry => (object?)entry.Value, StringComparer.Ordinal);
-        parameters["directory"] = Directory;
-
-        CloseDialog(AppDialogOutcome.Accepted, parameters);
+        var requestedContent = new DownloadContentSelection(
+            DownloadAudio,
+            DownloadVideo,
+            DownloadDanmaku,
+            DownloadSubtitle,
+            DownloadCover);
+        var selectedIds = HasSubtitleTracks
+            ? SubtitleTracks.Where(track => track.IsSelected).Select(track => track.TrackId).ToArray()
+            : null;
+        var defaultTrackId = SubtitleTracks.FirstOrDefault(track => track.IsDefault)?.TrackId;
+        CloseDialog(AppDialogOutcome.Accepted, DownloadSettingsDialog.EncodeResult(
+            Directory, requestedContent, selectedIds, defaultTrackId));
     }
 
     #endregion
@@ -463,4 +482,16 @@ internal class ViewDownloadSetterViewModel : BaseDialogViewModel
         // 弹出选择下载目录的窗口
         return await _filePickerService.SelectFolderAsync().ConfigureAwait(true);
     }
+}
+
+internal sealed class SubtitleTrackItem(
+    DownloadSettingsDialog.SubtitleTrack track, bool isSelected, bool isDefault)
+{
+    public long TrackId { get; } = track.TrackId;
+    public string Language { get; } = track.Language;
+    public string DisplayLanguage { get; } = track.DisplayLanguage;
+    public int Type { get; } = track.Type;
+    public string Url { get; } = track.Url;
+    public bool IsSelected { get; set; } = isSelected;
+    public bool IsDefault { get; set; } = isDefault;
 }

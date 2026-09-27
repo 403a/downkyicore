@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using DownKyi.Application.Downloads;
 using DownKyi.Application.Time;
 using DownKyi.Domain.Downloads;
@@ -859,14 +860,18 @@ public sealed class SqliteDownloadTaskStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task TypedRequestedContentRoundTripsAcrossReopenUsingLegacyWireKeys()
+    public async Task TypedRequestedContentAndSubtitleSelectionRoundTripAcrossReopen()
     {
         var expected = new DownloadContentSelection(
             Audio: true,
             Video: false,
             Danmaku: true,
-            Subtitle: false,
-            Cover: true);
+            Subtitle: true,
+            Cover: true) with
+        {
+            SelectedSubtitleTrackIds = ImmutableArray.Create(11L, 22L),
+            DefaultSubtitleTrackId = 22
+        };
         using (var store = CreateStore())
         {
             Assert.True((await store.AddAsync(
@@ -878,19 +883,33 @@ public sealed class SqliteDownloadTaskStoreTests : IDisposable
         var restored = Assert.Single(
             await reopened.GetUnfinishedAsync(TestContext.Current.CancellationToken));
 
-        Assert.Equal(expected, restored.Plan.RequestedContent);
+        var actual = restored.Plan.RequestedContent;
+        Assert.Equal(expected.Audio, actual.Audio);
+        Assert.Equal(expected.Video, actual.Video);
+        Assert.Equal(expected.Danmaku, actual.Danmaku);
+        Assert.Equal(expected.Subtitle, actual.Subtitle);
+        Assert.Equal(expected.Cover, actual.Cover);
+        Assert.True(expected.SelectedSubtitleTrackIds.HasValue);
+        Assert.True(actual.SelectedSubtitleTrackIds.HasValue);
+        Assert.Equal(
+            expected.SelectedSubtitleTrackIds.GetValueOrDefault().ToArray(),
+            actual.SelectedSubtitleTrackIds.GetValueOrDefault().ToArray());
+        Assert.Equal(expected.DefaultSubtitleTrackId, actual.DefaultSubtitleTrackId);
         using var connection = await OpenReadOnlyConnectionAsync().ConfigureAwait(true);
         using var command = connection.CreateCommand();
         command.CommandText = "SELECT need_download_content FROM download_base WHERE id = 'typed-content'";
         var json = Assert.IsType<string>(
             await command.ExecuteScalarAsync(TestContext.Current.CancellationToken));
         using var payload = System.Text.Json.JsonDocument.Parse(json);
-        Assert.Equal(5, payload.RootElement.EnumerateObject().Count());
+        Assert.Equal(7, payload.RootElement.EnumerateObject().Count());
         Assert.True(payload.RootElement.GetProperty("downloadAudio").GetBoolean());
         Assert.False(payload.RootElement.GetProperty("downloadVideo").GetBoolean());
         Assert.True(payload.RootElement.GetProperty("downloadDanmaku").GetBoolean());
-        Assert.False(payload.RootElement.GetProperty("downloadSubtitle").GetBoolean());
+        Assert.True(payload.RootElement.GetProperty("downloadSubtitle").GetBoolean());
         Assert.True(payload.RootElement.GetProperty("downloadCover").GetBoolean());
+        Assert.Equal([11L, 22L], payload.RootElement.GetProperty("selectedSubtitleTrackIds")
+            .EnumerateArray().Select(item => item.GetInt64()));
+        Assert.Equal(22, payload.RootElement.GetProperty("defaultSubtitleTrackId").GetInt64());
     }
 
     [Theory]

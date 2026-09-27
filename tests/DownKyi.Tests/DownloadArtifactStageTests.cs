@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Net;
 using Bilibili.Community.Service.Dm.V1;
 using DownKyi.Application.Bilibili;
@@ -502,6 +503,39 @@ public sealed class DownloadArtifactStageTests
     }
 
     [Fact]
+    public async Task SelectedDefaultSubtitleIsCopiedToTheDefaultArtifact()
+    {
+        var client = new TestBilibiliApiClient
+        {
+            GetStringAsyncHandler = (request, _) => Task.FromResult(
+                request.RequestAddress.Contains("/x/player/wbi/v2", StringComparison.Ordinal)
+                    ? """
+                      {"code":0,"data":{"aid":1,"bvid":"BV1test","cid":2,"subtitle":{"subtitles":[{"id":11,"lan":"zh","lan_doc":"Chinese","subtitle_url":"//example.test/zh.json","type":0},{"id":22,"lan":"en","lan_doc":"English","subtitle_url":"//example.test/en.json","type":1}]}}}
+                      """
+                    : request.RequestAddress.EndsWith("/en.json", StringComparison.Ordinal)
+                        ? """{"body":[{"from":0,"to":1,"content":"english"}]}"""
+                        : """{"body":[{"from":0,"to":1,"content":"chinese"}]}""")
+        };
+        using var context = await ArtifactTestContext.CreateAsync(
+            client,
+            subtitle: true,
+            selectedSubtitleTrackIds: [11, 22],
+            defaultSubtitleTrackId: 22).ConfigureAwait(true);
+
+        var result = await context.Stage.ExecuteAsync(
+            context.Execution,
+            TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.Contains("english", await File.ReadAllTextAsync(
+            context.Downloading.DownloadBase.FilePath + ".srt", TestContext.Current.CancellationToken),
+            StringComparison.Ordinal);
+        Assert.Contains("chinese", await File.ReadAllTextAsync(
+            context.Downloading.DownloadBase.FilePath + "_Chinese.srt", TestContext.Current.CancellationToken),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task MalformedSubtitleIsNotReportedAsNoResource()
     {
         var request = 0;
@@ -878,7 +912,9 @@ public sealed class DownloadArtifactStageTests
             bool generateMetadata = false,
             bool useMissingOutputDirectory = false,
             string? coverUrl = null,
-            string? pageCoverUrl = null)
+            string? pageCoverUrl = null,
+            long[]? selectedSubtitleTrackIds = null,
+            long? defaultSubtitleTrackId = null)
         {
             var directory = Path.Combine(
                 Path.GetTempPath(),
@@ -919,7 +955,11 @@ public sealed class DownloadArtifactStageTests
             {
                 Cover = cover,
                 Subtitle = subtitle,
-                Danmaku = danmaku
+                Danmaku = danmaku,
+                SelectedSubtitleTrackIds = selectedSubtitleTrackIds == null
+                    ? null
+                    : ImmutableArray.CreateRange(selectedSubtitleTrackIds),
+                DefaultSubtitleTrackId = defaultSubtitleTrackId
             };
             var downloading = new DownloadingItem
             {

@@ -80,7 +80,8 @@ public static partial class VideoStreamApi
         string? bvid,
         long cid,
         Action<Exception>? reportParseFailure,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyCollection<long>? selectedTrackIds = null)
     {
         ArgumentNullException.ThrowIfNull(keys);
         var subRipTexts = new List<SubRipText>();
@@ -99,6 +100,11 @@ public static partial class VideoStreamApi
         foreach (var subtitle in player.Subtitle.Subtitles)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (selectedTrackIds != null && !selectedTrackIds.Contains(subtitle.Id))
+            {
+                continue;
+            }
+
             const string referer = "https://www.bilibili.com";
             var subtitleUrl = NormalizeSubtitleUrl(subtitle.SubtitleAddress);
             if (subtitleUrl == null)
@@ -135,6 +141,7 @@ public static partial class VideoStreamApi
 
                 subRipTexts.Add(new SubRipText
                 {
+                    TrackId = subtitle.Id,
                     Lan = subtitle.Lan,
                     LanDoc = subtitle.LanDoc,
                     SrtString = srt
