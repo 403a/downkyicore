@@ -20,7 +20,7 @@ PR 修正文件。
 | Test／CI failure | `DownKyi.CentralTestRunner` + OS test project | TRX + failure recorder | `docs/testing/README.md` |
 | Download persistence | Domain task + Application service + SQLite store | transition／migration tests | 本文件「下載資料」 |
 | Transfer／media | coordinator + selected backend + media validator | focused runtime regression | 本文件「傳輸與媒體」 |
-| Known runtime gap | quick cards（locator only） | current-main repro + owner confirmation | `docs/exec-plans/v1.1.1-runtime-hardening.md` |
+| Known runtime gap | owner workboard candidate／linked Issue | current-main repro + owner confirmation | [GitHub Issue #137](https://github.com/crazysmile-PhD/downkyicore/issues/137) |
 | Settings | `ISettingsStore`／`SettingsSchemaMigrator` | settings + architecture + Host tests | 本文件「Settings」 |
 | Logging | `ApplicationLogProvider` + Infrastructure logging owners | provider stress + Host tests | `docs/design-docs/logging-ownership-sink-adr.md` |
 | Desktop／DI／theme | Desktop composition + design tokens | architecture + XAML + packaged smoke | `ARCHITECTURE.md` |

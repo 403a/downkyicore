@@ -10,10 +10,10 @@ This decision covers Desktop routed-feature identity, Shell menu metadata and
 route-manifest completeness. It does not redesign the router, DI container,
 Avalonia presentation ownership or unrelated download/runtime boundaries.
 
-The baseline counts, current numeric mappings, reachability observations and
-file estimates are snapshots owned by
-`../exec-plans/desktop-feature-locality.md`, not permanent facts in this
-document.
+Baseline counts, current numeric mappings, reachability observations, file
+estimates and implementation status are not permanent facts in this document.
+Reinspect current source and tests, then use the owner-assigned Issue or PR for
+temporary scope and progress.
 
 ## Current Ownership
 
