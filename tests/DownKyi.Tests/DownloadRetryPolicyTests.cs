@@ -342,6 +342,49 @@ public sealed class DownloadRetryPolicyTests
     }
 
     [Fact]
+    public async Task BuiltinBackendRecoversCompletedTargetBeforeResolvingAddress()
+    {
+        using var settings = new TestSettingsStore();
+        using var backend = new BuiltinTransferBackend(
+            settings.Store,
+            new DownloadDiagnosticLogger(
+                NullLogger<DownloadDiagnosticLogger>.Instance),
+            NullLogger<BuiltinTransferBackend>.Instance);
+        var directory = CreateTemporaryDirectory("completed-target-recovery");
+        const string fileName = "media.bin";
+        var target = Path.Combine(directory, fileName);
+        var payload = new byte[] { 1, 2, 3, 4 };
+        try
+        {
+            await File.WriteAllBytesAsync(
+                target,
+                payload,
+                TestContext.Current.CancellationToken);
+            var request = CreateRequestAt(
+                directory,
+                fileName,
+                backendIdentity: null,
+                static (_, _) => Task.CompletedTask,
+                "https://unresolvable.invalid/media") with
+            {
+                ExpectedBytes = payload.Length,
+                CancellationToken = TestContext.Current.CancellationToken
+            };
+
+            var result = await backend.TransferAsync(request);
+
+            Assert.Equal(DownloadTransferOutcome.Succeeded, result.Outcome);
+            Assert.Equal(payload, await File.ReadAllBytesAsync(
+                target,
+                TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task CoordinatorRefreshesExpiredAddressesOnlyOnce()
     {
         using var backend = new RecordingBackend(
@@ -458,6 +501,31 @@ public sealed class DownloadRetryPolicyTests
         Assert.Equal(3, backend.Requests.Count);
         Assert.Equal(backend.Requests[0].Urls, backend.Requests[1].Urls);
         Assert.NotEqual(backend.Requests[1].Urls, backend.Requests[2].Urls);
+    }
+
+    [Fact]
+    public async Task CoordinatorRetriesCleanedResumeRejectionAfterEarlierTransientAttempt()
+    {
+        using var backend = new RecordingBackend(
+            DownloadTransferResult.Failed(
+                DownloadTransferFailureKind.TransientNetwork,
+                "download.transfer.timeout"),
+            DownloadTransferResult.Failed(
+                DownloadTransferFailureKind.ResumeRejected,
+                "download.transfer.resume-rejected"),
+            DownloadTransferResult.Succeeded());
+        var coordinator = CreateCoordinator(backend, maximumAttempts: 5);
+
+        var result = await coordinator.TransferAsync(
+            CreateRequest("https://primary.invalid/media"),
+            static _ => Task.FromResult<IReadOnlyList<string>>([]),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(DownloadTransferOutcome.Succeeded, result.Outcome);
+        Assert.Equal(3, backend.Requests.Count);
+        Assert.All(
+            backend.Requests,
+            request => Assert.Equal("https://primary.invalid/media", Assert.Single(request.Urls)));
     }
 
     [Fact]

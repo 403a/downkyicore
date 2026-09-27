@@ -10,6 +10,43 @@ namespace DownKyi.Tests;
 public sealed class BuiltinRangeDownloaderTests
 {
     [Fact]
+    public async Task ExistingCompletedTargetIsRecoveredWithoutAnotherRequest()
+    {
+        var payload = CreatePayload(12);
+        using var handler = new UnexpectedRequestHandler();
+        var directory = CreateTemporaryDirectory("range-completed-recovery");
+        var target = Path.Combine(directory, "media.bin");
+        try
+        {
+            await File.WriteAllBytesAsync(
+                target,
+                payload,
+                TestContext.Current.CancellationToken);
+            using var downloader = CreateDownloader(
+                handler,
+                parallelCount: 2,
+                segmentSize: 4);
+
+            var result = await downloader.DownloadAsync(
+                target,
+                payload.Length,
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(payload.Length, result.TotalBytes);
+            Assert.Equal(payload.Length, result.ReceivedBytes);
+            Assert.Equal(0, handler.Requests);
+            Assert.Equal(payload, await File.ReadAllBytesAsync(
+                target,
+                TestContext.Current.CancellationToken));
+            Assert.False(File.Exists($"{target}.download"));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task WorkersConsumeFixedRangesConcurrentlyAndProduceExactFile()
     {
         var payload = CreatePayload(12);
@@ -125,6 +162,72 @@ public sealed class BuiltinRangeDownloaderTests
         }
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task ResponseHeadersWithoutDataTriggerBoundedTransientFailure(
+        int stalledRequest)
+    {
+        var payload = CreatePayload(4);
+        using var handler = new RangePayloadHandler(
+            payload,
+            stallBeforeHeadersAtRequest: stalledRequest);
+        var directory = CreateTemporaryDirectory("range-header-stall");
+        var target = Path.Combine(directory, "media.bin");
+        try
+        {
+            using var downloader = CreateDownloader(
+                handler,
+                parallelCount: 1,
+                segmentSize: 4,
+                readStallTimeout: TimeSpan.FromMilliseconds(50));
+
+            var error = await Assert.ThrowsAsync<TimeoutException>(() => downloader.DownloadAsync(
+                target,
+                payload.Length,
+                TestContext.Current.CancellationToken));
+            var classified = BuiltinTransferBackend.ClassifyFailure(
+                error,
+                reportedCanceled: false);
+
+            Assert.Equal(DownloadTransferFailureKind.TransientNetwork, classified.FailureKind);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task MissingResponseLengthIsAProtocolFailureInsteadOfADiskFailure()
+    {
+        using var handler = new UnknownLengthHandler();
+        var directory = CreateTemporaryDirectory("range-missing-length");
+        var target = Path.Combine(directory, "media.bin");
+        try
+        {
+            using var downloader = CreateDownloader(
+                handler,
+                parallelCount: 1,
+                segmentSize: 4);
+
+            var error = await Assert.ThrowsAsync<HttpIOException>(() => downloader.DownloadAsync(
+                target,
+                expectedBytes: 0,
+                cancellationToken: TestContext.Current.CancellationToken));
+            var classified = BuiltinTransferBackend.ClassifyFailure(
+                error,
+                reportedCanceled: false);
+
+            Assert.Equal(DownloadTransferFailureKind.TransientNetwork, classified.FailureKind);
+            Assert.Equal(HttpRequestError.InvalidResponse, error.HttpRequestError);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task LegacyDownloaderMetadataResumesWithoutRedownloadingCompletedRange()
     {
@@ -219,19 +322,23 @@ public sealed class BuiltinRangeDownloaderTests
         private readonly ConcurrentQueue<(long Start, long End)> _chunkRanges = new();
         private readonly ConcurrentReadGate? _readGate;
         private readonly int? _stallAtStart;
+        private readonly int? _stallBeforeHeadersAtRequest;
         private int _failureReturned;
+        private int _requests;
 
         public RangePayloadHandler(
             byte[] payload,
             int requiredConcurrentReads = 0,
             int? failOnceAtStart = null,
             int failureBytes = 0,
-            int? stallAtStart = null)
+            int? stallAtStart = null,
+            int? stallBeforeHeadersAtRequest = null)
         {
             _payload = payload ?? throw new ArgumentNullException(nameof(payload));
             _failOnceAtStart = failOnceAtStart;
             _failureBytes = failureBytes;
             _stallAtStart = stallAtStart;
+            _stallBeforeHeadersAtRequest = stallBeforeHeadersAtRequest;
             if (requiredConcurrentReads > 0)
             {
                 _readGate = new ConcurrentReadGate(requiredConcurrentReads);
@@ -243,11 +350,17 @@ public sealed class BuiltinRangeDownloaderTests
 
         public int MaximumConcurrentReads => _readGate?.MaximumConcurrentReads ?? 0;
 
-        protected override Task<HttpResponseMessage> SendAsync(
+        protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (Interlocked.Increment(ref _requests) == _stallBeforeHeadersAtRequest)
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
             var range = Assert.Single(request.Headers.Range?.Ranges ?? []);
             var start = range.From ?? 0;
             var end = range.To ?? (_payload.LongLength - 1);
@@ -287,11 +400,55 @@ public sealed class BuiltinRangeDownloaderTests
                 start,
                 end,
                 _payload.LongLength);
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.PartialContent)
+            return new HttpResponseMessage(HttpStatusCode.PartialContent)
             {
                 Content = content,
                 RequestMessage = request
+            };
+        }
+    }
+
+    private sealed class UnexpectedRequestHandler : HttpMessageHandler
+    {
+        private int _requests;
+
+        public int Requests => Volatile.Read(ref _requests);
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _requests);
+            return Task.FromException<HttpResponseMessage>(
+                new InvalidOperationException("The completed target must not be downloaded again."));
+        }
+    }
+
+    private sealed class UnknownLengthHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new UnknownLengthContent(),
+                RequestMessage = request
             });
+        }
+    }
+
+    private sealed class UnknownLengthContent : HttpContent
+    {
+        protected override Task SerializeToStreamAsync(
+            Stream stream,
+            TransportContext? context) => Task.CompletedTask;
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
         }
     }
 

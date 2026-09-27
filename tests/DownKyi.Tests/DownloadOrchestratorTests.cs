@@ -100,6 +100,58 @@ public sealed class DownloadOrchestratorTests
     }
 
     [Fact]
+    public async Task CancelingActiveTaskWaitsForExecutionToReleaseOwnedResources()
+    {
+        using var context = new OrchestratorContext();
+        DownloadTaskId taskId = Assert.Single(await context.AddQueuedTasksAsync(1));
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cancellationObserved = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseExecution = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        using var executor = new RecordingExecutor(async (_, cancellationToken) =>
+        {
+            started.TrySetResult();
+            try
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                cancellationObserved.TrySetResult();
+                await releaseExecution.Task.ConfigureAwait(false);
+                throw;
+            }
+        });
+        using var orchestrator = context.CreateOrchestrator(executor, workerCount: 1);
+
+        await orchestrator.StartAsync(TestContext.Current.CancellationToken);
+        await orchestrator.EnqueueAsync(taskId, TestContext.Current.CancellationToken);
+        await started.Task.WaitAsync(
+            TimeSpan.FromSeconds(5),
+            TestContext.Current.CancellationToken);
+
+        var cancellation = orchestrator.CancelAsync(taskId);
+        await cancellationObserved.Task.WaitAsync(
+            TimeSpan.FromSeconds(5),
+            TestContext.Current.CancellationToken);
+        try
+        {
+            Assert.False(cancellation.IsCompleted);
+        }
+        finally
+        {
+            releaseExecution.TrySetResult();
+        }
+
+        Assert.True(await cancellation.WaitAsync(
+            TimeSpan.FromSeconds(5),
+            TestContext.Current.CancellationToken));
+        await orchestrator.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
     public async Task CancelingOneConcurrentTaskDoesNotCancelAnotherTasksToken()
     {
         using var context = new OrchestratorContext();

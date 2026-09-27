@@ -82,7 +82,19 @@ internal sealed class BuiltinRangeDownloader : IDisposable
         ArgumentOutOfRangeException.ThrowIfNegative(expectedBytes);
         cancellationToken.ThrowIfCancellationRequested();
 
+        var recovered = TryRecoverCompletedTarget(targetFile, expectedBytes);
+        if (recovered != null)
+        {
+            return recovered;
+        }
+
         var probe = await ProbeAsync(expectedBytes, cancellationToken).ConfigureAwait(false);
+        recovered = TryRecoverCompletedTarget(targetFile, probe.TotalBytes);
+        if (recovered != null)
+        {
+            return recovered;
+        }
+
         var partialFile = $"{targetFile}.download";
         var state = await LoadOrCreateStateAsync(
             partialFile,
@@ -167,7 +179,7 @@ internal sealed class BuiltinRangeDownloader : IDisposable
         CancellationToken cancellationToken)
     {
         using var request = CreateRequest(rangeStart: 0, rangeEnd: 0);
-        using var response = await _http.SendAsync(request, cancellationToken)
+        using var response = await SendWithStallTimeoutAsync(request, cancellationToken)
             .ConfigureAwait(false);
         ThrowForHttpFailure(response);
 
@@ -198,7 +210,9 @@ internal sealed class BuiltinRangeDownloader : IDisposable
 
         if (totalBytes <= 0)
         {
-            throw new InvalidDataException("The media response did not declare its total length.");
+            throw new HttpIOException(
+                HttpRequestError.InvalidResponse,
+                "The media response did not declare its total length.");
         }
 
         if (expectedBytes > 0 && expectedBytes != totalBytes)
@@ -392,7 +406,7 @@ internal sealed class BuiltinRangeDownloader : IDisposable
         using var request = supportsRanges
             ? CreateRequest(requestStart, chunk.End)
             : CreateRequest(rangeStart: null, rangeEnd: null);
-        using var response = await _http.SendAsync(request, cancellationToken)
+        using var response = await SendWithStallTimeoutAsync(request, cancellationToken)
             .ConfigureAwait(false);
         ValidateChunkResponse(response, requestStart, chunk.End, state.TotalBytes, supportsRanges);
 
@@ -434,6 +448,67 @@ internal sealed class BuiltinRangeDownloader : IDisposable
         finally
         {
             ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
+    private BuiltinRangeDownloadResult? TryRecoverCompletedTarget(
+        string targetFile,
+        long expectedBytes)
+    {
+        if (!TryGetCompletedTarget(targetFile, expectedBytes, out var result))
+        {
+            return null;
+        }
+
+        _progress(result.ReceivedBytes, result.TotalBytes);
+        return result;
+    }
+
+    internal static bool TryGetCompletedTarget(
+        string targetFile,
+        long expectedBytes,
+        out BuiltinRangeDownloadResult result)
+    {
+        result = null!;
+        if (expectedBytes <= 0 || !File.Exists(targetFile))
+        {
+            return false;
+        }
+
+        if ((File.GetAttributes(targetFile) & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new IOException("The completed built-in download cannot be a redirected file.");
+        }
+
+        var actualBytes = new FileInfo(targetFile).Length;
+        if (actualBytes != expectedBytes)
+        {
+            throw new BuiltinResumeRejectedException(
+                "The completed built-in download does not match the expected length.");
+        }
+
+        result = new BuiltinRangeDownloadResult(actualBytes, expectedBytes);
+        return true;
+    }
+
+    private async Task<HttpResponseMessage> SendWithStallTimeoutAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        using var stallCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken);
+        stallCancellation.CancelAfter(_readStallTimeout);
+        try
+        {
+            return await _http.SendAsync(request, stallCancellation.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException exception) when (
+            !cancellationToken.IsCancellationRequested
+            && stallCancellation.IsCancellationRequested)
+        {
+            throw new TimeoutException(
+                "The media server stopped before sending response headers.",
+                exception);
         }
     }
 

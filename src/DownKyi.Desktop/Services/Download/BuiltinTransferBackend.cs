@@ -101,6 +101,15 @@ internal sealed class BuiltinTransferBackend : ITransferBackend
 
         try
         {
+            if (BuiltinRangeDownloader.TryGetCompletedTarget(
+                    targetFile,
+                    request.ExpectedBytes,
+                    out var completedTarget))
+            {
+                ReportProgress(completedTarget.ReceivedBytes, completedTarget.TotalBytes);
+                return DownloadTransferResult.Succeeded();
+            }
+
             var proxyAddress = ResolveProxyAddress(network);
             using var resolver = AriaDownloadAddressResolver.Create(proxyAddress);
             var resolution = await resolver.ResolveAsync(
