@@ -3,7 +3,6 @@ using DownKyi.Core.BiliApi.VideoStream.Models;
 using DownKyi.Images;
 using DownKyi.Models;
 using DownKyi.Utils;
-using Downloader;
 using DownloadStatus = DownKyi.Models.DownloadStatus;
 
 namespace DownKyi.ViewModels.DownloadManager
@@ -21,8 +20,6 @@ namespace DownKyi.ViewModels.DownloadManager
             Delete = ButtonIcon.Instance().Delete;
             Delete.Fill = DictionaryResource.GetColor("ColorPrimary");
         }
-
-        public DownloadService? DownloadService { get; set; }
 
         // model数据
         private Downloading _downloading = null!;

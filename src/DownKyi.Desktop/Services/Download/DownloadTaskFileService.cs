@@ -36,19 +36,6 @@ internal sealed class DownloadTaskFileService
     {
         ArgumentNullException.ThrowIfNull(downloading);
 
-        try
-        {
-            downloading.DownloadService?.CancelAsync();
-        }
-        catch (InvalidOperationException e)
-        {
-            _logger.LogDebugMessage($"Cancel built-in downloader failed: {e.Message}");
-        }
-        finally
-        {
-            downloading.DownloadService = null;
-        }
-
         var gid = downloading.Downloading.Gid;
         if (string.IsNullOrWhiteSpace(gid))
         {

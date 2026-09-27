@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -12,8 +11,6 @@ using DownKyi.Core.Settings;
 using DownKyi.Core.Utils;
 using DownKyi.Domain.Downloads;
 using DownKyi.Utils;
-using Downloader;
-using Downloader.Exceptions;
 using Microsoft.Extensions.Logging;
 
 namespace DownKyi.Services.Download;
@@ -66,147 +63,123 @@ internal sealed class BuiltinTransferBackend : ITransferBackend
                 "download.transfer.single-address-required");
         }
 
-        var url = request.Urls[0];
-        var path = request.Directory;
-        var localFileName = request.FileName;
-        var expectedBytes = request.ExpectedBytes;
         var network = _settingsStore.Current.Network;
-        var configuration = CreateDownloadConfiguration(network);
-
-        var targetFile = Path.Combine(path, localFileName);
-        var totalBytesToReceive = expectedBytes;
-        var receivedBytes = 0L;
+        var targetFile = Path.Combine(request.Directory, request.FileName);
         var progressUpdater = new DownloadProgressUiUpdater(
             TimeProvider.System,
             DownloadProgressUiUpdater.DefaultMinimumInterval);
+        var speedSampler = new BuiltinDownloadSpeedSampler(TimeProvider.System);
+        var progressSync = new Lock();
         DownloadProgress? lastProgress = null;
-        Exception? reportedError = null;
-        var reportedCanceled = false;
-        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        _diagnosticLogger.LogBuiltInTaskStart(
-            Name,
-            localFileName,
-            request.Urls.Count,
-            configuration.ChunkCount,
-            configuration.ParallelCount,
-            network);
 
-        using var downloader = new Downloader.DownloadService(configuration);
-        downloader.DownloadStarted += (_, args) =>
+        void ReportProgress(long received, long total)
         {
-            if (args.TotalBytesToReceive > 0)
+            lock (progressSync)
             {
-                totalBytesToReceive = (long)args.TotalBytesToReceive;
-            }
-        };
-        downloader.DownloadProgressChanged += (_, args) =>
-        {
-            receivedBytes = (long)Math.Max(0, args.ReceivedBytesSize);
-            if (args.TotalBytesToReceive > 0)
-            {
-                totalBytesToReceive = (long)args.TotalBytesToReceive;
-            }
+                var percentage = total <= 0 ? 0 : (double)received / total * 100;
+                var speed = speedSampler.Sample(received);
+                if (!progressUpdater.TryCreate(
+                        percentage,
+                        received,
+                        total,
+                        speed,
+                        out var progress))
+                {
+                    return;
+                }
 
-            var speed = (long)args.BytesPerSecondSpeed;
-            if (progressUpdater.TryCreate(
-                    args.ProgressPercentage,
-                    args.ReceivedBytesSize,
-                    args.TotalBytesToReceive,
-                    speed,
-                    out var progress))
-            {
                 lastProgress = progress;
                 request.PublishProgress(progress);
                 _diagnosticLogger.LogSpeed(
                     Name,
-                    localFileName,
-                    args.ReceivedBytesSize,
-                    args.TotalBytesToReceive,
+                    request.FileName,
+                    received,
+                    total,
                     speed);
             }
-        };
-        downloader.DownloadFileCompleted += (_, args) =>
-        {
-            reportedError = args.Error;
-            reportedCanceled = args.Cancelled;
-            if (args.Error != null)
-            {
-                _logger.LogWarningMessage(
-                    $"Built-in download completion reported an error; " +
-                    $"type={args.Error.GetType().Name}.");
-            }
+        }
 
-            request.SetBuiltinDownloadService(null);
-            completion.TrySetResult();
-        };
-
-        request.SetBuiltinDownloadService(downloader);
-        var transferTask = downloader.DownloadFileTaskAsync(
-            url,
-            targetFile,
-            request.CancellationToken);
-        Exception? transferError = null;
         try
         {
-            while (!completion.Task.IsCompleted && !transferTask.IsCompleted)
+            var proxyAddress = ResolveProxyAddress(network);
+            using var resolver = AriaDownloadAddressResolver.Create(proxyAddress);
+            var resolution = await resolver.ResolveAsync(
+                request.Urls[0],
+                network.UserAgent,
+                LoginHelper.GetLoginInfoCookiesString(),
+                request.CancellationToken).ConfigureAwait(true);
+            if (resolution.ErrorCode != null)
+            {
+                return DownloadTransferResult.Failed(
+                    DownloadTransferFailureKind.Permanent,
+                    resolution.ErrorCode);
+            }
+
+            var resolvedAddress = resolution.Address
+                ?? throw new InvalidOperationException(
+                    "The accepted built-in download address is missing.");
+            var headers = resolution.Headers
+                ?? throw new InvalidOperationException(
+                    "The accepted built-in download headers are missing.");
+            _diagnosticLogger.LogBuiltInTaskStart(
+                Name,
+                request.FileName,
+                request.Urls.Count,
+                CalculateSegmentCount(request.ExpectedBytes),
+                network.Split,
+                network);
+
+            using var handler = CreateHttpHandler(network, proxyAddress);
+            using var downloader = new BuiltinRangeDownloader(
+                handler,
+                resolvedAddress,
+                headers,
+                network.Split,
+                ReportProgress,
+                _logger,
+                disposeHandler: false);
+            using var transferCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                request.CancellationToken);
+            var transferTask = downloader.DownloadAsync(
+                targetFile,
+                request.ExpectedBytes,
+                transferCancellation.Token);
+
+            while (!transferTask.IsCompleted)
             {
                 if (request.IsPauseRequested())
                 {
-                    downloader.Pause();
-                    downloader.CancelAsync();
-                    request.SetBuiltinDownloadService(null);
-                    if (lastProgress != null)
-                    {
-                        await request.PersistProgressAsync(lastProgress, CancellationToken.None)
-                            .ConfigureAwait(true);
-                    }
-
-                    throw new OperationCanceledException("Download was paused.");
+                    await transferCancellation.CancelAsync().ConfigureAwait(true);
+                    break;
                 }
 
                 request.EnsureActive();
-
                 await Task.Delay(
                     TimeSpan.FromMilliseconds(100),
                     request.CancellationToken).ConfigureAwait(true);
             }
 
-            await transferTask.ConfigureAwait(true);
+            var result = await transferTask.ConfigureAwait(true);
+            if (IsDownloadedMediaFileUsable(
+                    targetFile,
+                    request.ExpectedBytes,
+                    result.ReceivedBytes,
+                    result.TotalBytes))
+            {
+                return DownloadTransferResult.Succeeded();
+            }
+
+            return DownloadTransferResult.Failed(
+                DownloadTransferFailureKind.InvalidMedia,
+                "download.transfer.invalid-media");
         }
         catch (OperationCanceledException) when (request.CancellationToken.IsCancellationRequested)
         {
-            downloader.CancelAsync();
-            request.SetBuiltinDownloadService(null);
-            try
-            {
-                await transferTask.ConfigureAwait(true);
-            }
-            catch (OperationCanceledException)
-            {
-                _logger.LogDebugMessage("Built-in transfer observed expected cancellation.");
-            }
-
             throw;
         }
-        catch (OperationCanceledException exception)
+        catch (OperationCanceledException) when (request.IsPauseRequested())
         {
-            downloader.CancelAsync();
-            try
-            {
-                await transferTask.ConfigureAwait(true);
-            }
-            catch (OperationCanceledException)
-            {
-                _logger.LogDebugMessage("Built-in transfer teardown was canceled.");
-            }
-
-            if (request.IsPauseRequested())
-            {
-                return DownloadTransferResult.Paused();
-            }
-
-            request.EnsureActive();
-            transferError = exception;
+            return DownloadTransferResult.Paused();
         }
         catch (Exception exception) when (exception is IOException
             or HttpRequestException
@@ -217,77 +190,35 @@ internal sealed class BuiltinTransferBackend : ITransferBackend
         {
             _logger.LogWarningMessage(
                 $"Built-in transfer failed; type={exception.GetType().Name}.");
-            transferError = exception;
+            return ClassifyFailure(exception, reportedCanceled: false);
         }
         finally
         {
-            request.SetBuiltinDownloadService(null);
+            if (lastProgress != null)
+            {
+                await request.PersistProgressAsync(lastProgress, CancellationToken.None)
+                    .ConfigureAwait(true);
+            }
         }
-
-        completion.TrySetResult();
-        if (lastProgress != null)
-        {
-            await request.PersistProgressAsync(lastProgress, CancellationToken.None)
-                .ConfigureAwait(true);
-        }
-
-        if (request.IsPauseRequested())
-        {
-            return DownloadTransferResult.Paused();
-        }
-
-        if (transferError == null &&
-            reportedError == null &&
-            !reportedCanceled &&
-            IsDownloadedMediaFileUsable(
-                targetFile,
-                expectedBytes,
-                receivedBytes,
-                totalBytesToReceive))
-        {
-            return DownloadTransferResult.Succeeded();
-        }
-
-        return ClassifyFailure(transferError ?? reportedError, reportedCanceled);
     }
 
     public void Dispose()
     {
     }
 
-    internal static DownloadConfiguration CreateDownloadConfiguration(
-        NetworkApplicationSettings network)
+    internal static int CalculateSegmentCount(
+        long expectedBytes,
+        long segmentSize = BuiltinRangeDownloader.DefaultSegmentSize)
     {
-        ArgumentNullException.ThrowIfNull(network);
-        var requestConfiguration = new RequestConfiguration
+        ArgumentOutOfRangeException.ThrowIfNegative(expectedBytes);
+        ArgumentOutOfRangeException.ThrowIfLessThan(segmentSize, 1);
+        if (expectedBytes == 0)
         {
-            Headers = new WebHeaderCollection
-            {
-                { "cookie", LoginHelper.GetLoginInfoCookiesString() }
-            },
-            UserAgent = network.UserAgent,
-            Referer = "https://www.bilibili.com"
-        };
-        if (network.IsHttpProxy == AllowStatus.Yes)
-        {
-            requestConfiguration.Proxy = new WebProxy(
-                network.HttpProxy,
-                network.HttpProxyListenPort);
+            return 0;
         }
 
-        var split = network.Split;
-        return new DownloadConfiguration
-        {
-            ChunkCount = split,
-            RequestConfiguration = requestConfiguration,
-            ParallelDownload = true,
-            ParallelCount = split,
-            MaxTryAgainOnFailure = 0,
-            MaximumMemoryBufferBytes = 50 * 1024 * 1024,
-            EnableAutoResumeDownload = true,
-            ClearPackageOnCompletionWithFailure = false,
-            FileExistPolicy = FileExistPolicy.IgnoreDownload
-        };
+        var count = 1 + ((expectedBytes - 1) / segmentSize);
+        return checked((int)Math.Min(count, int.MaxValue));
     }
 
     internal static DownloadTransferResult ClassifyFailure(
@@ -308,51 +239,39 @@ internal sealed class BuiltinTransferBackend : ITransferBackend
                 "download.transfer.network");
         }
 
-        if (FindException<HttpRequestException>(exception) is { } httpException)
+        if (FindException<BuiltinResumeRejectedException>(exception) != null)
         {
-            return httpException.StatusCode switch
-            {
-                HttpStatusCode.TooManyRequests => DownloadTransferResult.Failed(
-                    DownloadTransferFailureKind.RateLimited,
-                    "download.transfer.http-429"),
-                HttpStatusCode.Forbidden => DownloadTransferResult.Failed(
-                    DownloadTransferFailureKind.ExpiredAddress,
-                    "download.transfer.http-403"),
-                HttpStatusCode.NotFound => DownloadTransferResult.Failed(
-                    DownloadTransferFailureKind.ExpiredAddress,
-                    "download.transfer.http-404"),
-                HttpStatusCode.RequestTimeout => DownloadTransferResult.Failed(
-                    DownloadTransferFailureKind.TransientNetwork,
-                    "download.transfer.http-408"),
-                >= HttpStatusCode.InternalServerError => DownloadTransferResult.Failed(
-                    DownloadTransferFailureKind.TransientNetwork,
-                    $"download.transfer.http-{(int)httpException.StatusCode.Value}"),
-                null => DownloadTransferResult.Failed(
-                    DownloadTransferFailureKind.TransientNetwork,
-                    "download.transfer.network"),
-                _ => DownloadTransferResult.Failed(
-                    DownloadTransferFailureKind.Permanent,
-                    $"download.transfer.http-{(int)httpException.StatusCode.Value}")
-            };
+            return DownloadTransferResult.Failed(
+                DownloadTransferFailureKind.ResumeRejected,
+                "download.transfer.resume-rejected");
         }
 
-        if (FindException<TimeoutException>(exception) != null ||
-            FindException<OperationCanceledException>(exception) != null ||
-            FindException<SocketException>(exception) != null ||
-            FindException<HttpIOException>(exception) != null ||
-            FindException<IncompleteDownloadException>(exception) != null ||
-            reportedCanceled)
+        if (FindException<BuiltinHttpStatusException>(exception) is { } statusException)
+        {
+            return ClassifyHttpStatus(statusException.StatusCode, statusException.RetryAfter);
+        }
+
+        if (FindException<HttpRequestException>(exception) is { } httpException)
+        {
+            return ClassifyHttpStatus(httpException.StatusCode, retryAfter: null);
+        }
+
+        if (FindException<TimeoutException>(exception) != null
+            || FindException<OperationCanceledException>(exception) != null
+            || FindException<SocketException>(exception) != null
+            || FindException<HttpIOException>(exception) != null
+            || reportedCanceled)
         {
             return DownloadTransferResult.Failed(
                 DownloadTransferFailureKind.TransientNetwork,
                 "download.transfer.timeout");
         }
 
-        if (FindException<UnauthorizedAccessException>(exception) != null ||
-            FindException<DirectoryNotFoundException>(exception) != null ||
-            FindException<DriveNotFoundException>(exception) != null ||
-            FindException<PathTooLongException>(exception) != null ||
-            FindException<IOException>(exception) != null)
+        if (FindException<UnauthorizedAccessException>(exception) != null
+            || FindException<DirectoryNotFoundException>(exception) != null
+            || FindException<DriveNotFoundException>(exception) != null
+            || FindException<PathTooLongException>(exception) != null
+            || FindException<IOException>(exception) != null)
         {
             return DownloadTransferResult.Failed(
                 DownloadTransferFailureKind.Disk,
@@ -366,6 +285,84 @@ internal sealed class BuiltinTransferBackend : ITransferBackend
             exception == null
                 ? "download.transfer.invalid-media"
                 : "download.transfer.permanent");
+    }
+
+    private static DownloadTransferResult ClassifyHttpStatus(
+        HttpStatusCode? statusCode,
+        TimeSpan? retryAfter)
+    {
+        return statusCode switch
+        {
+            HttpStatusCode.TooManyRequests => DownloadTransferResult.Failed(
+                DownloadTransferFailureKind.RateLimited,
+                "download.transfer.http-429",
+                retryAfter),
+            HttpStatusCode.Forbidden => DownloadTransferResult.Failed(
+                DownloadTransferFailureKind.ExpiredAddress,
+                "download.transfer.http-403"),
+            HttpStatusCode.NotFound => DownloadTransferResult.Failed(
+                DownloadTransferFailureKind.ExpiredAddress,
+                "download.transfer.http-404"),
+            HttpStatusCode.RequestTimeout => DownloadTransferResult.Failed(
+                DownloadTransferFailureKind.TransientNetwork,
+                "download.transfer.http-408"),
+            >= HttpStatusCode.InternalServerError => DownloadTransferResult.Failed(
+                DownloadTransferFailureKind.TransientNetwork,
+                $"download.transfer.http-{(int)statusCode.Value}"),
+            null => DownloadTransferResult.Failed(
+                DownloadTransferFailureKind.TransientNetwork,
+                "download.transfer.network"),
+            _ => DownloadTransferResult.Failed(
+                DownloadTransferFailureKind.Permanent,
+                $"download.transfer.http-{(int)statusCode.Value}")
+        };
+    }
+
+    private static SocketsHttpHandler CreateHttpHandler(
+        NetworkApplicationSettings network,
+        Uri? proxyAddress)
+    {
+        var handler = new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            AutomaticDecompression = DecompressionMethods.None,
+            ConnectTimeout = TimeSpan.FromSeconds(15),
+            MaxConnectionsPerServer = network.Split,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+            UseCookies = false,
+            UseProxy = proxyAddress != null
+        };
+        if (proxyAddress != null)
+        {
+            handler.Proxy = new WebProxy(proxyAddress)
+            {
+                BypassProxyOnLocal = false
+            };
+        }
+
+        return handler;
+    }
+
+    private static Uri? ResolveProxyAddress(NetworkApplicationSettings network)
+    {
+        if (network.IsHttpProxy != AllowStatus.Yes)
+        {
+            return null;
+        }
+
+        try
+        {
+            return new UriBuilder(
+                Uri.UriSchemeHttp,
+                network.HttpProxy,
+                network.HttpProxyListenPort).Uri;
+        }
+        catch (UriFormatException exception)
+        {
+            throw new InvalidOperationException(
+                "The built-in download proxy address is invalid.",
+                exception);
+        }
     }
 
     private static TException? FindException<TException>(Exception? exception)
@@ -390,7 +387,11 @@ internal sealed class BuiltinTransferBackend : ITransferBackend
         long receivedBytes = 0,
         long totalBytesToReceive = 0)
     {
-        var result = DownloadFileIntegrity.Check(file, expectedBytes, receivedBytes, totalBytesToReceive);
+        var result = DownloadFileIntegrity.Check(
+            file,
+            expectedBytes,
+            receivedBytes,
+            totalBytesToReceive);
         if (!result.IsUsable)
         {
             _logger.LogInformationMessage(result.Reason ?? "Downloaded media file is not usable.");
@@ -399,4 +400,40 @@ internal sealed class BuiltinTransferBackend : ITransferBackend
         return result.IsUsable;
     }
 
+    private sealed class BuiltinDownloadSpeedSampler(TimeProvider timeProvider)
+    {
+        private readonly TimeProvider _timeProvider = timeProvider;
+        private readonly Lock _sync = new();
+        private long _lastBytes;
+        private DateTimeOffset? _lastSampleAt;
+        private long _speed;
+
+        public long Sample(long receivedBytes)
+        {
+            var now = _timeProvider.GetUtcNow();
+            lock (_sync)
+            {
+                if (_lastSampleAt is not { } lastSampleAt)
+                {
+                    _lastSampleAt = now;
+                    _lastBytes = receivedBytes;
+                    return 0;
+                }
+
+                var elapsed = now - lastSampleAt;
+                if (elapsed < TimeSpan.FromMilliseconds(100))
+                {
+                    return _speed;
+                }
+
+                var bytes = Math.Max(0, receivedBytes - _lastBytes);
+                _speed = elapsed.TotalSeconds <= 0
+                    ? 0
+                    : checked((long)Math.Min(bytes / elapsed.TotalSeconds, long.MaxValue));
+                _lastSampleAt = now;
+                _lastBytes = receivedBytes;
+                return _speed;
+            }
+        }
+    }
 }

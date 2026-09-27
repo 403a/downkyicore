@@ -23,7 +23,6 @@ internal static class DownloadTransferRequestFactory
         ArgumentNullException.ThrowIfNull(projections);
         ArgumentNullException.ThrowIfNull(stateWriter);
         ArgumentNullException.ThrowIfNull(ensureActive);
-        var projection = projections.GetRequiredDownloadingProjection(taskId);
         var snapshot = projections.GetRequiredSnapshot(taskId);
         return new DownloadTransferRequest(
             taskId,
@@ -41,7 +40,6 @@ internal static class DownloadTransferRequestFactory
                 taskId,
                 backendIdentity,
                 token),
-            service => projection.DownloadService = service,
             cancellationToken,
             stagingDirectory);
     }

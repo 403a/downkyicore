@@ -22,6 +22,10 @@
         <ProjectReference Include="..\src\DownKyi.Desktop\DownKyi.Desktop.csproj" />
     </ItemGroup>
     <ItemGroup>
+        <None Include="..\THIRD-PARTY-NOTICES.md"
+              Link="THIRD-PARTY-NOTICES.md"
+              CopyToOutputDirectory="PreserveNewest"
+              CopyToPublishDirectory="PreserveNewest" />
         <None Include="..\DownKyi.Core\Binary\$(DownKyiAssetRuntimeIdentifier)\aria2\*"
               Link="aria2\%(Filename)%(Extension)"
               Visible="false"
