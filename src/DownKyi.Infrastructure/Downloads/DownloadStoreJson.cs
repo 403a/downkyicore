@@ -7,6 +7,27 @@ namespace DownKyi.Infrastructure.Downloads;
 
 internal static class DownloadStoreJson
 {
+    private const string SelectedSubtitleTrackIds = "selectedSubtitleTrackIds";
+    private const string DefaultSubtitleTrackId = "defaultSubtitleTrackId";
+
+    public static string WriteContentSelection(DownloadContentSelection value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        var payload = value.ToLegacyMap()
+            .ToDictionary(item => item.Key, item => (object)item.Value, StringComparer.Ordinal);
+        if (value.SelectedSubtitleTrackIds is { } selectedIds)
+        {
+            payload[SelectedSubtitleTrackIds] = selectedIds;
+        }
+
+        if (value.DefaultSubtitleTrackId is { } defaultId)
+        {
+            payload[DefaultSubtitleTrackId] = defaultId;
+        }
+
+        return JsonSerializer.Serialize(payload);
+    }
+
     public static string WriteBooleanMap(IEnumerable<KeyValuePair<string, bool>> values)
     {
         ArgumentNullException.ThrowIfNull(values);
@@ -106,6 +127,11 @@ internal static class DownloadStoreJson
             var builder = ImmutableDictionary.CreateBuilder<string, bool>(StringComparer.Ordinal);
             foreach (var property in root.EnumerateObject())
             {
+                if (property.NameEquals(SelectedSubtitleTrackIds) || property.NameEquals(DefaultSubtitleTrackId))
+                {
+                    continue;
+                }
+
                 if (property.Value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
                 {
                     throw Corrupt(fieldName, $"Property '{property.Name}' is not a boolean.");
@@ -115,6 +141,33 @@ internal static class DownloadStoreJson
             }
 
             return builder.ToImmutable();
+        });
+    }
+
+    public static DownloadContentSelection ReadContentSelection(string json, string fieldName)
+    {
+        var result = DownloadContentSelection.FromLegacyMap(ReadBooleanMap(json, fieldName));
+        return Read(json, fieldName, root =>
+        {
+            var selectedIds = root.TryGetProperty(SelectedSubtitleTrackIds, out var selected)
+                ? selected.Deserialize<long[]>()?.ToImmutableArray()
+                  ?? throw Corrupt(fieldName, "Selected subtitle track ids are null.")
+                : (ImmutableArray<long>?)null;
+            var defaultId = root.TryGetProperty(DefaultSubtitleTrackId, out var defaultTrack)
+                ? defaultTrack.Deserialize<long>()
+                : (long?)null;
+
+            if (defaultId is { } selectedDefault &&
+                (selectedIds is not { } ids || !ids.Contains(selectedDefault)))
+            {
+                throw Corrupt(fieldName, "Default subtitle track is not selected.");
+            }
+
+            return result with
+            {
+                SelectedSubtitleTrackIds = selectedIds,
+                DefaultSubtitleTrackId = defaultId
+            };
         });
     }
 
