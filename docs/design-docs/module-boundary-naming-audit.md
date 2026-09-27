@@ -158,7 +158,7 @@ Gate 9 將跨 namespace simple-name duplicates 由 9 組降為 4 組。`ViewSeas
 
 Generic-name baseline 已由 5 項降為 0：播放品質、ASS formatting、application-data paths/storage 與 video-page projection 都使用責任名稱。測試仍掃描 `Constant`、`Utils` 與 `StorageManager`，但不再保留任何 allowlist entry。
 
-File/type mismatch baseline 已由 4 項降為 0。Bilibili JSON DTO 與 NFO XML DTO 只拆到同名檔案，沒有改動 CLR type、`JsonProperty`、XML element/attribute 或 wire shape；async command 只修正檔名。`Languages` resource URI 與 `DownKyi.Core.FFmpeg` casing 另由跨平台 architecture test 固定。
+File/type mismatch baseline 已由 4 項降為 0。Bilibili JSON DTO 與 NFO XML DTO 只拆到同名檔案，沒有改動 CLR type、`JsonProperty`、XML element/attribute 或 wire shape；async command 只修正檔名。`DownKyi.Core.FFmpeg` casing 另由跨平台 architecture test 固定。
 
 附件提供的「檔名必須等於第一個型別」正規表示式會誤判 partial、`.axaml.cs`、多型別 DTO 與 interface companion records。此方案不採用。
 

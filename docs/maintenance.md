@@ -238,6 +238,5 @@ file-exists check 取代。
 
 ## 固定名稱
 
-- Language resource：`src/DownKyi.Desktop/Languages/Default.axaml`。
 - FFmpeg namespace：`DownKyi.Core.FFmpeg`。
-- 禁止歷史拼法 `Languanges` 與 source-directory casing `FFMpeg`。
+- 禁止 source-directory casing `FFMpeg`。
