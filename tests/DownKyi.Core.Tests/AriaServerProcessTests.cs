@@ -25,7 +25,11 @@ public sealed class AriaServerProcessTests
 
         Assert.Contains("application files are incomplete", exception.Message,
             StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("complete release archive", exception.Message,
+        Assert.Contains("Redownload and reinstall DownKyi", exception.Message,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("complete release package", exception.Message,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("portable archive", exception.Message,
             StringComparison.OrdinalIgnoreCase);
         Assert.Contains("preserving all subdirectories", exception.Message,
             StringComparison.OrdinalIgnoreCase);

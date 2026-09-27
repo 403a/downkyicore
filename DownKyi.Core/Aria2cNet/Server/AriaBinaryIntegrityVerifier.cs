@@ -14,7 +14,9 @@ internal static class AriaBinaryIntegrityVerifier
         {
             throw new FileNotFoundException(
                 "The application files are incomplete: the packaged aria2 executable is missing. " +
-                "Re-extract the complete release archive while preserving all subdirectories, " +
+                "Redownload and reinstall DownKyi from a complete release package. " +
+                "If you use the portable archive, extract the entire archive while preserving " +
+                "all subdirectories, " +
                 $"then confirm that 'aria2/{Path.GetFileName(executablePath)}' exists.",
                 executablePath);
         }

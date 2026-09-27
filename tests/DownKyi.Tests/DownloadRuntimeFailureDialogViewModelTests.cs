@@ -62,7 +62,9 @@ public sealed class DownloadRuntimeFailureDialogViewModelTests
             AppDialog.DownloadRuntimeFailure,
             new Dictionary<string, object?> { ["failure"] = failure }));
 
-        Assert.Contains("Re-extract the complete release archive", viewModel.DiagnosticText,
+        Assert.Contains("Redownload and reinstall DownKyi", viewModel.DiagnosticText,
+            StringComparison.Ordinal);
+        Assert.Contains("If you use the portable archive", viewModel.DiagnosticText,
             StringComparison.Ordinal);
         Assert.Contains("'aria2/aria2c.exe'", viewModel.DiagnosticText,
             StringComparison.Ordinal);
