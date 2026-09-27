@@ -132,7 +132,7 @@ internal sealed class FlightRecorder
             var window = deadline?.SnapshotWindow ?? (recorderTimeout < TimeSpan.FromSeconds(1)
                 ? recorderTimeout
                 : TimeSpan.FromSeconds(1));
-            report.FinalSnapshot = await Task.Run(() => snapshotCapture(rootPid, window))
+            report.FinalSnapshot = await snapshotCapture(rootPid, window)
                 .WaitAsync(window).ConfigureAwait(false);
             if (deadline is null)
             {
