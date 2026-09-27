@@ -203,6 +203,7 @@ public sealed class ContentDownloadCoordinatorTests
             DownloadContentSelection.None with { Video = true });
 
         public Task<DownloadAddSelection?> SelectDownloadAsync(
+            VideoPage? subtitlePage = null,
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();

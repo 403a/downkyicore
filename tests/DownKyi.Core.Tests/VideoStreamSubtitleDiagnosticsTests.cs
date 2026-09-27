@@ -117,6 +117,32 @@ public sealed class VideoStreamSubtitleDiagnosticsTests
         Assert.False(subtitleRequest.IncludeBuvid);
     }
 
+    [Fact]
+    public async Task SelectedTrackIdsFilterBeforeSubtitleBodiesAreRequested()
+    {
+        var requestedAddresses = new List<string>();
+        var client = new StubBilibiliApiClient((request, _) =>
+        {
+            requestedAddresses.Add(request.RequestAddress);
+            return Task.FromResult(requestedAddresses.Count == 1
+                ? """
+                  {"code":0,"data":{"aid":1,"bvid":"BV1xx411c7mD","cid":2,"subtitle":{"subtitles":[{"id":11,"lan":"zh","lan_doc":"Chinese","subtitle_url":"//example.test/zh.json","type":0},{"id":22,"lan":"en","lan_doc":"English","subtitle_url":"//example.test/en.json","type":1}]}}}
+                  """
+                : """{"body":[{"from":0,"to":1,"content":"selected"}]}""");
+        });
+
+        var result = await client.GetSubtitleAsync(
+            Keys, 1702204169, 1, "BV1xx411c7mD", 2,
+            reportParseFailure: null,
+            TestContext.Current.CancellationToken,
+            selectedTrackIds: [22]);
+
+        var subtitle = Assert.Single(result);
+        Assert.Equal(22, subtitle.TrackId);
+        Assert.Equal(2, requestedAddresses.Count);
+        Assert.Equal("https://example.test/en.json", requestedAddresses[1]);
+    }
+
     [Theory]
     [InlineData("file://aisubtitle.hdslb.com/bfs/ai_subtitle/example.json")]
     [InlineData("ftp://aisubtitle.hdslb.com/bfs/ai_subtitle/example.json")]

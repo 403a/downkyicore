@@ -81,7 +81,7 @@ internal sealed class DownloadArtifactsStage : IDownloadPipelineStage
                         Path.GetFileName(context.WorkingBasePath) + "*.srt").ToArray()))
                 : await _artifactWriter.DownloadSubtitleAsync(
                     context.TaskId, input.Metadata, context.WorkingBasePath,
-                    cancellationToken).ConfigureAwait(true);
+                    input.RequestedContent, cancellationToken).ConfigureAwait(true);
             if (!subtitleResult.TryGetValue(out var subtitles))
             {
                 return StageFailure(subtitleResult.Error);

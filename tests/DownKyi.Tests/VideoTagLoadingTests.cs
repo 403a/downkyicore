@@ -161,6 +161,46 @@ public sealed class VideoTagLoadingTests : IDisposable
     }
 
     [Fact]
+    public async Task SubtitleDiscoveryFailureStillOpensDownloadSettings()
+    {
+        var client = new TestBilibiliApiClient
+        {
+            GetStringAsyncHandler = (_, _) => Task.FromException<string>(
+                new HttpRequestException("subtitle endpoint unavailable"))
+        };
+        using var context = CreateContext(generateMetadata: false, client: client);
+        var page = CreatePage(_ => Task.FromResult<IReadOnlyList<string>>([]));
+
+        var selection = await context.Service.SelectDownloadAsync(
+            page,
+            TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        Assert.Null(selection);
+        Assert.Single(context.Dialogs.Requests);
+    }
+
+    [Theory]
+    [InlineData("{\"code\":0,\"data\":{\"aid\":1,\"bvid\":\"BV1test\",\"cid\":2,\"subtitle\":null}}")]
+    [InlineData("{\"code\":0,\"data\":{\"aid\":1,\"bvid\":\"BV1test\",\"cid\":2,\"subtitle\":{\"subtitles\":null}}}")]
+    public async Task MissingSubtitleContainerOpensDownloadSettingsWithNoTracks(string response)
+    {
+        var client = new TestBilibiliApiClient
+        {
+            GetStringAsyncHandler = (_, _) => Task.FromResult(response)
+        };
+        using var context = CreateContext(generateMetadata: false, client: client);
+        var page = CreatePage(_ => Task.FromResult<IReadOnlyList<string>>([]));
+
+        var selection = await context.Service.SelectDownloadAsync(
+            page,
+            TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        Assert.Null(selection);
+        var request = Assert.Single(context.Dialogs.Requests);
+        Assert.Empty(DownloadSettingsDialog.ReadSubtitleTracks(request));
+    }
+
+    [Fact]
     public async Task CanceledTagLoadIsNotPermanentlyCached()
     {
         var attempts = 0;
@@ -474,7 +514,8 @@ public sealed class VideoTagLoadingTests : IDisposable
         bool generateMetadata,
         IPhysicalOutputPathResolver? resolver = null,
         IDownloadTaskQueue? taskQueue = null,
-        IDownloadRuntimeAvailability? runtimeAvailability = null)
+        IDownloadRuntimeAvailability? runtimeAvailability = null,
+        TestBilibiliApiClient? client = null)
     {
         Directory.CreateDirectory(_directory);
         return new DownloadTestContext(
@@ -482,7 +523,8 @@ public sealed class VideoTagLoadingTests : IDisposable
             generateMetadata,
             resolver,
             taskQueue,
-            runtimeAvailability);
+            runtimeAvailability,
+            client);
     }
 
     private static DownloadAddSelection CreateSelection(
@@ -539,7 +581,8 @@ public sealed class VideoTagLoadingTests : IDisposable
             bool generateMetadata,
             IPhysicalOutputPathResolver? resolver,
             IDownloadTaskQueue? taskQueue,
-            IDownloadRuntimeAvailability? runtimeAvailability)
+            IDownloadRuntimeAvailability? runtimeAvailability,
+            TestBilibiliApiClient? client)
         {
             _settings = new DownKyi.Core.Settings.SettingsStore(settingsPath);
             _settings.Update(settings => settings with
@@ -565,7 +608,7 @@ public sealed class VideoTagLoadingTests : IDisposable
             Logger = new RecordingLogger<DownloadMovieMetadataBuilder>();
             Dialogs = new RecordingDialogService();
             var desktop = new TestDesktopInteractionContext();
-            var client = new TestBilibiliApiClient();
+            client ??= new TestBilibiliApiClient();
             _admission = new DownloadTaskAdmissionService(
                 ListState,
                 _taskService,

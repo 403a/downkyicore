@@ -1,6 +1,7 @@
 using DownKyi.Application.Bilibili;
 using DownKyi.Application.Downloads;
 using DownKyi.Core.BiliApi.VideoStream;
+using DownKyi.Core.BiliApi.VideoStream.Models;
 using DownKyi.Domain.Downloads;
 using DownKyi.Presentation;
 using DownKyi.Services;
@@ -72,7 +73,8 @@ public sealed class VideoDetailDownloadCoordinatorTests
         var session = new RecordingSession(admissionAllowed: true);
         var coordinator = new VideoDetailDownloadCoordinator(new RecordingFactory(session));
         var video = new VideoInfoView();
-        IList<VideoSection> sections = [new VideoSection()];
+        var page = new VideoPage { IsSelected = true, PlayUrl = new PlayUrl() };
+        IList<VideoSection> sections = [new VideoSection { VideoPages = [page] }];
 
         var result = await coordinator.AddAsync(
             "BV17x411w7KC",
@@ -87,6 +89,7 @@ public sealed class VideoDetailDownloadCoordinatorTests
         Assert.Same(video, session.CreatedPreparedDownload!.Video);
         Assert.Same(session.Selection, session.ReceivedSelection);
         Assert.Same(session.CreatedPreparedDownload, session.ReceivedPreparedDownload);
+        Assert.Same(page, session.ReceivedSubtitlePage);
     }
 
     private sealed class RecordingFactory(IAddToDownloadSession? session = null)
@@ -123,6 +126,8 @@ public sealed class VideoDetailDownloadCoordinatorTests
 
         public PreparedDownload? ReceivedPreparedDownload { get; private set; }
 
+        public VideoPage? ReceivedSubtitlePage { get; private set; }
+
         public Task<bool> EnsureAdmissionAsync(CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -131,9 +136,11 @@ public sealed class VideoDetailDownloadCoordinatorTests
         }
 
         public Task<DownloadAddSelection?> SelectDownloadAsync(
+            VideoPage? subtitlePage = null,
             CancellationToken cancellationToken = default)
         {
             DirectorySelectionCount++;
+            ReceivedSubtitlePage = subtitlePage;
             return Task.FromResult<DownloadAddSelection?>(Selection);
         }
 

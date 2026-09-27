@@ -11,7 +11,9 @@ internal interface IAddToDownloadSession
 {
     Task<bool> EnsureAdmissionAsync(CancellationToken cancellationToken = default);
 
-    Task<DownloadAddSelection?> SelectDownloadAsync(CancellationToken cancellationToken = default);
+    Task<DownloadAddSelection?> SelectDownloadAsync(
+        VideoPage? subtitlePage = null,
+        CancellationToken cancellationToken = default);
 
     Task<PreparedDownload> PrepareAsync(
         VideoInfoView videoInfoView,

@@ -9,6 +9,10 @@ public sealed record DownloadContentSelection(
     bool Subtitle,
     bool Cover)
 {
+    public ImmutableArray<long>? SelectedSubtitleTrackIds { get; init; }
+
+    public long? DefaultSubtitleTrackId { get; init; }
+
     private const string AudioKey = "downloadAudio";
     private const string VideoKey = "downloadVideo";
     private const string DanmakuKey = "downloadDanmaku";
