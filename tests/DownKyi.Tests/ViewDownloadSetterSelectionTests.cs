@@ -29,6 +29,7 @@ public sealed class ViewDownloadSetterSelectionTests
             new(22, "en", "English", 1, "//en")
         ]));
         viewModel.SubtitleTracks[0].IsSelected = false;
+        viewModel.SubtitleTracks[1].IsDefault = true;
         AppDialogResult? result = null;
         viewModel.CloseRequested += (_, value) => result = value;
 
@@ -87,7 +88,7 @@ public sealed class ViewDownloadSetterSelectionTests
     }
 
     [Fact]
-    public void DownloadAllSelectsEverySubtitleTrackAndDefault()
+    public void DownloadAllDoesNotSelectSubtitleTracksOrDefault()
     {
         using var settings = new TestSettingsStore();
         var interaction = new TestDesktopInteractionContext();
@@ -95,7 +96,10 @@ public sealed class ViewDownloadSetterSelectionTests
             interaction.Notifications,
             new StubFilePickerService(),
             settings.Store,
-            NullLogger<ViewDownloadSetterViewModel>.Instance);
+            NullLogger<ViewDownloadSetterViewModel>.Instance)
+        {
+            DownloadSubtitle = false
+        };
         viewModel.OnDialogOpened(DownloadSettingsDialog.CreateRequest(
         [
             new(11, "zh", "中文", 0, "//zh"),
@@ -105,12 +109,12 @@ public sealed class ViewDownloadSetterSelectionTests
 
         viewModel.DownloadAllCommand.Execute(null);
 
-        Assert.All(viewModel.SubtitleTracks, track => Assert.True(track.IsSelected));
-        Assert.True(viewModel.SubtitleTracks[0].IsDefault);
+        Assert.All(viewModel.SubtitleTracks, track => Assert.False(track.IsSelected));
+        Assert.DoesNotContain(viewModel.SubtitleTracks, track => track.IsDefault);
     }
 
     [Fact]
-    public void SelectingEveryContentOptionSelectsEverySubtitleTrackAndDefault()
+    public void DerivedDownloadAllDoesNotSelectSubtitleTracksOrDefault()
     {
         using var settings = new TestSettingsStore();
         var interaction = new TestDesktopInteractionContext();
@@ -144,8 +148,40 @@ public sealed class ViewDownloadSetterSelectionTests
         viewModel.DownloadCoverCommand.Execute(null);
 
         Assert.True(viewModel.DownloadAll);
-        Assert.All(viewModel.SubtitleTracks, track => Assert.True(track.IsSelected));
-        Assert.True(viewModel.SubtitleTracks[0].IsDefault);
+        Assert.All(viewModel.SubtitleTracks, track => Assert.False(track.IsSelected));
+        Assert.DoesNotContain(viewModel.SubtitleTracks, track => track.IsDefault);
+    }
+
+    [Fact]
+    public void DownloadCommandDoesNotReplaceDeselectedDefaultSubtitle()
+    {
+        using var settings = new TestSettingsStore();
+        var interaction = new TestDesktopInteractionContext();
+        var viewModel = new ViewDownloadSetterViewModel(
+            interaction.Notifications,
+            new StubFilePickerService(),
+            settings.Store,
+            NullLogger<ViewDownloadSetterViewModel>.Instance)
+        {
+            Directory = Path.GetTempPath(),
+            DownloadSubtitle = true
+        };
+        viewModel.OnDialogOpened(DownloadSettingsDialog.CreateRequest(
+        [
+            new(11, "zh", "中文", 0, "//zh"),
+            new(22, "en", "English", 1, "//en")
+        ]));
+        viewModel.SubtitleTracks[0].IsSelected = false;
+        AppDialogResult? result = null;
+        viewModel.CloseRequested += (_, value) => result = value;
+
+        viewModel.DownloadCommand.Execute(null);
+
+        var selection = DownloadSettingsDialog.DecodeResult(Assert.IsType<AppDialogResult>(result));
+        Assert.True(selection.HasValue);
+        Assert.Equal([22L], selection.Value.RequestedContent.SelectedSubtitleTrackIds.GetValueOrDefault().ToArray());
+        Assert.Null(selection.Value.RequestedContent.DefaultSubtitleTrackId);
+        Assert.DoesNotContain(viewModel.SubtitleTracks, track => track.IsDefault);
     }
 
     [Fact]
@@ -153,14 +189,15 @@ public sealed class ViewDownloadSetterSelectionTests
     {
         var track = new SubtitleTrackItem(
             new DownloadSettingsDialog.SubtitleTrack(11, "zh", "中文", 0, "//zh"),
-            isSelected: false,
-            isDefault: false);
+            isSelected: true,
+            isDefault: true);
         var changed = new List<string?>();
         track.PropertyChanged += (_, eventArgs) => changed.Add(eventArgs.PropertyName);
 
-        track.IsSelected = true;
+        track.IsSelected = false;
 
         Assert.Contains(nameof(track.IsSelected), changed);
+        Assert.False(track.IsDefault);
     }
 
     private sealed class StubFilePickerService : IFilePickerService

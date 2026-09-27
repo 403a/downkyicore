@@ -30,7 +30,7 @@ internal static class DownloadSettingsDialog
             var selected = requestedContent.Subtitle ? ImmutableArray.CreateRange(selectedTrackIds) : [];
             defaultTrackId = defaultTrackId is { } candidate && selected.IndexOf(candidate) >= 0
                 ? candidate
-                : selected.Length > 0 ? selected[0] : null;
+                : null;
             requestedContent = requestedContent with
             {
                 SelectedSubtitleTrackIds = selected,

@@ -267,7 +267,6 @@ internal class ViewDownloadSetterViewModel : BaseDialogViewModel
             DownloadDanmaku = true;
             DownloadSubtitle = true;
             DownloadCover = true;
-            SelectAllSubtitleTracks();
         }
         else
         {
@@ -279,19 +278,6 @@ internal class ViewDownloadSetterViewModel : BaseDialogViewModel
         }
 
         SetVideoContent();
-    }
-
-    private void SelectAllSubtitleTracks()
-    {
-        foreach (var track in SubtitleTracks)
-        {
-            track.IsSelected = true;
-        }
-
-        if (SubtitleTracks.Count > 0 && !SubtitleTracks.Any(track => track.IsDefault))
-        {
-            SubtitleTracks[0].IsDefault = true;
-        }
     }
 
     // 音频选择事件
@@ -367,10 +353,6 @@ internal class ViewDownloadSetterViewModel : BaseDialogViewModel
     private void UpdateDownloadAll()
     {
         DownloadAll = DownloadAudio && DownloadVideo && DownloadDanmaku && DownloadSubtitle && DownloadCover;
-        if (DownloadAll)
-        {
-            SelectAllSubtitleTracks();
-        }
     }
 
     // 确认下载事件
@@ -464,6 +446,14 @@ internal sealed partial class SubtitleTrackItem(
 
     [ObservableProperty]
     private bool _isDefault = isDefault;
+
+    partial void OnIsSelectedChanged(bool value)
+    {
+        if (!value)
+        {
+            IsDefault = false;
+        }
+    }
 
     public long TrackId { get; } = track.TrackId;
     public string Language { get; } = track.Language;
