@@ -182,7 +182,7 @@ internal sealed class AddToDownloadService : IAddToDownloadSession
                             subtitlePage.Cid, cancellationToken),
                         TimeProvider.System,
                         cancellationToken).ConfigureAwait(false);
-                    subtitleTracks = player?.Subtitle.Subtitles.Select(track =>
+                    subtitleTracks = player?.Subtitle?.Subtitles?.Select(track =>
                         new DownloadSettingsDialog.SubtitleTrack(
                             track.Id, track.Lan, track.LanDoc, track.Type, track.SubtitleAddress))
                         .ToArray() ?? [];

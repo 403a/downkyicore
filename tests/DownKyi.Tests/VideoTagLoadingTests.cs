@@ -179,6 +179,27 @@ public sealed class VideoTagLoadingTests : IDisposable
         Assert.Single(context.Dialogs.Requests);
     }
 
+    [Theory]
+    [InlineData("{\"code\":0,\"data\":{\"aid\":1,\"bvid\":\"BV1test\",\"cid\":2,\"subtitle\":null}}")]
+    [InlineData("{\"code\":0,\"data\":{\"aid\":1,\"bvid\":\"BV1test\",\"cid\":2,\"subtitle\":{\"subtitles\":null}}}")]
+    public async Task MissingSubtitleContainerOpensDownloadSettingsWithNoTracks(string response)
+    {
+        var client = new TestBilibiliApiClient
+        {
+            GetStringAsyncHandler = (_, _) => Task.FromResult(response)
+        };
+        using var context = CreateContext(generateMetadata: false, client: client);
+        var page = CreatePage(_ => Task.FromResult<IReadOnlyList<string>>([]));
+
+        var selection = await context.Service.SelectDownloadAsync(
+            page,
+            TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        Assert.Null(selection);
+        var request = Assert.Single(context.Dialogs.Requests);
+        Assert.Empty(DownloadSettingsDialog.ReadSubtitleTracks(request));
+    }
+
     [Fact]
     public async Task CanceledTagLoadIsNotPermanentlyCached()
     {
