@@ -242,6 +242,62 @@ public sealed class PlayUrlEnvelopeContractTests
     }
 
     [Fact]
+    public async Task BangumiV2FullPlaybackRemainsValid()
+    {
+        var client = CreateClientFromBody(
+            """
+            {"code":0,"message":"success","result":{"video_info":{"is_preview":0,"durl":[{"order":1}],"dash":{"video":[],"audio":[]}}}}
+            """);
+
+        var payload = await client.GetBangumiPlayUrlAsync(
+            1,
+            "BV1fixture",
+            2,
+            3489,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.False(payload?.IsPreview);
+        Assert.Single(payload?.Durl ?? []);
+    }
+
+    [Fact]
+    public async Task BangumiV2PlayCheckPreviewIsRejected()
+    {
+        var client = CreateClient("playurl-bangumi-v2-preview.json");
+
+        var exception = await Assert.ThrowsAsync<BilibiliApiResponseException>(() =>
+            client.GetBangumiPlayUrlAsync(
+                1,
+                "BV1fixture",
+                2,
+                3489,
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        Assert.Equal(nameof(VideoStreamApi.GetBangumiPlayUrlAsync), exception.Operation);
+        Assert.Contains("preview-only", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task BangumiV2IsPreviewFlagIsRejected()
+    {
+        var client = CreateClientFromBody(
+            """
+            {"code":0,"message":"success","result":{"video_info":{"is_preview":1,"durl":[{"order":1}],"dash":{"video":[],"audio":[]}}}}
+            """);
+
+        var exception = await Assert.ThrowsAsync<BilibiliApiResponseException>(() =>
+            client.GetBangumiPlayUrlAsync(
+                1,
+                "BV1fixture",
+                2,
+                3489,
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        Assert.Equal(nameof(VideoStreamApi.GetBangumiPlayUrlAsync), exception.Operation);
+        Assert.Contains("preview-only", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task OrdinaryVideoEndpointRejectsEmptyDataEnvelope()
     {
         var client = CreateClient("playurl-empty-data.json");

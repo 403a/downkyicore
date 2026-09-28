@@ -23,6 +23,7 @@ public class PlayUrl : BaseModel
     // quality
     // format
     // timelength
+    [JsonProperty("is_preview")] public bool? IsPreview { get; set; }
     // accept_format
     [JsonProperty("accept_description")] public IReadOnlyList<string> AcceptDescription { get; set; } = Array.Empty<string>();
 

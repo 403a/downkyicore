@@ -18,6 +18,17 @@ internal static class BangumiPlayUrlV2Contract
             result.VideoInfo,
             "result.video_info",
             operationName);
+        if (string.Equals(
+                result.PlayCheck?.PlayDetail,
+                "PLAY_PREVIEW",
+                StringComparison.Ordinal)
+            || payload.IsPreview == true)
+        {
+            throw new BilibiliApiResponseException(
+                operationName,
+                $"{operationName} returned preview-only playback content.");
+        }
+
         if (payload.Durl == null)
         {
             throw MalformedPayload(operationName, "result.video_info.durl");
