@@ -827,6 +827,9 @@ internal sealed record BuiltinRangeResourceIdentity(
     string? StrongETag,
     DateTimeOffset? LastModified)
 {
+    private static readonly TimeSpan MinimumStrongLastModifiedAge =
+        TimeSpan.FromSeconds(60);
+
     public bool CanResume => StrongETag != null || LastModified != null;
 
     public string? IfRangeValue => StrongETag ?? LastModified?.ToString("R");
@@ -842,7 +845,7 @@ internal sealed record BuiltinRangeResourceIdentity(
             : null;
         var lastModified = response.Content.Headers.LastModified is { } modified
                            && response.Headers.Date is { } responseDate
-                           && responseDate - modified >= TimeSpan.FromSeconds(1)
+                           && responseDate - modified >= MinimumStrongLastModifiedAge
             ? (DateTimeOffset?)modified
             : null;
         return new BuiltinRangeResourceIdentity(

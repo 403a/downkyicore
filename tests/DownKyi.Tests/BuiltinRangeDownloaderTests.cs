@@ -259,6 +259,22 @@ public sealed class BuiltinRangeDownloaderTests
     }
 
     [Fact]
+    public void LastModifiedInsideClockSkewWindowCannotResume()
+    {
+        var lastModified = new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero);
+        using var response = new HttpResponseMessage(HttpStatusCode.PartialContent)
+        {
+            Content = new ByteArrayContent([0])
+        };
+        response.Content.Headers.LastModified = lastModified;
+        response.Headers.Date = lastModified.AddSeconds(59);
+
+        var identity = BuiltinRangeResourceIdentity.Create(MediaAddress, response);
+
+        Assert.False(identity.CanResume);
+    }
+
+    [Fact]
     public async Task ChangedChunkEntityTagIsRejectedWhenServerIgnoresIfRange()
     {
         var payload = CreatePayload(12);
