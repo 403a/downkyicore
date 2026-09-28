@@ -4,6 +4,15 @@ namespace DownKyi.Core.Tests;
 
 public sealed class DanmakuSenderTests
 {
+    [Theory]
+    [InlineData(1, "83dcefb7")]
+    [InlineData(123456, "972d361")]
+    [InlineData(123456789, "cbf43926")]
+    public void UserIdToMidHashUsesStableCrc32Values(long userId, string expected)
+    {
+        Assert.Equal(expected, DanmakuSender.GetMidHash(userId));
+    }
+
     [Fact]
     public void LookupRejectsCancellationBeforeCpuSearchStarts()
     {

@@ -20,25 +20,63 @@
                 FontSize="12"
                 Foreground="{DynamicResource BrushTextDark}"
                 Header="{DynamicResource FilterType}">
-                <StackPanel Margin="10" Orientation="Horizontal">
-                    <CheckBox
-                        Margin="0,0,0,0"
-                        Command="{Binding TopFilterCommand}"
-                        Content="{DynamicResource TopFilter}"
+                <StackPanel Margin="10">
+                    <StackPanel Orientation="Horizontal">
+                        <CheckBox
+                            Command="{Binding TopFilterCommand}"
+                            Content="{DynamicResource TopFilter}"
+                            Foreground="{DynamicResource BrushTextDark}"
+                            IsChecked="{Binding TopFilter, Mode=TwoWay}" />
+                        <CheckBox
+                            Margin="40,0,0,0"
+                            Command="{Binding BottomFilterCommand}"
+                            Content="{DynamicResource BottomFilter}"
+                            Foreground="{DynamicResource BrushTextDark}"
+                            IsChecked="{Binding BottomFilter, Mode=TwoWay}" />
+                        <CheckBox
+                            Margin="40,0,0,0"
+                            Command="{Binding ScrollFilterCommand}"
+                            Content="{DynamicResource ScrollFilter}"
+                            Foreground="{DynamicResource BrushTextDark}"
+                            IsChecked="{Binding ScrollFilter, Mode=TwoWay}" />
+                        <CheckBox
+                            Margin="40,0,0,0"
+                            Command="{Binding RemoveEmojiAndSpecialCharactersCommand}"
+                            Content="{DynamicResource RemoveEmojiAndSpecialCharacters}"
+                            Foreground="{DynamicResource BrushTextDark}"
+                            IsChecked="{Binding RemoveEmojiAndSpecialCharacters, Mode=TwoWay}" />
+                    </StackPanel>
+
+                    <TextBlock
+                        Margin="0,16,0,4"
                         Foreground="{DynamicResource BrushTextDark}"
-                        IsChecked="{Binding TopFilter, Mode=TwoWay}" />
-                    <CheckBox
-                        Margin="40,0,0,0"
-                        Command="{Binding BottomFilterCommand}"
-                        Content="{DynamicResource BottomFilter}"
+                        Text="{DynamicResource BlockedDanmakuKeywords}" />
+                    <TextBox
+                        Width="500"
+                        Height="90"
+                        HorizontalAlignment="Left"
+                        AcceptsReturn="True"
+                        TextWrapping="Wrap"
+                        Text="{Binding BlockedKeywordsText, Mode=TwoWay}" />
+
+                    <TextBlock
+                        Margin="0,16,0,4"
                         Foreground="{DynamicResource BrushTextDark}"
-                        IsChecked="{Binding BottomFilter, Mode=TwoWay}" />
-                    <CheckBox
-                        Margin="40,0,0,0"
-                        Command="{Binding ScrollFilterCommand}"
-                        Content="{DynamicResource ScrollFilter}"
-                        Foreground="{DynamicResource BrushTextDark}"
-                        IsChecked="{Binding ScrollFilter, Mode=TwoWay}" />
+                        Text="{DynamicResource BlockedDanmakuSenderUids}" />
+                    <TextBox
+                        Width="500"
+                        Height="90"
+                        HorizontalAlignment="Left"
+                        AcceptsReturn="True"
+                        TextWrapping="Wrap"
+                        Text="{Binding BlockedSenderUidsText, Mode=TwoWay}" />
+                    <Button
+                        Width="120"
+                        Margin="0,12,0,0"
+                        HorizontalAlignment="Left"
+                        Command="{Binding SaveCustomFilterListsCommand}"
+                        Content="{DynamicResource SaveDanmakuBlacklists}"
+                        Theme="{StaticResource BtnBorderStyle}" />
                 </StackPanel>
             </HeaderedContentControl>
 
