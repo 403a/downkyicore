@@ -7,6 +7,8 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Runtime.ExceptionServices;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -100,6 +102,7 @@ internal sealed class BuiltinRangeDownloader : IDisposable
             partialFile,
             probe.TotalBytes,
             probe.SupportsRanges,
+            probe.ResourceIdentity,
             cancellationToken).ConfigureAwait(false);
         var receivedBytes = state.Chunks.Sum(static chunk => chunk.Position);
         _progress(receivedBytes, probe.TotalBytes);
@@ -221,13 +224,17 @@ internal sealed class BuiltinRangeDownloader : IDisposable
                 "The media length changed before the transfer started.");
         }
 
-        return new BuiltinRangeProbe(totalBytes, supportsRanges);
+        return new BuiltinRangeProbe(
+            totalBytes,
+            supportsRanges,
+            BuiltinRangeResourceIdentity.Create(_address, response));
     }
 
     private async Task<BuiltinRangeResumeState> LoadOrCreateStateAsync(
         string partialFile,
         long totalBytes,
         bool supportsRanges,
+        BuiltinRangeResourceIdentity resourceIdentity,
         CancellationToken cancellationToken)
     {
         if (!File.Exists(partialFile))
@@ -236,6 +243,7 @@ internal sealed class BuiltinRangeDownloader : IDisposable
                 partialFile,
                 totalBytes,
                 supportsRanges,
+                resourceIdentity,
                 cancellationToken).ConfigureAwait(false);
         }
 
@@ -278,6 +286,9 @@ internal sealed class BuiltinRangeDownloader : IDisposable
 
         if (document == null
             || document.TotalFileSize != totalBytes
+            || document.ResourceIdentity == null
+            || !document.ResourceIdentity.CanResume
+            || !document.ResourceIdentity.Matches(resourceIdentity)
             || !TryValidateChunks(document.Chunks, totalBytes, out var chunks))
         {
             throw new BuiltinResumeRejectedException(
@@ -290,13 +301,18 @@ internal sealed class BuiltinRangeDownloader : IDisposable
                 "The server no longer supports resuming the partial media file.");
         }
 
-        return new BuiltinRangeResumeState(totalBytes, chunks);
+        return new BuiltinRangeResumeState(
+            totalBytes,
+            chunks,
+            resourceIdentity,
+            HasResumedBytes: chunks.Any(static chunk => chunk.Position > 0));
     }
 
     private async Task<BuiltinRangeResumeState> CreateFreshStateAsync(
         string partialFile,
         long totalBytes,
         bool supportsRanges,
+        BuiltinRangeResourceIdentity resourceIdentity,
         CancellationToken cancellationToken)
     {
         var directory = Path.GetDirectoryName(partialFile);
@@ -321,7 +337,11 @@ internal sealed class BuiltinRangeDownloader : IDisposable
             await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        return new BuiltinRangeResumeState(totalBytes, chunks);
+        return new BuiltinRangeResumeState(
+            totalBytes,
+            chunks,
+            resourceIdentity,
+            HasResumedBytes: false);
     }
 
     private async Task<long> DownloadPendingChunksAsync(
@@ -404,11 +424,21 @@ internal sealed class BuiltinRangeDownloader : IDisposable
     {
         var requestStart = checked(chunk.Start + chunk.Position);
         using var request = supportsRanges
-            ? CreateRequest(requestStart, chunk.End)
+            ? CreateRequest(
+                requestStart,
+                chunk.End,
+                state.ResourceIdentity.IfRangeValue)
             : CreateRequest(rangeStart: null, rangeEnd: null);
         using var response = await SendWithStallTimeoutAsync(request, cancellationToken)
             .ConfigureAwait(false);
-        ValidateChunkResponse(response, requestStart, chunk.End, state.TotalBytes, supportsRanges);
+        ValidateChunkResponse(
+            response,
+            requestStart,
+            chunk.End,
+            state.TotalBytes,
+            supportsRanges,
+            state.ResourceIdentity,
+            state.HasResumedBytes);
 
         var remaining = checked(chunk.End - requestStart + 1);
         var source = await response.Content
@@ -571,7 +601,8 @@ internal sealed class BuiltinRangeDownloader : IDisposable
                 state.Chunks.Select(static chunk => new BuiltinRangeResumeChunk(
                     chunk.Start,
                     chunk.End,
-                    chunk.Position)).ToArray());
+                    chunk.Position)).ToArray(),
+                state.ResourceIdentity);
             var metadata = JsonSerializer.SerializeToUtf8Bytes(document, ResumeJsonOptions);
             if (metadata.Length > MaximumResumeMetadataBytes)
             {
@@ -593,12 +624,19 @@ internal sealed class BuiltinRangeDownloader : IDisposable
         }
     }
 
-    private HttpRequestMessage CreateRequest(long? rangeStart, long? rangeEnd)
+    private HttpRequestMessage CreateRequest(
+        long? rangeStart,
+        long? rangeEnd,
+        string? ifRange = null)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, _address);
         if (rangeStart.HasValue)
         {
             request.Headers.Range = new RangeHeaderValue(rangeStart, rangeEnd);
+            if (!string.IsNullOrWhiteSpace(ifRange))
+            {
+                request.Headers.TryAddWithoutValidation("If-Range", ifRange);
+            }
         }
 
         request.Headers.AcceptEncoding.ParseAdd("identity");
@@ -625,7 +663,9 @@ internal sealed class BuiltinRangeDownloader : IDisposable
         long requestStart,
         long requestEnd,
         long totalBytes,
-        bool supportsRanges)
+        bool supportsRanges,
+        BuiltinRangeResourceIdentity resourceIdentity,
+        bool requireResourceValidator)
     {
         ThrowForHttpFailure(response);
         var expectedLength = checked(requestEnd - requestStart + 1);
@@ -653,6 +693,13 @@ internal sealed class BuiltinRangeDownloader : IDisposable
         {
             throw new BuiltinResumeRejectedException(
                 "The media response length did not match the requested byte range.");
+        }
+
+        if (supportsRanges
+            && !resourceIdentity.IsCompatibleWith(response, requireResourceValidator))
+        {
+            throw new BuiltinResumeRejectedException(
+                "The media response resource identity changed during the transfer.");
         }
     }
 
@@ -757,17 +804,103 @@ internal sealed class BuiltinRangeChunk(long start, long end, long position)
 
 internal sealed record BuiltinRangeDownloadResult(long ReceivedBytes, long TotalBytes);
 
-internal sealed record BuiltinRangeProbe(long TotalBytes, bool SupportsRanges);
+internal sealed record BuiltinRangeProbe(
+    long TotalBytes,
+    bool SupportsRanges,
+    BuiltinRangeResourceIdentity ResourceIdentity);
 
 internal sealed record BuiltinRangeResumeState(
     long TotalBytes,
-    BuiltinRangeChunk[] Chunks);
+    BuiltinRangeChunk[] Chunks,
+    BuiltinRangeResourceIdentity ResourceIdentity,
+    bool HasResumedBytes);
 
 internal sealed record BuiltinRangeResumeDocument(
     long TotalFileSize,
-    BuiltinRangeResumeChunk[] Chunks);
+    BuiltinRangeResumeChunk[] Chunks,
+    BuiltinRangeResourceIdentity? ResourceIdentity = null);
 
 internal sealed record BuiltinRangeResumeChunk(long Start, long End, long Position);
+
+internal sealed record BuiltinRangeResourceIdentity(
+    string AddressHash,
+    string? StrongETag,
+    DateTimeOffset? LastModified)
+{
+    public bool CanResume => StrongETag != null || LastModified != null;
+
+    public string? IfRangeValue => StrongETag ?? LastModified?.ToString("R");
+
+    public static BuiltinRangeResourceIdentity Create(
+        Uri address,
+        HttpResponseMessage response)
+    {
+        ArgumentNullException.ThrowIfNull(address);
+        ArgumentNullException.ThrowIfNull(response);
+        var entityTag = response.Headers.ETag is { IsWeak: false } strongEntityTag
+            ? strongEntityTag.ToString()
+            : null;
+        var lastModified = response.Content.Headers.LastModified is { } modified
+                           && response.Headers.Date is { } responseDate
+                           && responseDate - modified >= TimeSpan.FromSeconds(1)
+            ? (DateTimeOffset?)modified
+            : null;
+        return new BuiltinRangeResourceIdentity(
+            Convert.ToHexString(SHA256.HashData(
+                Encoding.UTF8.GetBytes(address.AbsoluteUri))),
+            entityTag,
+            lastModified);
+    }
+
+    public bool Matches(BuiltinRangeResourceIdentity current)
+    {
+        ArgumentNullException.ThrowIfNull(current);
+        if (!string.Equals(AddressHash, current.AddressHash, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (StrongETag != null && current.StrongETag != null)
+        {
+            return string.Equals(StrongETag, current.StrongETag, StringComparison.Ordinal);
+        }
+
+        return LastModified != null
+               && current.LastModified != null
+               && LastModified == current.LastModified;
+    }
+
+    public bool IsCompatibleWith(
+        HttpResponseMessage response,
+        bool requireValidator)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+        var validatorMatched = false;
+        if (StrongETag != null && response.Headers.ETag is { } entityTag)
+        {
+            if (entityTag.IsWeak
+                || !string.Equals(StrongETag, entityTag.ToString(), StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            validatorMatched = true;
+        }
+
+        if (LastModified != null
+            && response.Content.Headers.LastModified is { } currentLastModified)
+        {
+            if (LastModified != currentLastModified)
+            {
+                return false;
+            }
+
+            validatorMatched = true;
+        }
+
+        return !requireValidator || validatorMatched;
+    }
+}
 
 internal sealed class BuiltinResumeRejectedException : IOException
 {

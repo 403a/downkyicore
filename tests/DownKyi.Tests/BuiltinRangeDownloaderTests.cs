@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using DownKyi.Services.Download;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -131,6 +133,197 @@ public sealed class BuiltinRangeDownloaderTests
     }
 
     [Fact]
+    public async Task ChangedEntityTagRejectsSameLengthPartialBeforeRequestingMissingRanges()
+    {
+        var previousPayload = CreatePayload(12);
+        var currentPayload = previousPayload.Select(static value => checked((byte)(value + 32))).ToArray();
+        var directory = CreateTemporaryDirectory("range-resource-etag-change");
+        var target = Path.Combine(directory, "media.bin");
+        try
+        {
+            await WritePartialAsync(
+                target,
+                previousPayload,
+                ResourceIdentity(MediaAddress, "\"resource-v1\""));
+            using var handler = new RangePayloadHandler(
+                currentPayload,
+                entityTag: "\"resource-v2\"");
+            using var downloader = CreateDownloader(
+                handler,
+                parallelCount: 1,
+                segmentSize: 4);
+
+            await Assert.ThrowsAsync<BuiltinResumeRejectedException>(() => downloader.DownloadAsync(
+                target,
+                currentPayload.Length,
+                TestContext.Current.CancellationToken));
+
+            Assert.Empty(handler.ChunkRanges);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ChangedResolvedAddressRejectsPartialEvenWhenEntityTagMatches()
+    {
+        var payload = CreatePayload(12);
+        var directory = CreateTemporaryDirectory("range-resource-address-change");
+        var target = Path.Combine(directory, "media.bin");
+        var previousAddress = new Uri("https://cdn-a.invalid/file");
+        var currentAddress = new Uri("https://cdn-b.invalid/file");
+        try
+        {
+            await WritePartialAsync(
+                target,
+                payload,
+                ResourceIdentity(previousAddress, "\"resource-v1\""));
+            using var handler = new RangePayloadHandler(payload);
+            using var downloader = CreateDownloader(
+                handler,
+                parallelCount: 1,
+                segmentSize: 4,
+                address: currentAddress);
+
+            await Assert.ThrowsAsync<BuiltinResumeRejectedException>(() => downloader.DownloadAsync(
+                target,
+                payload.Length,
+                TestContext.Current.CancellationToken));
+
+            Assert.Empty(handler.ChunkRanges);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task MatchingStrongLastModifiedResumesOnlyMissingRangeBytes()
+    {
+        var payload = CreatePayload(12);
+        var lastModified = new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero);
+        var responseDate = lastModified.AddMinutes(1);
+        var directory = CreateTemporaryDirectory("range-last-modified-resume");
+        var target = Path.Combine(directory, "media.bin");
+        try
+        {
+            using (var firstHandler = new RangePayloadHandler(
+                payload,
+                failOnceAtStart: 4,
+                failureBytes: 2,
+                entityTag: null,
+                lastModified: lastModified,
+                responseDate: responseDate))
+            using (var firstAttempt = CreateDownloader(
+                firstHandler,
+                parallelCount: 1,
+                segmentSize: 4))
+            {
+                await Assert.ThrowsAsync<HttpIOException>(() => firstAttempt.DownloadAsync(
+                    target,
+                    payload.Length,
+                    TestContext.Current.CancellationToken));
+            }
+
+            using var secondHandler = new RangePayloadHandler(
+                payload,
+                entityTag: null,
+                lastModified: lastModified,
+                responseDate: responseDate);
+            using var secondAttempt = CreateDownloader(
+                secondHandler,
+                parallelCount: 1,
+                segmentSize: 4);
+
+            await secondAttempt.DownloadAsync(
+                target,
+                payload.Length,
+                TestContext.Current.CancellationToken);
+
+            Assert.DoesNotContain(secondHandler.ChunkRanges, range => range.Start is 0 or 4);
+            Assert.Contains(secondHandler.ChunkRanges, range => range == (6L, 7L));
+            Assert.All(
+                secondHandler.IfRangeValues,
+                value => Assert.Equal(lastModified.ToString("R"), value));
+            Assert.Equal(payload, await File.ReadAllBytesAsync(
+                target,
+                TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ChangedChunkEntityTagIsRejectedWhenServerIgnoresIfRange()
+    {
+        var payload = CreatePayload(12);
+        using var handler = new RangePayloadHandler(
+            payload,
+            entityTag: "\"resource-v1\"",
+            chunkEntityTag: "\"resource-v2\"");
+        var directory = CreateTemporaryDirectory("range-if-range-ignored");
+        var target = Path.Combine(directory, "media.bin");
+        try
+        {
+            using var downloader = CreateDownloader(
+                handler,
+                parallelCount: 1,
+                segmentSize: 4);
+
+            await Assert.ThrowsAsync<BuiltinResumeRejectedException>(() => downloader.DownloadAsync(
+                target,
+                payload.Length,
+                TestContext.Current.CancellationToken));
+
+            Assert.Equal([(0L, 3L)], handler.ChunkRanges);
+            Assert.Equal(["\"resource-v1\""], handler.IfRangeValues);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task MissingChunkValidatorRejectsReuseWhenServerIgnoresIfRange()
+    {
+        var payload = CreatePayload(12);
+        var directory = CreateTemporaryDirectory("range-if-range-omitted-validator");
+        var target = Path.Combine(directory, "media.bin");
+        try
+        {
+            await WritePartialAsync(
+                target,
+                payload,
+                ResourceIdentity(MediaAddress, "\"resource-v1\""));
+            using var handler = new RangePayloadHandler(
+                payload,
+                omitChunkValidators: true);
+            using var downloader = CreateDownloader(
+                handler,
+                parallelCount: 1,
+                segmentSize: 4);
+
+            await Assert.ThrowsAsync<BuiltinResumeRejectedException>(() => downloader.DownloadAsync(
+                target,
+                payload.Length,
+                TestContext.Current.CancellationToken));
+
+            Assert.Equal([(4L, 7L)], handler.ChunkRanges);
+            Assert.Equal(["\"resource-v1\""], handler.IfRangeValues);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task BodyWithoutDataTriggersBoundedTransientFailure()
     {
         var payload = CreatePayload(4);
@@ -229,7 +422,7 @@ public sealed class BuiltinRangeDownloaderTests
     }
 
     [Fact]
-    public async Task LegacyDownloaderMetadataResumesWithoutRedownloadingCompletedRange()
+    public async Task LegacyDownloaderMetadataWithoutResourceIdentityIsRejectedBeforeResume()
     {
         var payload = CreatePayload(12);
         var directory = CreateTemporaryDirectory("legacy-range-resume");
@@ -265,15 +458,12 @@ public sealed class BuiltinRangeDownloaderTests
                 parallelCount: 2,
                 segmentSize: 4);
 
-            await downloader.DownloadAsync(
+            await Assert.ThrowsAsync<BuiltinResumeRejectedException>(() => downloader.DownloadAsync(
                 target,
                 payload.Length,
-                TestContext.Current.CancellationToken);
-
-            Assert.DoesNotContain(handler.ChunkRanges, range => range.Start == 0);
-            Assert.Equal(payload, await File.ReadAllBytesAsync(
-                target,
                 TestContext.Current.CancellationToken));
+
+            Assert.Empty(handler.ChunkRanges);
         }
         finally
         {
@@ -285,11 +475,12 @@ public sealed class BuiltinRangeDownloaderTests
         HttpMessageHandler handler,
         int parallelCount,
         long segmentSize,
-        TimeSpan? readStallTimeout = null)
+        TimeSpan? readStallTimeout = null,
+        Uri? address = null)
     {
         return new BuiltinRangeDownloader(
             handler,
-            new Uri("https://media.invalid/file"),
+            address ?? MediaAddress,
             new AriaTaskHeaders(
                 ["Origin: https://www.bilibili.com", "Referer: https://www.bilibili.com"],
                 "DownKyi-Test",
@@ -304,6 +495,53 @@ public sealed class BuiltinRangeDownloaderTests
 
     private static byte[] CreatePayload(int length) =>
         Enumerable.Range(0, length).Select(static value => checked((byte)value)).ToArray();
+
+    private static readonly Uri MediaAddress = new("https://media.invalid/file");
+
+    private static object ResourceIdentity(Uri address, string strongETag) =>
+        new
+        {
+            AddressHash = Convert.ToHexString(SHA256.HashData(
+                Encoding.UTF8.GetBytes(address.AbsoluteUri))),
+            StrongETag = strongETag,
+            LastModified = (DateTimeOffset?)null
+        };
+
+    private static async Task WritePartialAsync(
+        string target,
+        byte[] payload,
+        object? resourceIdentity)
+    {
+        var metadata = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            TotalFileSize = payload.Length,
+            Chunks = new[]
+            {
+                new { Start = 0, End = 3, Position = 4 },
+                new { Start = 4, End = 7, Position = 0 },
+                new { Start = 8, End = 11, Position = 0 }
+            },
+            ResourceIdentity = resourceIdentity
+        });
+        var stream = new FileStream(
+            $"{target}.download",
+            FileMode.CreateNew,
+            FileAccess.Write,
+            FileShare.None,
+            bufferSize: 4096,
+            FileOptions.Asynchronous);
+        await using (var streamLifetime = stream.ConfigureAwait(false))
+        {
+            stream.SetLength(payload.Length);
+            await stream.WriteAsync(
+                payload.AsMemory(0, 4),
+                TestContext.Current.CancellationToken).ConfigureAwait(false);
+            stream.Position = payload.Length;
+            await stream.WriteAsync(
+                metadata,
+                TestContext.Current.CancellationToken).ConfigureAwait(false);
+        }
+    }
 
     private static string CreateTemporaryDirectory(string purpose)
     {
@@ -320,9 +558,15 @@ public sealed class BuiltinRangeDownloaderTests
         private readonly int? _failOnceAtStart;
         private readonly int _failureBytes;
         private readonly ConcurrentQueue<(long Start, long End)> _chunkRanges = new();
+        private readonly ConcurrentQueue<string?> _ifRangeValues = new();
         private readonly ConcurrentReadGate? _readGate;
         private readonly int? _stallAtStart;
         private readonly int? _stallBeforeHeadersAtRequest;
+        private readonly string? _entityTag;
+        private readonly string? _chunkEntityTag;
+        private readonly bool _omitChunkValidators;
+        private readonly DateTimeOffset? _lastModified;
+        private readonly DateTimeOffset? _responseDate;
         private int _failureReturned;
         private int _requests;
 
@@ -332,13 +576,23 @@ public sealed class BuiltinRangeDownloaderTests
             int? failOnceAtStart = null,
             int failureBytes = 0,
             int? stallAtStart = null,
-            int? stallBeforeHeadersAtRequest = null)
+            int? stallBeforeHeadersAtRequest = null,
+            string? entityTag = "\"resource-v1\"",
+            string? chunkEntityTag = null,
+            bool omitChunkValidators = false,
+            DateTimeOffset? lastModified = null,
+            DateTimeOffset? responseDate = null)
         {
             _payload = payload ?? throw new ArgumentNullException(nameof(payload));
             _failOnceAtStart = failOnceAtStart;
             _failureBytes = failureBytes;
             _stallAtStart = stallAtStart;
             _stallBeforeHeadersAtRequest = stallBeforeHeadersAtRequest;
+            _entityTag = entityTag;
+            _chunkEntityTag = chunkEntityTag;
+            _omitChunkValidators = omitChunkValidators;
+            _lastModified = lastModified;
+            _responseDate = responseDate;
             if (requiredConcurrentReads > 0)
             {
                 _readGate = new ConcurrentReadGate(requiredConcurrentReads);
@@ -347,6 +601,8 @@ public sealed class BuiltinRangeDownloaderTests
 
         public IReadOnlyCollection<(long Start, long End)> ChunkRanges =>
             _chunkRanges.ToArray();
+
+        public IReadOnlyCollection<string?> IfRangeValues => _ifRangeValues.ToArray();
 
         public int MaximumConcurrentReads => _readGate?.MaximumConcurrentReads ?? 0;
 
@@ -368,6 +624,10 @@ public sealed class BuiltinRangeDownloaderTests
             if (!isProbe)
             {
                 _chunkRanges.Enqueue((start, end));
+                _ifRangeValues.Enqueue(
+                    request.Headers.TryGetValues("If-Range", out var values)
+                        ? values.Single()
+                        : null);
             }
 
             Stream contentStream;
@@ -400,11 +660,30 @@ public sealed class BuiltinRangeDownloaderTests
                 start,
                 end,
                 _payload.LongLength);
-            return new HttpResponseMessage(HttpStatusCode.PartialContent)
+            var response = new HttpResponseMessage(HttpStatusCode.PartialContent)
             {
                 Content = content,
                 RequestMessage = request
             };
+            var entityTag = !isProbe && _omitChunkValidators
+                ? null
+                : !isProbe && _chunkEntityTag != null
+                    ? _chunkEntityTag
+                    : _entityTag;
+            if (entityTag != null)
+            {
+                response.Headers.ETag = EntityTagHeaderValue.Parse(entityTag);
+            }
+            if (_lastModified != null && (isProbe || !_omitChunkValidators))
+            {
+                response.Content.Headers.LastModified = _lastModified;
+            }
+            if (_responseDate != null)
+            {
+                response.Headers.Date = _responseDate;
+            }
+
+            return response;
         }
     }
 
