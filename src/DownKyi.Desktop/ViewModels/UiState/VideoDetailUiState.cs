@@ -27,6 +27,7 @@ internal sealed partial class VideoDetailUiState : ObservableObject
     private VectorImage _downloadManage = ButtonIcon.Instance().DownloadManage;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsContentVisible))]
     private VideoInfoView? _videoInfoView;
 
     [ObservableProperty]
@@ -46,7 +47,8 @@ internal sealed partial class VideoDetailUiState : ObservableObject
 
     public bool IsBusy => DisplayState == VideoDetailDisplayState.Busy;
 
-    public bool IsContentVisible => DisplayState == VideoDetailDisplayState.Content;
+    public bool IsContentVisible => DisplayState == VideoDetailDisplayState.Content
+                                    || (DisplayState == VideoDetailDisplayState.Busy && VideoInfoView != null);
 
     public bool IsEmptyVisible => DisplayState == VideoDetailDisplayState.Empty;
 
