@@ -506,6 +506,9 @@ public sealed class MediaAndHttpRuntimeArchitectureTests
         Assert.DoesNotContain("UpdateChannelAsync", viewModelSource, StringComparison.Ordinal);
         Assert.Contains("Medias.AddRange", viewModelSource, StringComparison.Ordinal);
         Assert.Contains("ISeasonsSeriesCoordinator", viewModelSource, StringComparison.Ordinal);
+        Assert.Contains("SeriesNavigationPayload", viewModelSource, StringComparison.Ordinal);
+        Assert.Contains("SeasonNavigationPayload", viewModelSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("Dictionary<string, object>", viewModelSource, StringComparison.Ordinal);
         Assert.DoesNotContain("IAddToDownloadServiceFactory", viewModelSource, StringComparison.Ordinal);
         Assert.DoesNotContain("SetDirectory", viewModelSource, StringComparison.Ordinal);
         Assert.DoesNotContain("Task.Run", coordinatorSource, StringComparison.Ordinal);

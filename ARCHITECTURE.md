@@ -80,13 +80,16 @@ flowchart LR
     ListUrl["bare /list/mid input"] --> PublicationPayload["PublicationNavigationPayload"]
     PublicationPayload --> PublicationPage["WBI publication search"]
     PublicationPage --> History
+    SeriesUrl["/list/mid?sid=series input"] --> SeriesPayload["SeriesNavigationPayload"]
+    SeriesPayload --> SeriesPage["series metadata + archives"]
+    SeriesPage --> History
 ```
 
 Main region 的返回操作必須先縮減 `AvaloniaNavigationService` 的既有歷史，並恢復原本的 View/ViewModel instance；只有沒有歷史時才建立 typed parent route。UserSpace 的公開收藏夾由注入的 coordinator 一次映射到 snapshot，返回同一個 MID 時保留原頁面與清單狀態。失效收藏項目保留在 UI 供辨識，但不能選取、開啟或加入下載。
 
 ViewModel 與其他呼叫者只依賴 Application 的 `IAppNavigationService`／`IAppDialogService`。只有 `NavigationViewModelFactory` 與 `DialogContentFactory` 能在局部組裝邊界使用 provider，依 typed enum 選擇已註冊的 transient ViewModel/View；Avalonia adapters 本身不持有容器。
 
-投稿路由只接受 `PublicationNavigationPayload`。裸 `bilibili.com/list/<MID>` 代表該使用者全部投稿；`x/series/archives` 契約已完成審查，但帶 `sid` 的 URL 在建立獨立 typed series payload 與產品測試前仍不得被猜成全部投稿。投稿搜尋採 WBI 回應的精確 `page.count`；收藏搜尋的 `media_count` 是未篩選總數，因此分頁只能依 `has_more` 逐頁擴展。兩頁返回時保留 query、頁碼與既有 media instances；被取消的未完成頁才會補載。
+投稿路由只接受 `PublicationNavigationPayload`。裸 `bilibili.com/list/<MID>` 代表該使用者全部投稿；帶正整數 `sid` 的 URL 使用獨立 `SeriesNavigationPayload`，由既有 series metadata 與 `x/series/archives` owner 載入指定系列。無效 `sid`、API failure 或不匹配的 MID/series identity 都 fail closed，不得轉成全部投稿。投稿搜尋採 WBI 回應的精確 `page.count`；收藏搜尋的 `media_count` 是未篩選總數，因此分頁只能依 `has_more` 逐頁擴展。兩頁返回時保留 query、頁碼與既有 media instances；被取消的未完成頁才會補載。
 
 導航箭頭 path 必須由 factory 建立獨立 geometry；不得讓不同 ViewModel 共用可變的 `PathIconData`，否則單頁主題更新會改壞其他頁面。
 

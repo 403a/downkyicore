@@ -92,6 +92,14 @@ internal class SearchService
         {
             NavigateToVideo(parentRoute, input);
         }
+        // UP主指定系列
+        else if (ParseEntrance.GetUserSeriesListUrl(justId) is { } series)
+        {
+            _navigationService.Navigate(new AppNavigationRequest(
+                AppRoute.SeasonsSeries,
+                parentRoute,
+                new SeriesNavigationPayload(series.Mid, series.SeriesId)));
+        }
         // UP主全部投稿列表
         else if (ParseEntrance.IsUserVideoListUrl(justId))
         {

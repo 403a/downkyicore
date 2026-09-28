@@ -2,6 +2,8 @@ using System.Globalization;
 
 namespace DownKyi.Core.BiliApi.BiliUtils;
 
+public sealed record UserSeriesListAddress(long Mid, long SeriesId);
+
 public static partial class ParseEntrance
 {
     /// <summary>
@@ -19,21 +21,49 @@ public static partial class ParseEntrance
     public static long GetUserVideoListId(string input)
     {
         ArgumentNullException.ThrowIfNull(input);
-        if (!Uri.TryCreate(input.Trim(), UriKind.Absolute, out var uri)
-            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
-            || !IsBilibiliWebHost(uri.Host)
-            || HasNonEmptyQueryValue(uri.Query, "sid"))
+        if (!TryParseUserVideoListUrl(input, out var uri, out var mid)
+            || !TryGetSingleQueryValue(uri.Query, "sid", out var hasSeriesId, out _)
+            || hasSeriesId)
         {
             return -1;
+        }
+
+        return mid;
+    }
+
+    /// <summary>
+    /// 获取指定系列列表URL中的UP主MID与系列ID。
+    /// </summary>
+    public static UserSeriesListAddress? GetUserSeriesListUrl(string input)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        if (!TryParseUserVideoListUrl(input, out var uri, out var parsedMid)
+            || !TryGetSingleQueryValue(uri.Query, "sid", out var hasSeriesId, out var value)
+            || !hasSeriesId
+            || !long.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var parsedSeriesId)
+            || parsedSeriesId <= 0)
+        {
+            return null;
+        }
+
+        return new UserSeriesListAddress(parsedMid, parsedSeriesId);
+    }
+
+    private static bool TryParseUserVideoListUrl(string input, out Uri uri, out long mid)
+    {
+        mid = -1;
+        if (!Uri.TryCreate(input.Trim(), UriKind.Absolute, out uri!)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+            || !IsBilibiliWebHost(uri.Host))
+        {
+            return false;
         }
 
         var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
         return segments.Length == 2
             && string.Equals(segments[0], "list", StringComparison.Ordinal)
-            && long.TryParse(segments[1], NumberStyles.None, CultureInfo.InvariantCulture, out var mid)
-            && mid > 0
-                ? mid
-                : -1;
+            && long.TryParse(segments[1], NumberStyles.None, CultureInfo.InvariantCulture, out mid)
+            && mid > 0;
     }
 
     private static bool IsBilibiliWebHost(string host)
@@ -43,19 +73,38 @@ public static partial class ParseEntrance
             || string.Equals(host, "m.bilibili.com", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool HasNonEmptyQueryValue(string query, string name)
+    private static bool TryGetSingleQueryValue(
+        string query,
+        string name,
+        out bool found,
+        out string value)
     {
-        foreach (var item in query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+        found = false;
+        value = string.Empty;
+        try
         {
-            var pair = item.Split('=', 2);
-            if (string.Equals(Uri.UnescapeDataString(pair[0]), name, StringComparison.OrdinalIgnoreCase)
-                && pair.Length == 2
-                && !string.IsNullOrWhiteSpace(Uri.UnescapeDataString(pair[1])))
+            foreach (var item in query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
             {
-                return true;
+                var pair = item.Split('=', 2);
+                if (!string.Equals(Uri.UnescapeDataString(pair[0]), name, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (found || pair.Length != 2)
+                {
+                    return false;
+                }
+
+                found = true;
+                value = Uri.UnescapeDataString(pair[1]);
             }
         }
+        catch (UriFormatException)
+        {
+            return false;
+        }
 
-        return false;
+        return true;
     }
 }
