@@ -559,6 +559,45 @@ public sealed class DownloadRetryPolicyTests
     }
 
     [Fact]
+    public async Task CoordinatorDeletesRejectedPartialBeforeRestartingSameAddress()
+    {
+        var directory = CreateTemporaryDirectory("resume-overlap-restart");
+        const string fileName = "media.tmp";
+        var partial = Path.Combine(directory, $"{fileName}.download");
+        await File.WriteAllTextAsync(
+            partial,
+            "rejected partial bytes",
+            TestContext.Current.CancellationToken);
+        using var backend = new RecordingBackend(
+            DownloadTransferResult.Failed(
+                DownloadTransferFailureKind.ResumeRejected,
+                "download.transfer.resume-rejected"),
+            DownloadTransferResult.Succeeded());
+
+        try
+        {
+            var result = await CreateCoordinator(backend, maximumAttempts: 2).TransferAsync(
+                CreateRequestAt(
+                    directory,
+                    fileName,
+                    backendIdentity: null,
+                    static (_, _) => Task.CompletedTask,
+                    "https://primary.invalid/media"),
+                static _ => Task.FromResult<IReadOnlyList<string>>([]),
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(DownloadTransferOutcome.Succeeded, result.Outcome);
+            Assert.Equal(2, backend.Requests.Count);
+            Assert.Equal(backend.Requests[0].Urls, backend.Requests[1].Urls);
+            Assert.False(File.Exists(partial));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task CoordinatorRetriesCleanedResumeRejectionAfterEarlierTransientAttempt()
     {
         using var backend = new RecordingBackend(
