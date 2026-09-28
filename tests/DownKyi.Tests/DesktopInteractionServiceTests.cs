@@ -103,13 +103,36 @@ public sealed class DesktopInteractionServiceTests
     }
 
     [Fact]
-    public void SeriesListUrlDoesNotMasqueradeAsUploaderList()
+    public void SeriesListUrlUsesTypedSeriesPayloadAndNeverPublicationPayload()
     {
         using var settings = new TestSettingsStore();
         var navigation = new RecordingNavigationService();
         var search = new SearchService(settings.Store, navigation);
 
-        Assert.False(search.BiliInput("https://www.bilibili.com/list/42?sid=99", AppRoute.Index));
+        Assert.True(search.BiliInput("https://www.bilibili.com/list/42?sid=99", AppRoute.Index));
+
+        var request = Assert.Single(navigation.Requests);
+        Assert.Equal(AppRoute.SeasonsSeries, request.Route);
+        Assert.Equal(AppRoute.Index, request.Parent);
+        var payload = Assert.IsType<SeriesNavigationPayload>(request.Parameter);
+        Assert.Equal(42, payload.Mid);
+        Assert.Equal(99, payload.SeriesId);
+        Assert.IsNotType<PublicationNavigationPayload>(request.Parameter);
+    }
+
+    [Theory]
+    [InlineData("https://www.bilibili.com/list/42?sid=0")]
+    [InlineData("https://www.bilibili.com/list/42?sid=-1")]
+    [InlineData("https://www.bilibili.com/list/42?sid=invalid")]
+    [InlineData("https://evil.example/list/42?sid=99")]
+    [InlineData("not a url")]
+    public void InvalidSeriesListUrlDoesNotNavigate(string input)
+    {
+        using var settings = new TestSettingsStore();
+        var navigation = new RecordingNavigationService();
+        var search = new SearchService(settings.Store, navigation);
+
+        Assert.False(search.BiliInput(input, AppRoute.Index));
         Assert.Empty(navigation.Requests);
     }
 

@@ -86,6 +86,38 @@ public sealed class UiSmokeTests
     }
 
     [AvaloniaFact]
+    public async Task TypedSeriesPayloadLoadsTheExistingSeriesPage()
+    {
+        await AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            DesktopTestResources.EnsureProductThemeResources();
+            ViewSeasonsSeriesDetailViewModel? series = null;
+            using var navigation = new AvaloniaNavigationService(
+                route => route == AppRoute.SeasonsSeries
+                    ? series!
+                    : throw new InvalidOperationException($"Unexpected route {route}."),
+                static action => action());
+            var coordinator = new SeriesPageCoordinatorStub();
+            series = new ViewSeasonsSeriesDetailViewModel(
+                new DesktopInteractionContextStub(navigation),
+                coordinator,
+                NullLogger<ViewSeasonsSeriesDetailViewModel>.Instance);
+
+            navigation.Navigate(new AppNavigationRequest(
+                AppRoute.SeasonsSeries,
+                AppRoute.Index,
+                new SeriesNavigationPayload(42, 99)));
+
+            Assert.Equal(42, coordinator.LastMid);
+            Assert.Equal(99, coordinator.LastId);
+            Assert.Equal(SeasonsSeriesKind.Series, coordinator.LastKind);
+            Assert.Equal("fixture series", series.Title);
+            Assert.Equal(3, series.Pager.Count);
+            Assert.Equal("BV1seriesfixture", Assert.Single(series.Medias).Bvid);
+        }).ConfigureAwait(true);
+    }
+
+    [AvaloniaFact]
     public async Task FavoritesSearchPageAndSnapshotSurviveTypedBackNavigation()
     {
         await AvaloniaTestDispatcher.RunAsync(async () =>
@@ -1109,6 +1141,43 @@ public sealed class UiSmokeTests
             DownKyi.Core.BiliApi.Users.Models.BangumiType type,
             int page,
             int pageSize,
+            CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class SeriesPageCoordinatorStub : ISeasonsSeriesCoordinator
+    {
+        public long LastMid { get; private set; }
+
+        public long LastId { get; private set; }
+
+        public SeasonsSeriesKind LastKind { get; private set; }
+
+        public Task<SeasonsSeriesPageSnapshot> LoadPageAsync(
+            long mid,
+            long id,
+            SeasonsSeriesKind kind,
+            int page,
+            int pageSize,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            LastMid = mid;
+            LastId = id;
+            LastKind = kind;
+            return Task.FromResult(new SeasonsSeriesPageSnapshot(
+                [new DownKyi.Core.BiliApi.Users.Models.SpaceSeasonsSeriesArchives
+                {
+                    Aid = 1,
+                    Bvid = "BV1seriesfixture",
+                    Title = "fixture video"
+                }],
+                "fixture series",
+                61));
+        }
+
+        public Task<int?> AddToDownloadAsync(
+            IReadOnlyList<SeasonsSeriesDownloadItem> items,
+            bool onlySelected,
             CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
