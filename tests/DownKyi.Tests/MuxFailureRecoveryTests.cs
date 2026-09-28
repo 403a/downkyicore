@@ -15,6 +15,56 @@ namespace DownKyi.Tests;
 
 public sealed class MuxFailureRecoveryTests
 {
+    [Theory]
+    [InlineData(false, 1)]
+    [InlineData(true, 1)]
+    [InlineData(false, 3)]
+    [InlineData(true, 3)]
+    public async Task DurlMuxPassesFinalizedAudioIntentToFfmpeg(
+        bool needsAudio,
+        int segmentCount)
+    {
+        var requestedContent = DownloadContentSelection.None with
+        {
+            Audio = needsAudio,
+            Video = true,
+            MediaKind = DownloadMediaKind.Durl
+        };
+        var test = await MuxTestContext.CreateAsync(requestedContent).ConfigureAwait(true);
+        await using var testLifetime = test.ConfigureAwait(true);
+        await test.AddDurlSourcesAsync(segmentCount).ConfigureAwait(true);
+        var stage = test.CreateStage(new FfmpegOperationResult(
+            succeeded: true,
+            outputPath: test.Execution.WorkingBasePath + ".mp4",
+            failureReason: null,
+            duration: TimeSpan.Zero));
+
+        var result = await stage.ExecuteAsync(
+            test.Execution,
+            TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        Assert.True(result.IsSuccess);
+        if (segmentCount == 1)
+        {
+            Assert.Equal(
+                GetExpectedEmbeddedAudioMode(needsAudio),
+                test.Muxer?.MergeEmbeddedAudioMode);
+            Assert.Null(test.Muxer?.ConcatEmbeddedAudioMode);
+        }
+        else
+        {
+            Assert.Equal(
+                GetExpectedEmbeddedAudioMode(needsAudio),
+                test.Muxer?.ConcatEmbeddedAudioMode);
+            Assert.Null(test.Muxer?.MergeEmbeddedAudioMode);
+        }
+    }
+
+    private static FfmpegEmbeddedAudioMode GetExpectedEmbeddedAudioMode(bool needsAudio) =>
+        needsAudio
+            ? FfmpegEmbeddedAudioMode.Required
+            : FfmpegEmbeddedAudioMode.Excluded;
+
     [Fact]
     public async Task InvalidAudioRevokesOnlyAudioCacheAndKeepsValidVideo()
     {
@@ -197,7 +247,10 @@ public sealed class MuxFailureRecoveryTests
 
         public string VideoKey { get; }
 
-        public static async Task<MuxTestContext> CreateAsync()
+        public StubMuxer? Muxer { get; private set; }
+
+        public static async Task<MuxTestContext> CreateAsync(
+            DownloadContentSelection? requestedContent = null)
         {
             var directory = Path.Combine(
                 Path.GetTempPath(),
@@ -217,7 +270,11 @@ public sealed class MuxFailureRecoveryTests
             var downloadBase = new DownloadBase
             {
                 Id = taskId.Value,
-                FilePath = Path.Combine(directory, "output")
+                FilePath = Path.Combine(directory, "output"),
+                NeedDownloadContent = requestedContent ?? DownloadContentSelection.All with
+                {
+                    MediaKind = DownloadMediaKind.Dash
+                }
             };
             var downloading = new DownloadingItem
             {
@@ -300,16 +357,17 @@ public sealed class MuxFailureRecoveryTests
 
         public MuxStage CreateStage(FfmpegOperationResult result)
         {
+            Muxer = new StubMuxer(result);
             return new MuxStage(
                 new DownloadActivityPresenter(_projectionStore, _stateWriter),
-                new StubMuxer(result),
+                Muxer,
                 _stateWriter,
                 NullLogger<MuxStage>.Instance);
         }
 
-        public async Task<DurlTestSource[]> AddDurlSourcesAsync()
+        public async Task<DurlTestSource[]> AddDurlSourcesAsync(int count = 3)
         {
-            var sources = Enumerable.Range(1, 3)
+            var sources = Enumerable.Range(1, count)
                 .Select(order => new DurlTestSource(
                     order,
                     $"durl-{order}-key",
@@ -366,14 +424,22 @@ public sealed class MuxFailureRecoveryTests
 
     private sealed class StubMuxer(FfmpegOperationResult result) : IFfmpegMediaMuxer
     {
+        public FfmpegEmbeddedAudioMode? ConcatEmbeddedAudioMode { get; private set; }
+
+        public FfmpegEmbeddedAudioMode? MergeEmbeddedAudioMode { get; private set; }
+
         public Task<FfmpegOperationResult> ConcatDurlVideosAsync(
             VideoApplicationSettings videoSettings,
             IReadOnlyList<FfmpegConcatSegment> segments,
             string outputVideo,
             bool overwriteDestination,
             Action<string>? action = null,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(result);
+            FfmpegEmbeddedAudioMode embeddedAudioMode = FfmpegEmbeddedAudioMode.Optional,
+            CancellationToken cancellationToken = default)
+        {
+            ConcatEmbeddedAudioMode = embeddedAudioMode;
+            return Task.FromResult(result);
+        }
 
         public Task<FfmpegOperationResult> MergeMediaAsync(
             VideoApplicationSettings videoSettings,
@@ -381,8 +447,12 @@ public sealed class MuxFailureRecoveryTests
             string? video,
             string destination,
             bool overwriteDestination,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(result);
+            FfmpegEmbeddedAudioMode embeddedAudioMode = FfmpegEmbeddedAudioMode.Optional,
+            CancellationToken cancellationToken = default)
+        {
+            MergeEmbeddedAudioMode = embeddedAudioMode;
+            return Task.FromResult(result);
+        }
     }
 
     private sealed record DurlTestSource(int Order, string TransferKey, string FilePath);

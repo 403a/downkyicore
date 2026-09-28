@@ -239,6 +239,7 @@ public sealed class DownloadAddOwnerTests : IDisposable
         using var settingsStore = new DownKyi.Core.Settings.SettingsStore(
             Path.Combine(_directory, "settings.json"));
         var page = CreatePage();
+        page.AudioQualityFormat = "高质量";
         page.EpisodeId = 99;
         page.Page = 2;
         page.Duration = "01:23";
@@ -279,12 +280,14 @@ public sealed class DownloadAddOwnerTests : IDisposable
         Assert.Equal(page.Page, item.DownloadBase.Page);
         Assert.Equal(80, item.Resolution.Id);
         Assert.Equal("1080P", item.Resolution.Name);
-        Assert.Equal("AVC", item.VideoCodecName);
+        Assert.Equal("H.264/AVC", item.VideoCodecName);
         Assert.Equal(
             DownKyi.Core.BiliApi.VideoStream.PlayStreamType.Cheese,
             item.Downloading.PlayStreamType);
         Assert.Equal(DownKyi.Models.DownloadStatus.NotStarted, item.Downloading.DownloadStatus);
-        Assert.Equal(content, item.DownloadBase.NeedDownloadContent);
+        Assert.Equal(
+            content with { MediaKind = DownloadMediaKind.Dash },
+            item.DownloadBase.NeedDownloadContent);
         Assert.StartsWith(_directory, item.DownloadBase.FilePath, StringComparison.Ordinal);
         Assert.Contains("section", item.DownloadBase.FilePath, StringComparison.Ordinal);
     }
@@ -303,6 +306,7 @@ public sealed class DownloadAddOwnerTests : IDisposable
             }
         };
         var page = CreatePage();
+        page.AudioQualityFormat = "高质量";
         var video = new VideoInfoView
         {
             Title = "main",
@@ -338,6 +342,43 @@ public sealed class DownloadAddOwnerTests : IDisposable
         Assert.Equal(first.DownloadBase.FilePath, second.DownloadBase.FilePath);
     }
 
+    [Fact]
+    public void DraftFactoryRejectsAudioOnlyDurlContract()
+    {
+        Directory.CreateDirectory(_directory);
+        using var settingsStore = new DownKyi.Core.Settings.SettingsStore(
+            Path.Combine(_directory, "settings.json"));
+        var page = CreatePage();
+        page.PlayUrl = new DownKyi.Core.BiliApi.VideoStream.Models.PlayUrl
+        {
+            Quality = 80,
+            VideoCodecid = 7,
+            Durl = [new DownKyi.Core.BiliApi.VideoStream.Models.PlayUrlDurl()]
+        };
+        var video = new VideoInfoView
+        {
+            Title = "main",
+            VideoZone = "Technology"
+        };
+        var section = new VideoSection
+        {
+            Title = "section",
+            VideoPages = [page]
+        };
+
+        var error = Assert.Throws<InvalidOperationException>(() => DownloadTaskDraftFactory.Create(
+            _directory,
+            video,
+            section,
+            sectionCount: 1,
+            page,
+            CreateVideoQuality(),
+            settingsStore.Current,
+            DownloadContentSelection.None with { Audio = true }));
+
+        Assert.Equal("Audio-only DURL downloads are not supported.", error.Message);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_directory))
@@ -358,7 +399,27 @@ public sealed class DownloadAddOwnerTests : IDisposable
             Order = 1,
             OriginalPublishTime = new DateTime(2024, 1, 2),
             PublishTime = "2024-01-02",
-            PlayUrl = new DownKyi.Core.BiliApi.VideoStream.Models.PlayUrl(),
+            PlayUrl = new DownKyi.Core.BiliApi.VideoStream.Models.PlayUrl
+            {
+                Dash = new DownKyi.Core.BiliApi.VideoStream.Models.PlayUrlDash
+                {
+                    Video =
+                    [
+                        new DownKyi.Core.BiliApi.VideoStream.Models.PlayUrlDashVideo
+                        {
+                            Id = 80,
+                            CodecId = 7
+                        }
+                    ],
+                    Audio =
+                    [
+                        new DownKyi.Core.BiliApi.VideoStream.Models.PlayUrlDashVideo
+                        {
+                            Id = 30280
+                        }
+                    ]
+                }
+            },
             VideoQuality = CreateVideoQuality()
         };
     }
@@ -369,7 +430,7 @@ public sealed class DownloadAddOwnerTests : IDisposable
         {
             Quality = 80,
             QualityFormat = "1080P",
-            SelectedVideoCodec = "AVC"
+            SelectedVideoCodec = "H.264/AVC"
         };
     }
 
@@ -390,7 +451,7 @@ public sealed class DownloadAddOwnerTests : IDisposable
                     Id = 80,
                     Name = "1080P"
                 },
-                VideoCodecName = "AVC"
+                VideoCodecName = "H.264/AVC"
             },
             Downloading = new Downloading
             {

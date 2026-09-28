@@ -37,6 +37,13 @@ internal sealed class ResolvePlaybackStage : IDownloadPipelineStage
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
+        if (context.Input.RequestedContent.MediaKind is null)
+        {
+            return DownloadStageResult.Failure(
+                "download.resolve.recreate-task",
+                "This unfinished download predates the finalized media contract and must be recreated.");
+        }
+
         var playbackBasePath = context.Input.OutputBasePath
             .Replace("\\", "/", StringComparison.Ordinal);
 
@@ -68,11 +75,6 @@ internal sealed class ResolvePlaybackStage : IDownloadPipelineStage
         context.DownloadDirectory = path;
         _presenter.Reset(context);
         await _presenter.ShowParsingAsync(context, cancellationToken).ConfigureAwait(true);
-
-        if (context.NeedsMedia && context.TryReuseStagedMedia())
-        {
-            return DownloadStageResult.Success(Name);
-        }
 
         if (context.PlayUrl != null)
         {

@@ -44,6 +44,7 @@ internal sealed class DownloadPlaybackResolver
                         media.Avid,
                         media.Bvid,
                         media.Cid,
+                        quality: input.Metadata.Resolution.Id,
                         cancellationToken: cancellationToken),
                     1 => _client.GetVideoPlayUrlWebPageAsync(
                         keys,
@@ -52,7 +53,8 @@ internal sealed class DownloadPlaybackResolver
                         media.Bvid,
                         media.Cid,
                         media.Page,
-                        cancellationToken),
+                        quality: input.Metadata.Resolution.Id,
+                        cancellationToken: cancellationToken),
                     _ => throw new ArgumentException(
                         "Invalid video parse type. Valid values are: 0 (WebAPI) or 1 (WebPage).")
                 },
@@ -63,12 +65,14 @@ internal sealed class DownloadPlaybackResolver
                 media.Bvid,
                 media.Cid,
                 media.EpisodeId,
+                quality: input.Metadata.Resolution.Id,
                 cancellationToken: cancellationToken),
             PlayStreamType.Cheese => _client.GetCheesePlayUrlAsync(
                 media.Avid,
                 media.Bvid,
                 media.Cid,
                 media.EpisodeId,
+                quality: input.Metadata.Resolution.Id,
                 cancellationToken: cancellationToken),
             _ => Task.FromResult<PlayUrl?>(null)
         };

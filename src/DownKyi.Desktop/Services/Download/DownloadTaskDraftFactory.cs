@@ -35,6 +35,24 @@ internal static class DownloadTaskDraftFactory
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(content);
 
+        var playUrl = page.PlayUrl
+            ?? throw new InvalidOperationException("A download draft requires a parsed playback URL.");
+        var needsMedia = content.Audio || content.Video;
+        var mediaKind = needsMedia
+            ? DownloadMediaContract.Detect(playUrl)
+            : DownloadMediaKind.None;
+        if (needsMedia && mediaKind == DownloadMediaKind.None)
+        {
+            throw new InvalidOperationException(
+                "A media download draft requires a supported finalized playback format.");
+        }
+
+        if (mediaKind == DownloadMediaKind.Durl && content.Audio && !content.Video)
+        {
+            throw new InvalidOperationException(
+                "Audio-only DURL downloads are not supported.");
+        }
+
         var audioCodec = PlaybackQualityCatalog.GetAudioQualities()
             .FirstOrDefault(quality => quality.Name == page.AudioQualityFormat) ?? new Quality();
         var downloadBase = new DownloadBase
@@ -67,7 +85,7 @@ internal static class DownloadTaskDraftFactory
             AudioCodec = audioCodec,
             Page = page.Page
         };
-        downloadBase.NeedDownloadContent = content;
+        downloadBase.NeedDownloadContent = content with { MediaKind = mediaKind };
 
         return new DownloadingItem
         {
@@ -77,8 +95,7 @@ internal static class DownloadTaskDraftFactory
                 PlayStreamType = ResolvePlayStreamType(video.TypeId),
                 DownloadStatus = DownloadStatus.NotStarted
             },
-            PlayUrl = page.PlayUrl
-                ?? throw new InvalidOperationException("A download draft requires a parsed playback URL.")
+            PlayUrl = playUrl
         };
     }
 

@@ -104,6 +104,44 @@ public sealed class PlayUrlEnvelopeContractTests
     }
 
     [Fact]
+    public async Task WebPageVideoEndpointFallsBackWhenDurlQualityDiffersFromRequestedQuality()
+    {
+        var requests = new List<BilibiliHttpRequest>();
+        var client = new StubBilibiliApiClient((request, _) =>
+        {
+            requests.Add(request);
+            if (request.RequestAddress.StartsWith(
+                    "https://www.bilibili.com/video/",
+                    StringComparison.Ordinal))
+            {
+                return Task.FromResult(
+                    """
+                    <script>window.__playinfo__={"code":0,"message":"success","data":{"quality":64,"video_codecid":7,"durl":[{"order":1,"url":"https://example.invalid/default"}]}}</script>
+                    """);
+            }
+
+            return Task.FromResult(
+                """
+                {"code":0,"message":"success","data":{"quality":80,"video_codecid":7,"durl":[{"order":1,"url":"https://example.invalid/requested"}]}}
+                """);
+        });
+
+        var payload = await client.GetVideoPlayUrlWebPageAsync(
+            Keys,
+            1702204169,
+            1,
+            "BV1fixture",
+            2,
+            1,
+            quality: 80,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(80, payload?.Quality);
+        Assert.Equal(2, requests.Count);
+        Assert.Contains("qn=80", requests[1].RequestAddress, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task BangumiEndpointUsesResultVideoInfoEnvelope()
     {
         BilibiliHttpRequest? capturedRequest = null;

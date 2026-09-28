@@ -85,12 +85,14 @@ public static partial class VideoStreamApi
         string bvid,
         long cid,
         int p,
+        int quality = 125,
         CancellationToken cancellationToken = default)
     {
         var url = BuildVideoPlayPageUrl(avid, bvid, p);
         var playUrl = await GetPlayUrlWebPageAsync(client, url, cancellationToken)
             .ConfigureAwait(false);
-        if (playUrl == null)
+        if (playUrl == null ||
+            (playUrl.Durl.Count > 0 && playUrl.Quality != quality))
         {
             playUrl = await client.GetVideoPlayUrlAsync(
                 keys,
@@ -98,6 +100,7 @@ public static partial class VideoStreamApi
                 avid,
                 bvid,
                 cid,
+                quality,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 
