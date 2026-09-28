@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using DownKyi.Services.Download;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -175,7 +177,11 @@ public sealed class BuiltinRangeDownloaderTests
         var target = Path.Combine(directory, "media.bin");
         try
         {
-            await WritePartialAsync(target, payload, ResourceIdentity(strongETag: null));
+            await WritePartialAsync(
+                target,
+                payload,
+                ResourceIdentity(strongETag: null),
+                secondChunkPosition: 2);
             using var handler = new RangePayloadHandler(payload, entityTag: null);
             using var downloader = CreateDownloader(
                 handler,
@@ -188,7 +194,7 @@ public sealed class BuiltinRangeDownloaderTests
                 TestContext.Current.CancellationToken);
 
             Assert.Equal(
-                [(0L, 3L), (4L, 7L), (8L, 11L)],
+                [(4L, 5L), (6L, 7L), (8L, 11L)],
                 handler.ChunkRanges.OrderBy(static range => range.Start).ToArray());
             Assert.All(handler.IfRangeValues, Assert.Null);
             Assert.Equal(payload, await File.ReadAllBytesAsync(
@@ -229,6 +235,77 @@ public sealed class BuiltinRangeDownloaderTests
 
             Assert.Equal([(0L, 3L)], handler.ChunkRanges);
             Assert.True(File.Exists($"{target}.download"));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ConflictingOverlapValidatorRejectsPartialWhenProbeHasNoValidator()
+    {
+        var payload = CreatePayload(12);
+        var directory = CreateTemporaryDirectory("range-overlap-validator-mismatch");
+        var target = Path.Combine(directory, "media.bin");
+        try
+        {
+            await WritePartialAsync(
+                target,
+                payload,
+                ResourceIdentity("\"resource-v1\""));
+            using var handler = new RangePayloadHandler(
+                payload,
+                entityTag: null,
+                overlapEntityTag: "\"resource-v2\"");
+            using var downloader = CreateDownloader(
+                handler,
+                parallelCount: 1,
+                segmentSize: 4);
+
+            await Assert.ThrowsAsync<BuiltinResumeRejectedException>(() => downloader.DownloadAsync(
+                target,
+                payload.Length,
+                TestContext.Current.CancellationToken));
+
+            Assert.Equal([(0L, 3L)], handler.ChunkRanges);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ChangedResourceScopeUsesOverlapBeforeResuming()
+    {
+        var payload = CreatePayload(12);
+        var previousAddress = new Uri("https://previous-media.invalid/file");
+        var directory = CreateTemporaryDirectory("range-resource-scope-change");
+        var target = Path.Combine(directory, "media.bin");
+        try
+        {
+            await WritePartialAsync(
+                target,
+                payload,
+                ResourceIdentity("\"resource-v1\"", previousAddress));
+            using var handler = new RangePayloadHandler(payload);
+            using var downloader = CreateDownloader(
+                handler,
+                parallelCount: 1,
+                segmentSize: 4);
+
+            await downloader.DownloadAsync(
+                target,
+                payload.Length,
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(
+                [(0L, 3L), (4L, 7L), (8L, 11L)],
+                handler.ChunkRanges.OrderBy(static range => range.Start).ToArray());
+            Assert.Equal(payload, await File.ReadAllBytesAsync(
+                target,
+                TestContext.Current.CancellationToken));
         }
         finally
         {
@@ -357,7 +434,7 @@ public sealed class BuiltinRangeDownloaderTests
         response.Content.Headers.LastModified = lastModified;
         response.Headers.Date = lastModified.AddSeconds(59);
 
-        var identity = BuiltinRangeResourceIdentity.Create(response);
+        var identity = BuiltinRangeResourceIdentity.Create(MediaAddress, response);
 
         Assert.Null(identity.LastModified);
         Assert.Null(identity.IfRangeValue);
@@ -395,9 +472,10 @@ public sealed class BuiltinRangeDownloaderTests
     }
 
     [Fact]
-    public async Task MissingChunkValidatorRejectsReuseWhenServerIgnoresIfRange()
+    public async Task OverlapVerifiedResumeAllowsLaterResponsesWithoutValidators()
     {
         var payload = CreatePayload(12);
+        var previousAddress = new Uri("https://previous-media.invalid/file");
         var directory = CreateTemporaryDirectory("range-if-range-omitted-validator");
         var target = Path.Combine(directory, "media.bin");
         try
@@ -405,10 +483,50 @@ public sealed class BuiltinRangeDownloaderTests
             await WritePartialAsync(
                 target,
                 payload,
-                ResourceIdentity("\"resource-v1\""));
+                ResourceIdentity("\"resource-v1\"", previousAddress));
             using var handler = new RangePayloadHandler(
                 payload,
                 omitChunkValidators: true);
+            using var downloader = CreateDownloader(
+                handler,
+                parallelCount: 1,
+                segmentSize: 4);
+
+            await downloader.DownloadAsync(
+                target,
+                payload.Length,
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(
+                [(0L, 3L), (4L, 7L), (8L, 11L)],
+                handler.ChunkRanges.OrderBy(static range => range.Start).ToArray());
+            Assert.Equal(payload, await File.ReadAllBytesAsync(
+                target,
+                TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task OverlapVerifiedResumeRejectsConflictingLaterValidator()
+    {
+        var payload = CreatePayload(12);
+        var previousAddress = new Uri("https://previous-media.invalid/file");
+        var directory = CreateTemporaryDirectory("range-overlap-later-validator-mismatch");
+        var target = Path.Combine(directory, "media.bin");
+        try
+        {
+            await WritePartialAsync(
+                target,
+                payload,
+                ResourceIdentity("\"resource-v1\"", previousAddress));
+            using var handler = new RangePayloadHandler(
+                payload,
+                chunkEntityTag: "\"resource-v2\"",
+                overlapEntityTag: "\"resource-v1\"");
             using var downloader = CreateDownloader(
                 handler,
                 parallelCount: 1,
@@ -419,8 +537,7 @@ public sealed class BuiltinRangeDownloaderTests
                 payload.Length,
                 TestContext.Current.CancellationToken));
 
-            Assert.Equal([(4L, 7L)], handler.ChunkRanges);
-            Assert.Equal(["\"resource-v1\""], handler.IfRangeValues);
+            Assert.Equal([(0L, 3L), (4L, 7L)], handler.ChunkRanges);
         }
         finally
         {
@@ -553,9 +670,11 @@ public sealed class BuiltinRangeDownloaderTests
 
     private static readonly Uri MediaAddress = new("https://media.invalid/file");
 
-    private static object ResourceIdentity(string? strongETag) =>
+    private static object ResourceIdentity(string? strongETag, Uri? address = null) =>
         new
         {
+            AddressHash = Convert.ToHexString(SHA256.HashData(
+                Encoding.UTF8.GetBytes((address ?? MediaAddress).AbsoluteUri))),
             StrongETag = strongETag,
             LastModified = (DateTimeOffset?)null
         };
@@ -563,7 +682,8 @@ public sealed class BuiltinRangeDownloaderTests
     private static async Task WritePartialAsync(
         string target,
         byte[] payload,
-        object? resourceIdentity)
+        object? resourceIdentity,
+        int secondChunkPosition = 0)
     {
         var metadata = JsonSerializer.SerializeToUtf8Bytes(new
         {
@@ -571,7 +691,7 @@ public sealed class BuiltinRangeDownloaderTests
             Chunks = new[]
             {
                 new { Start = 0, End = 3, Position = 4 },
-                new { Start = 4, End = 7, Position = 0 },
+                new { Start = 4, End = 7, Position = secondChunkPosition },
                 new { Start = 8, End = 11, Position = 0 }
             },
             ResourceIdentity = resourceIdentity
@@ -587,7 +707,7 @@ public sealed class BuiltinRangeDownloaderTests
         {
             stream.SetLength(payload.Length);
             await stream.WriteAsync(
-                payload.AsMemory(0, 4),
+                payload.AsMemory(0, 4 + secondChunkPosition),
                 TestContext.Current.CancellationToken).ConfigureAwait(false);
             stream.Position = payload.Length;
             await stream.WriteAsync(
@@ -617,6 +737,7 @@ public sealed class BuiltinRangeDownloaderTests
         private readonly int? _stallBeforeHeadersAtRequest;
         private readonly string? _entityTag;
         private readonly string? _chunkEntityTag;
+        private readonly string? _overlapEntityTag;
         private readonly bool _omitChunkValidators;
         private readonly DateTimeOffset? _lastModified;
         private readonly DateTimeOffset? _responseDate;
@@ -632,6 +753,7 @@ public sealed class BuiltinRangeDownloaderTests
             int? stallBeforeHeadersAtRequest = null,
             string? entityTag = "\"resource-v1\"",
             string? chunkEntityTag = null,
+            string? overlapEntityTag = null,
             bool omitChunkValidators = false,
             DateTimeOffset? lastModified = null,
             DateTimeOffset? responseDate = null)
@@ -643,6 +765,7 @@ public sealed class BuiltinRangeDownloaderTests
             _stallBeforeHeadersAtRequest = stallBeforeHeadersAtRequest;
             _entityTag = entityTag;
             _chunkEntityTag = chunkEntityTag;
+            _overlapEntityTag = overlapEntityTag;
             _omitChunkValidators = omitChunkValidators;
             _lastModified = lastModified;
             _responseDate = responseDate;
@@ -718,11 +841,7 @@ public sealed class BuiltinRangeDownloaderTests
                 Content = content,
                 RequestMessage = request
             };
-            var entityTag = !isProbe && _omitChunkValidators
-                ? null
-                : !isProbe && _chunkEntityTag != null
-                    ? _chunkEntityTag
-                    : _entityTag;
+            var entityTag = GetEntityTag(isProbe, start);
             if (entityTag != null)
             {
                 response.Headers.ETag = EntityTagHeaderValue.Parse(entityTag);
@@ -737,6 +856,21 @@ public sealed class BuiltinRangeDownloaderTests
             }
 
             return response;
+        }
+
+        private string? GetEntityTag(bool isProbe, long start)
+        {
+            if (isProbe)
+            {
+                return _entityTag;
+            }
+
+            if (start == 0 && _overlapEntityTag != null)
+            {
+                return _overlapEntityTag;
+            }
+
+            return _omitChunkValidators ? null : _chunkEntityTag ?? _entityTag;
         }
     }
 
