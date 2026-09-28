@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using DownKyi.Core.BiliApi.VideoStream.Models;
+using DownKyi.Domain.Downloads;
 using DownKyi.Presentation;
 
 namespace DownKyi.Services.Download;
@@ -54,3 +55,16 @@ internal sealed record PreparedDownload(
             }).ToArray());
     }
 }
+
+internal sealed record FinalizedDownloadPage(
+    VideoPage Page,
+    VideoQuality VideoQuality,
+    DownloadContentSelection RequestedContent);
+
+internal sealed record FinalizedDownloadSection(
+    VideoSection Section,
+    IReadOnlyList<FinalizedDownloadPage> Pages);
+
+internal sealed record FinalizedDownload(
+    VideoInfoView Video,
+    IReadOnlyList<FinalizedDownloadSection> Sections);

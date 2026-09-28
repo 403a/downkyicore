@@ -1,0 +1,44 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vmd="clr-namespace:DownKyi.ViewModels.Dialogs"
+             x:Class="DownKyi.Views.Dialogs.DownloadContentConflictDialog"
+             x:DataType="vmd:DownloadContentConflictDialogViewModel">
+    <Border BorderBrush="{DynamicResource BrushWindowBorder}" BorderThickness="1,1,1,0.6">
+        <Grid RowDefinitions="40,*">
+            <Grid Grid.Row="0"
+                  Background="{DynamicResource BrushBackgroundGreyTranslucent3}"
+                  WindowDecorationProperties.ElementRole="TitleBar">
+                <TextBlock Margin="10,0"
+                           VerticalAlignment="Center"
+                           FontSize="12"
+                           Foreground="{DynamicResource BrushCaptionForeground}"
+                           Text="{Binding Title}" />
+            </Grid>
+
+            <StackPanel Grid.Row="1"
+                        MinWidth="420"
+                        MaxWidth="620"
+                        Margin="24,20"
+                        Spacing="18">
+                <TextBlock Foreground="{DynamicResource BrushTextDark}"
+                           Text="{Binding Message}"
+                           TextWrapping="Wrap" />
+                <CheckBox Content="{DynamicResource ApplyToAllSameContentConflict}"
+                          Foreground="{DynamicResource BrushTextDark}"
+                          IsChecked="{Binding ApplyToAll, Mode=TwoWay}" />
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
+                    <Button Grid.Column="0"
+                            Command="{Binding UseAvailableContentCommand}"
+                            Content="{Binding UseAvailableContent}"
+                            Foreground="{DynamicResource BrushText}"
+                            Theme="{StaticResource BtnStyle}" />
+                    <Button Grid.Column="1"
+                            Command="{Binding SkipPageCommand}"
+                            Content="{DynamicResource SkipDownloadPage}"
+                            Foreground="{DynamicResource BrushText}"
+                            Theme="{StaticResource BtnStyle}" />
+                </Grid>
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>

@@ -40,6 +40,9 @@ internal sealed class DialogContentFactory(IServiceProvider services)
             AppDialog.DownloadRuntimeFailure => (
                 typeof(DownloadRuntimeFailureDialog),
                 typeof(DownloadRuntimeFailureDialogViewModel)),
+            AppDialog.DownloadContentConflict => (
+                typeof(DownloadContentConflictDialog),
+                typeof(DownloadContentConflictDialogViewModel)),
             _ => throw new ArgumentOutOfRangeException(nameof(dialog), dialog, null)
         };
     }
