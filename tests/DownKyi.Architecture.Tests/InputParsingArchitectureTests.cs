@@ -11,7 +11,7 @@ public sealed class InputParsingArchitectureTests
         "BiliApi",
         "BiliUtils");
     private static readonly Regex PublicMethodRegex = new(
-        @"public static (?:bool|long|string) ([A-Za-z_][A-Za-z0-9_]*)\(",
+        @"public static (?:bool|long|string|UserSeriesListAddress\?) ([A-Za-z_][A-Za-z0-9_]*)\(",
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking,
         TimeSpan.FromSeconds(1));
 
@@ -71,7 +71,8 @@ public sealed class InputParsingArchitectureTests
         AssertPublicMethods(
             "ParseEntrance.UserVideoList.cs",
             "IsUserVideoListUrl",
-            "GetUserVideoListId");
+            "GetUserVideoListId",
+            "GetUserSeriesListUrl");
     }
 
     [Fact]

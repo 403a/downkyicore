@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Threading.Tasks;
@@ -70,31 +69,25 @@ internal class ViewUserSpaceSeasonsSeriesViewModel : ViewModelBase
             return;
         }
 
-        // 应该用枚举的，偷懒直接用数字
-        var type = 0;
+        object payload;
         if (seasonsSeries.TypeImage == NormalIcon.Instance().SeasonsSeries)
         {
-            type = 1;
+            payload = new SeasonNavigationPayload(mid, seasonsSeries.Id);
         }
         else if (seasonsSeries.TypeImage == NormalIcon.Instance().Channel1)
         {
-            type = 2;
+            payload = new SeriesNavigationPayload(mid, seasonsSeries.Id);
         }
-
-        var data = new Dictionary<string, object>
+        else
         {
-            { "mid", mid },
-            { "id", seasonsSeries.Id },
-            { "name", seasonsSeries.Name },
-            { "count", seasonsSeries.Count },
-            { "type", type }
-        };
+            return;
+        }
 
         // 进入视频页面
         Navigation.Navigate(new AppNavigationRequest(
             AppRoute.SeasonsSeries,
             AppRoute.UserSpace,
-            data));
+            payload));
 
         SelectedItem = -1;
     }

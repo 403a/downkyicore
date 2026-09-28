@@ -17,9 +17,14 @@ internal enum SeasonsSeriesKind
 
 internal sealed record SeasonsSeriesDownloadItem(string Bvid, bool IsSelected);
 
+internal sealed record SeasonsSeriesPageSnapshot(
+    IReadOnlyList<SpaceSeasonsSeriesArchives> Archives,
+    string Title,
+    int TotalCount);
+
 internal interface ISeasonsSeriesCoordinator
 {
-    Task<IReadOnlyList<SpaceSeasonsSeriesArchives>> LoadPageAsync(
+    Task<SeasonsSeriesPageSnapshot> LoadPageAsync(
         long mid,
         long id,
         SeasonsSeriesKind kind,
@@ -46,7 +51,7 @@ internal sealed class SeasonsSeriesCoordinator : ISeasonsSeriesCoordinator
         _client = client ?? throw new ArgumentNullException(nameof(client));
     }
 
-    public async Task<IReadOnlyList<SpaceSeasonsSeriesArchives>> LoadPageAsync(
+    public async Task<SeasonsSeriesPageSnapshot> LoadPageAsync(
         long mid,
         long id,
         SeasonsSeriesKind kind,
@@ -64,9 +69,15 @@ internal sealed class SeasonsSeriesCoordinator : ISeasonsSeriesCoordinator
                     page,
                     pageSize,
                     cancellationToken).ConfigureAwait(false);
-                return season == null || season.Meta.Total == 0
-                    ? Array.Empty<SpaceSeasonsSeriesArchives>()
-                    : season.Archives;
+                if (season == null)
+                {
+                    throw new InvalidOperationException("The requested Bilibili season returned no data.");
+                }
+
+                return new SeasonsSeriesPageSnapshot(
+                    season.Archives,
+                    season.Meta.Name,
+                    season.Meta.Total);
             case SeasonsSeriesKind.Series:
                 var meta = await _client.GetSeriesMetaAsync(id, cancellationToken)
                     .ConfigureAwait(false);
@@ -76,9 +87,20 @@ internal sealed class SeasonsSeriesCoordinator : ISeasonsSeriesCoordinator
                     page,
                     pageSize,
                     cancellationToken).ConfigureAwait(false);
-                return series == null || meta?.Meta.Total == 0
-                    ? Array.Empty<SpaceSeasonsSeriesArchives>()
-                    : series.Archives;
+                if (series == null || meta == null)
+                {
+                    throw new InvalidOperationException("The requested Bilibili series returned no data.");
+                }
+
+                if (meta.Meta.Mid != mid || meta.Meta.SeriesId != id)
+                {
+                    throw new InvalidOperationException("The requested Bilibili series did not match the supplied uploader and series IDs.");
+                }
+
+                return new SeasonsSeriesPageSnapshot(
+                    series.Archives,
+                    meta.Meta.Name,
+                    meta.Meta.Total);
             default:
                 throw new ArgumentOutOfRangeException(nameof(kind), kind, null);
         }

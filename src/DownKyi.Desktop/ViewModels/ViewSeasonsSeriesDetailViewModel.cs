@@ -270,7 +270,7 @@ internal class ViewSeasonsSeriesDetailViewModel : ViewModelBase
 
         try
         {
-            var archives = await _coordinator
+            var page = await _coordinator
                 .LoadPageAsync(_mid, _id, _kind, current, VideoNumberInPage, cancellationToken)
                 .ConfigureAwait(true);
             cancellationToken.ThrowIfCancellationRequested();
@@ -279,14 +279,22 @@ internal class ViewSeasonsSeriesDetailViewModel : ViewModelBase
                 return;
             }
 
-            if (archives.Count == 0)
+            if (!string.IsNullOrWhiteSpace(page.Title))
+            {
+                Title = page.Title;
+            }
+
+            Pager.Count = Math.Max(
+                current,
+                (int)Math.Ceiling((double)page.TotalCount / VideoNumberInPage));
+            if (page.Archives.Count == 0)
             {
                 LoadingVisibility = false;
                 NoDataVisibility = true;
                 return;
             }
 
-            Medias.AddRange(archives.Select(CreateMedia));
+            Medias.AddRange(page.Archives.Select(CreateMedia));
             LoadingVisibility = false;
             NoDataVisibility = false;
         }
@@ -302,6 +310,7 @@ internal class ViewSeasonsSeriesDetailViewModel : ViewModelBase
             {
                 LoadingVisibility = false;
                 NoDataVisibility = true;
+                Notifications.Show(e.Message);
             }
         }
         finally
@@ -374,25 +383,43 @@ internal class ViewSeasonsSeriesDetailViewModel : ViewModelBase
         DownloadManage.Width = 24;
         DownloadManage.Fill = DictionaryResource.GetColor("ColorPrimary");
 
-        var parameter = navigationContext.Parameters.GetValue<Dictionary<string, object>>("Parameter");
-        if (parameter == null)
+        if (navigationContext.Parameter is SeriesNavigationPayload series)
         {
+            InitializePage(
+                series.Mid,
+                series.SeriesId,
+                SeasonsSeriesKind.Series);
             return;
         }
 
+        if (navigationContext.Parameter is SeasonNavigationPayload season)
+        {
+            InitializePage(
+                season.Mid,
+                season.SeasonId,
+                SeasonsSeriesKind.Season);
+            return;
+        }
+
+        NoDataVisibility = true;
+    }
+
+    private void InitializePage(
+        long mid,
+        long id,
+        SeasonsSeriesKind kind)
+    {
         CancelOperations();
         IsEnabled = true;
         Medias.Clear();
         IsSelectAll = false;
-        _mid = (long)parameter["mid"];
-        _id = (long)parameter["id"];
-        _kind = (SeasonsSeriesKind)(int)parameter["type"];
-        Title = (string)parameter["name"];
-        var count = (int)parameter["count"];
+        NoDataVisibility = false;
+        _mid = mid;
+        _id = id;
+        _kind = kind;
+        Title = string.Empty;
 
-        ReplacePager(new CustomPagerViewModel(
-            1,
-            (int)Math.Ceiling((double)count / VideoNumberInPage)));
+        ReplacePager(new CustomPagerViewModel(1, 1));
         Pager.Current = 1;
     }
 
