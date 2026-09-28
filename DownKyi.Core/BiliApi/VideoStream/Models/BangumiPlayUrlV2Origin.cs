@@ -11,6 +11,15 @@ public sealed class BangumiPlayUrlV2Origin : BaseModel
 
 public sealed class BangumiPlayUrlV2Result : BaseModel
 {
+    [JsonProperty("play_check")]
+    public BangumiPlayUrlV2PlayCheck? PlayCheck { get; set; }
+
     [JsonProperty("video_info")]
     public PlayUrl? VideoInfo { get; set; }
+}
+
+public sealed class BangumiPlayUrlV2PlayCheck : BaseModel
+{
+    [JsonProperty("play_detail")]
+    public string? PlayDetail { get; set; }
 }

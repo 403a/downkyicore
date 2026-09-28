@@ -6,7 +6,6 @@
       "play_detail": "PLAY_PREVIEW"
     },
     "video_info": {
-      "is_preview": 1,
       "quality": 80,
       "timelength": 1228032,
       "durl": [
