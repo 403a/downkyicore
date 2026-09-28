@@ -9,7 +9,9 @@ public sealed class CustomDanmakuFilterTests
     [Fact]
     public void EmojiOnlyDanmakuIsRemovedAfterCleanup()
     {
-        var result = CreateFilter(removeEmoji: true).DoFilter([CreateDanmaku("😂😂😂")]);
+        var result = CreateFilter(removeEmoji: true).DoFilter(
+            [CreateDanmaku("😂😂😂")],
+            TestContext.Current.CancellationToken);
 
         Assert.Empty(result);
     }
@@ -19,7 +21,7 @@ public sealed class CustomDanmakuFilterTests
     {
         var input = CreateDanmaku("太好笑了😂😂");
 
-        var result = CreateFilter(removeEmoji: true).DoFilter([input]);
+        var result = CreateFilter(removeEmoji: true).DoFilter([input], TestContext.Current.CancellationToken);
 
         Assert.Equal("太好笑了", Assert.Single(result).Content);
         Assert.Equal("太好笑了😂😂", input.Content);
@@ -30,7 +32,9 @@ public sealed class CustomDanmakuFilterTests
     {
         const string content = "中文 English 123，。！？,.!?-_:;()[]";
 
-        var result = CreateFilter(removeEmoji: true).DoFilter([CreateDanmaku(content)]);
+        var result = CreateFilter(removeEmoji: true).DoFilter(
+            [CreateDanmaku(content)],
+            TestContext.Current.CancellationToken);
 
         Assert.Equal(content, Assert.Single(result).Content);
     }
@@ -38,7 +42,9 @@ public sealed class CustomDanmakuFilterTests
     [Fact]
     public void ExactKeywordMatchIsRemoved()
     {
-        var result = CreateFilter(blockedKeywords: ["劇透"]).DoFilter([CreateDanmaku("劇透")]);
+        var result = CreateFilter(blockedKeywords: ["劇透"]).DoFilter(
+            [CreateDanmaku("劇透")],
+            TestContext.Current.CancellationToken);
 
         Assert.Empty(result);
     }
@@ -46,7 +52,9 @@ public sealed class CustomDanmakuFilterTests
     [Fact]
     public void KeywordContainedInSentenceIsRemoved()
     {
-        var result = CreateFilter(blockedKeywords: ["劇透"]).DoFilter([CreateDanmaku("前方劇透注意")]);
+        var result = CreateFilter(blockedKeywords: ["劇透"]).DoFilter(
+            [CreateDanmaku("前方劇透注意")],
+            TestContext.Current.CancellationToken);
 
         Assert.Empty(result);
     }
@@ -56,7 +64,9 @@ public sealed class CustomDanmakuFilterTests
     {
         var danmaku = CreateDanmaku("這集很好看");
 
-        var result = CreateFilter(blockedKeywords: [" ", "\t", "劇透"]).DoFilter([danmaku]);
+        var result = CreateFilter(blockedKeywords: [" ", "\t", "劇透"]).DoFilter(
+            [danmaku],
+            TestContext.Current.CancellationToken);
 
         Assert.Same(danmaku, Assert.Single(result));
     }
@@ -66,7 +76,9 @@ public sealed class CustomDanmakuFilterTests
     {
         var danmaku = CreateDanmaku("   ");
 
-        var result = CreateFilter(blockedKeywords: ["劇透"]).DoFilter([danmaku]);
+        var result = CreateFilter(blockedKeywords: ["劇透"]).DoFilter(
+            [danmaku],
+            TestContext.Current.CancellationToken);
 
         Assert.Same(danmaku, Assert.Single(result));
     }
@@ -80,7 +92,7 @@ public sealed class CustomDanmakuFilterTests
         [
             CreateDanmaku("刪除", commenter: "ABC123"),
             kept
-        ]);
+        ], TestContext.Current.CancellationToken);
 
         Assert.Same(kept, Assert.Single(result));
     }
@@ -97,9 +109,20 @@ public sealed class CustomDanmakuFilterTests
             CreateDanmaku("前方劇透😂"),
             CreateDanmaku("發送者命中", commenter: "blocked"),
             CreateDanmaku("正常😂")
-        ]);
+        ], TestContext.Current.CancellationToken);
 
         Assert.Equal("正常", Assert.Single(result).Content);
+    }
+
+    [Fact]
+    public void CustomFilteringObservesCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.Throws<OperationCanceledException>(() =>
+            CreateFilter(blockedKeywords: ["劇透"])
+                .DoFilter([CreateDanmaku("正常")], cancellation.Token));
     }
 
     [Fact]

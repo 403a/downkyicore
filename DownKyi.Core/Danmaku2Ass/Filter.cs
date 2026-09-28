@@ -9,6 +9,14 @@ namespace DownKyi.Core.Danmaku2Ass;
 public abstract class Filter
 {
     public abstract IReadOnlyList<Danmaku> DoFilter(IReadOnlyList<Danmaku> danmakus);
+
+    public virtual IReadOnlyList<Danmaku> DoFilter(
+        IReadOnlyList<Danmaku> danmakus,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return DoFilter(danmakus);
+    }
 }
 
 /// <summary>
@@ -78,6 +86,13 @@ public sealed class CustomDanmakuFilter : Filter
 
     public override IReadOnlyList<Danmaku> DoFilter(IReadOnlyList<Danmaku> danmakus)
     {
+        return DoFilter(danmakus, CancellationToken.None);
+    }
+
+    public override IReadOnlyList<Danmaku> DoFilter(
+        IReadOnlyList<Danmaku> danmakus,
+        CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(danmakus);
 
         if (!IsEnabled)
@@ -88,6 +103,7 @@ public sealed class CustomDanmakuFilter : Filter
         var kept = new List<Danmaku>(danmakus.Count);
         foreach (var danmaku in danmakus)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (_blockedCommenters.Contains(danmaku.Commenter))
             {
                 continue;
@@ -97,7 +113,7 @@ public sealed class CustomDanmakuFilter : Filter
                 ? RemoveEmojiAndSpecialCharacters(danmaku.Content)
                 : danmaku.Content;
             if ((_removeEmojiAndSpecialCharacters && string.IsNullOrWhiteSpace(content))
-                || _blockedKeywords.Any(keyword => content.Contains(keyword, StringComparison.Ordinal)))
+                || ContainsBlockedKeyword(content, cancellationToken))
             {
                 continue;
             }
@@ -106,6 +122,20 @@ public sealed class CustomDanmakuFilter : Filter
         }
 
         return kept;
+    }
+
+    private bool ContainsBlockedKeyword(string content, CancellationToken cancellationToken)
+    {
+        foreach (var keyword in _blockedKeywords)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (content.Contains(keyword, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static Danmaku CopyWithContent(Danmaku danmaku, string content)

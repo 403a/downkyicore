@@ -3,6 +3,7 @@ namespace DownKyi.Core.Danmaku2Ass;
 public class Producer
 {
     private readonly CustomDanmakuFilter? _customFilter;
+    private readonly CancellationToken _cancellationToken;
 
     public Dictionary<string, bool> Config { get; }
     public Dictionary<string, Filter> Filters { get; private set; } = new();
@@ -13,11 +14,13 @@ public class Producer
     public Producer(
         Dictionary<string, bool> config,
         IReadOnlyList<Danmaku> danmakus,
-        CustomDanmakuFilter? customFilter = null)
+        CustomDanmakuFilter? customFilter = null,
+        CancellationToken cancellationToken = default)
     {
         Config = config;
         Danmakus = danmakus;
         _customFilter = customFilter;
+        _cancellationToken = cancellationToken;
     }
 
     public void StartHandle()
@@ -73,8 +76,9 @@ public class Producer
                 continue;
             }
 
+            _cancellationToken.ThrowIfCancellationRequested();
             var count = danmakus.Count;
-            danmakus = filter.DoFilter(danmakus);
+            danmakus = filter.DoFilter(danmakus, _cancellationToken);
             filterDetail[name] = count - danmakus.Count;
         }
 

@@ -136,7 +136,7 @@ public sealed class BilibiliDanmakuConverter
         }
 
         // 弹幕预处理
-        var producer = new Producer(_config, danmakus, _customFilter);
+        var producer = new Producer(_config, danmakus, _customFilter, cancellationToken);
         producer.StartHandle();
 
         // 字幕生成

@@ -52,9 +52,7 @@
                         Foreground="{DynamicResource BrushTextDark}"
                         Text="{DynamicResource BlockedDanmakuKeywords}" />
                     <TextBox
-                        Width="500"
                         Height="90"
-                        HorizontalAlignment="Left"
                         AcceptsReturn="True"
                         TextWrapping="Wrap"
                         Text="{Binding BlockedKeywordsText, Mode=TwoWay}" />
@@ -64,9 +62,7 @@
                         Foreground="{DynamicResource BrushTextDark}"
                         Text="{DynamicResource BlockedDanmakuSenderUids}" />
                     <TextBox
-                        Width="500"
                         Height="90"
-                        HorizontalAlignment="Left"
                         AcceptsReturn="True"
                         TextWrapping="Wrap"
                         Text="{Binding BlockedSenderUidsText, Mode=TwoWay}" />
