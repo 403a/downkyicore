@@ -124,11 +124,9 @@ internal partial class ViewPublicationViewModel
 
     private void InitView()
     {
-        ArrowBack.Fill = DictionaryResource.GetColor("ColorTextDark");
         DownloadManage = ButtonIcon.Instance().DownloadManage;
         DownloadManage.Height = 24;
         DownloadManage.Width = 24;
-        DownloadManage.Fill = DictionaryResource.GetColor("ColorPrimary");
         TabHeaders.Clear();
         Medias.Clear();
         SelectTabId = -1;
@@ -149,7 +147,6 @@ internal partial class ViewPublicationViewModel
             return;
         }
 
-        ArrowBack.Fill = DictionaryResource.GetColor("ColorTextDark");
         if (Equals(_loadedPayload, payload))
         {
             if (!_hasLoadedPage)

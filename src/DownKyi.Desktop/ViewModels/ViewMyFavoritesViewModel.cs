@@ -207,13 +207,11 @@ internal partial class ViewMyFavoritesViewModel : ViewModelBase
         MediaNoDataVisibility = false;
 
         ArrowBack = NavigationIcon.CreateArrowBack();
-        ArrowBack.Fill = DictionaryResource.GetColor("ColorTextDark");
 
         // 下载管理按钮
         DownloadManage = ButtonIcon.Instance().DownloadManage;
         DownloadManage.Height = 24;
         DownloadManage.Width = 24;
-        DownloadManage.Fill = DictionaryResource.GetColor("ColorPrimary");
 
         TabHeaders = new RangeObservableCollection<TabHeader>();
         Medias = new RangeObservableCollection<FavoritesMedia>();
@@ -235,7 +233,6 @@ internal partial class ViewMyFavoritesViewModel : ViewModelBase
     {
         InitView();
 
-        ArrowBack.Fill = DictionaryResource.GetColor("ColorText");
         // 结束任务
         CancelOperations();
 

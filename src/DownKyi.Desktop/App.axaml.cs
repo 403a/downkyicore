@@ -13,11 +13,11 @@ using DownKyi.Core.Settings;
 using DownKyi.Core.Storage;
 using DownKyi.Core.Utils;
 using DownKyi.CustomControl.AsyncImageLoader;
+using DownKyi.Desktop.Appearance;
 using DownKyi.Desktop.Composition;
 using DownKyi.Infrastructure.Logging;
 using DownKyi.Models;
 using DownKyi.Platform;
-using DownKyi.Utils;
 using DownKyi.Views;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -84,7 +84,7 @@ internal partial class App : Avalonia.Application, IAsyncDisposable
         desktopContext.AttachMainWindow(mainWindow);
         desktop.MainWindow = mainWindow;
 
-        ThemeHelper.SetTheme(host.Services.GetRequiredService<ISettingsStore>().Current.Basic.ThemeMode);
+        host.Services.GetRequiredService<DesktopThemeController>().ApplySavedMode();
         base.OnFrameworkInitializationCompleted();
 
         if (!Design.IsDesignMode)

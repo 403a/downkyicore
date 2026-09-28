@@ -385,7 +385,6 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
         var icon = ButtonIcon.Instance().DownloadManage;
         icon.Height = 24;
         icon.Width = 24;
-        icon.Fill = DictionaryResource.GetColor("ColorPrimary");
         return icon;
     }
 

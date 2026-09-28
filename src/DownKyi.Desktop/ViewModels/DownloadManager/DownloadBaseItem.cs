@@ -1,5 +1,4 @@
 using System;
-using Avalonia;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DownKyi.Core.BiliApi.BiliUtils;
@@ -22,10 +21,8 @@ namespace DownKyi.ViewModels.DownloadManager
                 ArgumentNullException.ThrowIfNull(value);
                 _downloadBase = value;
 
-                ZoneImage = Avalonia.Application.Current == null
-                    ? null
-                    : DictionaryResource.Get<DrawingImage>(
-                        VideoZoneIcon.Instance().GetZoneImageKey(DownloadBase.ZoneId));
+                ZoneImage = DictionaryResource.GetIfApplicationInitialized<DrawingImage>(
+                    VideoZoneIcon.Instance().GetZoneImageKey(DownloadBase.ZoneId));
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(Order));
                 OnPropertyChanged(nameof(MainTitle));

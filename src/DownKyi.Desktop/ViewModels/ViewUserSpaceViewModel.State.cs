@@ -55,14 +55,6 @@ internal partial class ViewUserSpaceViewModel
         set => SetProperty(ref _contentVisibility, value);
     }
 
-    private string _topNavigationBg = string.Empty;
-
-    public string TopNavigationBg
-    {
-        get => _topNavigationBg;
-        set => SetProperty(ref _topNavigationBg, value);
-    }
-
     private string? _background;
 
     public string? Background

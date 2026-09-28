@@ -66,7 +66,7 @@
                     Width="{Binding UiState.DownloadManage.Width}"
                     Height="{Binding UiState.DownloadManage.Height}"
                     Data="{Binding UiState.DownloadManage.Data}"
-                    Fill="{Binding UiState.DownloadManage.Fill}"
+                    Fill="{DynamicResource BrushPrimary}"
                     Stretch="Uniform" />
             </ContentControl>
         </Button>

@@ -10,6 +10,7 @@ using DownKyi.Core.Settings;
 using DownKyi.Core.Storage;
 using DownKyi.CustomControl.AsyncImageLoader;
 using DownKyi.CustomControl.AsyncImageLoader.Loaders;
+using DownKyi.Desktop.Appearance;
 using DownKyi.Infrastructure.Bilibili;
 using DownKyi.Platform;
 using DownKyi.Services;
@@ -57,6 +58,7 @@ internal static class DesktopComposition
                 disposeHttpClient: true,
                 Path.Combine(ApplicationStorage.GetCache(), "Images")));
         services.AddSingleton<ISettingsStore, SettingsStore>();
+        services.AddSingleton<DesktopThemeController>();
         services.AddSingleton<IBilibiliCookieProvider, BilibiliCookieProvider>();
         services.AddDownKyiBilibiliInfrastructure(provider =>
         {

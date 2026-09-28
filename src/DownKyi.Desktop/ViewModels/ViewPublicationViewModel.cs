@@ -159,13 +159,11 @@ namespace DownKyi.ViewModels
             NoDataVisibility = false;
 
             _arrowBack = NavigationIcon.CreateArrowBack();
-            _arrowBack.Fill = DictionaryResource.GetColor("ColorTextDark");
 
             // 下载管理按钮
             _downloadManage = ButtonIcon.Instance().DownloadManage;
             _downloadManage.Height = 24;
             _downloadManage.Width = 24;
-            _downloadManage.Fill = DictionaryResource.GetColor("ColorPrimary");
 
             _tabHeaders = new RangeObservableCollection<TabHeader>();
             _medias = new RangeObservableCollection<PublicationMedia>();
@@ -183,7 +181,6 @@ namespace DownKyi.ViewModels
 
         protected internal override void ExecuteBackSpace()
         {
-            ArrowBack.Fill = DictionaryResource.GetColor("ColorText");
 
             CancelOperations();
             if (TryNavigateBack())

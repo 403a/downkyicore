@@ -14,22 +14,6 @@ internal class TabRightBanner : ObservableObject
         set => SetProperty(ref isEnabled, value);
     }
 
-    private string labelColor = string.Empty;
-
-    public string LabelColor
-    {
-        get => labelColor;
-        set => SetProperty(ref labelColor, value);
-    }
-
-    private string countColor = string.Empty;
-
-    public string CountColor
-    {
-        get => countColor;
-        set => SetProperty(ref countColor, value);
-    }
-
     private string label = string.Empty;
 
     public string Label

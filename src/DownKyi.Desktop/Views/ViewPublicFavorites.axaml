@@ -50,10 +50,11 @@
                 ToolTip.Tip="{DynamicResource DownloadManager}">
                 <ContentControl>
                     <Path
+                        x:Name="DownloadManagePath"
                         Width="{Binding DownloadManage.Width}"
                         Height="{Binding DownloadManage.Height}"
                         Data="{Binding DownloadManage.Data}"
-                        Fill="{Binding DownloadManage.Fill}"
+                        Fill="{DynamicResource BrushPrimary}"
                         Stretch="Uniform" />
                 </ContentControl>
             </Button>
@@ -142,7 +143,7 @@
                                 Width="{Binding Favorites.Play.Width}"
                                 Height="{Binding Favorites.Play.Height}"
                                 Data="{Binding Favorites.Play.Data}"
-                                Fill="{Binding Favorites.Play.Fill}"
+                                Fill="{DynamicResource BrushTextGrey2}"
                                 Stretch="UniformToFill" />
                         </ContentControl>
                         <TextBlock
@@ -162,7 +163,7 @@
                                 Width="{Binding Favorites.Like.Width}"
                                 Height="{Binding Favorites.Like.Height}"
                                 Data="{Binding Favorites.Like.Data}"
-                                Fill="{Binding Favorites.Like.Fill}"
+                                Fill="{DynamicResource BrushTextGrey2}"
                                 Stretch="UniformToFill" />
                         </ContentControl>
                         <TextBlock
@@ -182,7 +183,7 @@
                                 Width="{Binding Favorites.Favorite.Width}"
                                 Height="{Binding Favorites.Favorite.Height}"
                                 Data="{Binding Favorites.Favorite.Data}"
-                                Fill="{Binding Favorites.Favorite.Fill}"
+                                Fill="{DynamicResource BrushTextGrey2}"
                                 Stretch="UniformToFill" />
                         </ContentControl>
                         <TextBlock
@@ -202,7 +203,7 @@
                                 Width="{Binding Favorites.Share.Width}"
                                 Height="{Binding Favorites.Share.Height}"
                                 Data="{Binding Favorites.Share.Data}"
-                                Fill="{Binding Favorites.Share.Fill}"
+                                Fill="{DynamicResource BrushTextGrey2}"
                                 Stretch="UniformToFill" />
                         </ContentControl>
                         <TextBlock

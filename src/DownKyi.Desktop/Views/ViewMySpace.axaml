@@ -11,6 +11,26 @@
              xmlns:vmp="clr-namespace:DownKyi.Presentation"
              xmlns:asyncImageLoader="clr-namespace:DownKyi.CustomControl.AsyncImageLoader"
              x:DataType="vm:ViewMySpaceViewModel">
+    <UserControl.Styles>
+        <Style Selector="Grid.theme-header">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Grid.theme-header Path">
+            <Setter Property="Fill" Value="{DynamicResource BrushTextDark}" />
+        </Style>
+        <Style Selector="Grid.theme-header TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource BrushTextDark}" />
+        </Style>
+        <Style Selector="Grid.theme-header.overlay">
+            <Setter Property="Background" Value="{DynamicResource BrushMask100}" />
+        </Style>
+        <Style Selector="Grid.theme-header.overlay Path">
+            <Setter Property="Fill" Value="{DynamicResource BrushText}" />
+        </Style>
+        <Style Selector="Grid.theme-header.overlay TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource BrushText}" />
+        </Style>
+    </UserControl.Styles>
     <UserControl.Resources>
         <ControlTheme x:Key="SpaceStyle" TargetType="{x:Type ListBox}">
             <Setter Property="Template">
@@ -120,7 +140,7 @@
                                 Width="{Binding CoinIcon.Width}"
                                 Height="{Binding CoinIcon.Height}"
                                 Data="{Binding CoinIcon.Data}"
-                                Fill="{Binding CoinIcon.Fill}"
+                                Fill="{DynamicResource BrushPrimary}"
                                 Stretch="Uniform" />
                         </ContentControl>
                         <TextBlock
@@ -136,7 +156,7 @@
                                 Width="{Binding MoneyIcon.Width}"
                                 Height="{Binding MoneyIcon.Height}"
                                 Data="{Binding MoneyIcon.Data}"
-                                Fill="{Binding MoneyIcon.Fill}"
+                                Fill="{DynamicResource BrushMoney}"
                                 Stretch="Uniform" />
                         </ContentControl>
                         <TextBlock
@@ -153,7 +173,7 @@
                                 Width="{Binding BindingEmail.Width}"
                                 Height="{Binding BindingEmail.Height}"
                                 Data="{Binding BindingEmail.Data}"
-                                Fill="{Binding BindingEmail.Fill}"
+                                Fill="{DynamicResource BrushPrimary}"
                                 Stretch="Uniform" />
                         </ContentControl>
                         <ContentControl
@@ -164,7 +184,7 @@
                                 Width="{Binding BindingPhone.Width}"
                                 Height="{Binding BindingPhone.Height}"
                                 Data="{Binding BindingPhone.Data}"
-                                Fill="{Binding BindingPhone.Fill}"
+                                Fill="{DynamicResource BrushPrimary}"
                                 Stretch="Uniform" />
                         </ContentControl>
                     </StackPanel>
@@ -284,7 +304,7 @@
                                                     Width="{Binding Image.Width}"
                                                     Height="{Binding Image.Height}"
                                                     Data="{Binding Image.Data}"
-                                                    Fill="{Binding Image.Fill}"
+                                                    Fill="{DynamicResource BrushPrimary}"
                                                     Stretch="Uniform" />
                                             </Border>
                                             <TextBlock
@@ -328,7 +348,11 @@
             IsVisible="{Binding NoDataVisibility}" />
 
         <!--  顶部导航  -->
-        <Grid VerticalAlignment="Top" Background="{Binding TopNavigationBg}" ColumnDefinitions="150,*,150">
+        <Grid
+            VerticalAlignment="Top"
+            Classes="theme-header"
+            Classes.overlay="{Binding ViewVisibility}"
+            ColumnDefinitions="150,*,150">
             <Button
                 Grid.Column="0"
                 Margin="10,5,0,5"
@@ -342,13 +366,11 @@
                             Width="{Binding ArrowBack.Width}"
                             Height="{Binding ArrowBack.Height}"
                             Data="{Binding ArrowBack.Data}"
-                            Fill="{Binding ArrowBack.Fill}"
                             Stretch="None" />
                     </ContentControl>
                     <TextBlock
                         VerticalAlignment="Center"
                         FontSize="16"
-                        Foreground="{Binding ArrowBack.Fill}"
                         Text="{DynamicResource MySpace}" />
                 </StackPanel>
             </Button>
@@ -364,14 +386,12 @@
                         Margin="10,0"
                         VerticalAlignment="Center"
                         FontSize="16"
-                        Foreground="{Binding Logout.Fill}"
                         Text="{DynamicResource Logout}" />
                     <ContentControl Width="24" Height="24">
                         <Path
                             Width="{Binding Logout.Width}"
                             Height="{Binding Logout.Height}"
                             Data="{Binding Logout.Data}"
-                            Fill="{Binding Logout.Fill}"
                             Stretch="Uniform" />
                     </ContentControl>
                 </StackPanel>

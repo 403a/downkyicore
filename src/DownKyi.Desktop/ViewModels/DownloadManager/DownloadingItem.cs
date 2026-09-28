@@ -14,11 +14,9 @@ namespace DownKyi.ViewModels.DownloadManager
         {
             // 暂停继续按钮
             StartOrPause = ButtonIcon.Instance().Pause;
-            StartOrPause.Fill = DictionaryResource.GetColor("ColorPrimary");
 
             // 删除按钮
             Delete = ButtonIcon.Instance().Delete;
-            Delete.Fill = DictionaryResource.GetColor("ColorPrimary");
         }
 
         // model数据
@@ -147,7 +145,6 @@ namespace DownKyi.ViewModels.DownloadManager
                 DownloadStatus.DownloadFailed => ButtonIcon.Instance().Retry,
                 _ => ButtonIcon.Instance().Pause
             };
-            StartOrPause.Fill = DictionaryResource.GetColor("ColorPrimary");
         }
     }
 }

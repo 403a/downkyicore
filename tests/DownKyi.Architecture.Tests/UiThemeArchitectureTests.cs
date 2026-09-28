@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace DownKyi.Architecture.Tests;
 
 public sealed class UiThemeArchitectureTests
@@ -18,6 +20,7 @@ public sealed class UiThemeArchitectureTests
         Assert.Contains("/Themes/DesignTokens.axaml", appSource, StringComparison.Ordinal);
         Assert.DoesNotContain("/Themes/DesignTokens.axaml", themeSource, StringComparison.Ordinal);
         Assert.Contains("x:Key=\"Default\"", themeSource, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"Light\"", themeSource, StringComparison.Ordinal);
         Assert.Contains("x:Key=\"Dark\"", themeSource, StringComparison.Ordinal);
         Assert.Contains("DownKyiFontSizeBody", tokenSource, StringComparison.Ordinal);
         Assert.Contains("DownKyiSpacingMedium", tokenSource, StringComparison.Ordinal);
@@ -25,6 +28,138 @@ public sealed class UiThemeArchitectureTests
         Assert.Contains("DownKyiElevationLow", tokenSource, StringComparison.Ordinal);
         Assert.Contains("Avalonia.Themes.Fluent", projectSource, StringComparison.Ordinal);
         Assert.DoesNotContain("Avalonia.Themes.Simple", projectSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DefaultAndDarkPalettesDeclareTheSameSemanticColorKeys()
+    {
+        var defaultKeys = ExtractKeys(ReadSource(
+                "src", "DownKyi.Desktop", "Themes", "Colors", "ColorDefault.axaml"))
+            .Where(static key => key.StartsWith("Color", StringComparison.Ordinal))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        var darkKeys = ExtractKeys(ReadSource(
+                "src", "DownKyi.Desktop", "Themes", "Colors", "ColorDark.axaml"))
+            .Where(static key => key.StartsWith("Color", StringComparison.Ordinal))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.NotEmpty(defaultKeys);
+        Assert.Equal(defaultKeys, darkKeys);
+    }
+
+    [Fact]
+    public void EveryReferencedSemanticThemeResourceIsDeclared()
+    {
+        var desktopRoot = Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop");
+        var declaredKeys = Directory
+            .EnumerateFiles(Path.Combine(desktopRoot, "Themes"), "*.axaml", SearchOption.AllDirectories)
+            .SelectMany(static path => ExtractKeys(File.ReadAllText(path)))
+            .ToHashSet(StringComparer.Ordinal);
+        var referencedKeys = Directory
+            .EnumerateFiles(desktopRoot, "*.axaml", SearchOption.AllDirectories)
+            .Where(IsRepositorySourcePath)
+            .SelectMany(static path => ExtractSemanticResourceReferences(File.ReadAllText(path)))
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        var missingKeys = referencedKeys
+            .Where(key => !declaredKeys.Contains(key))
+            .ToArray();
+
+        Assert.True(
+            missingKeys.Length == 0,
+            $"Missing semantic theme resources: {string.Join(", ", missingKeys)}");
+    }
+
+    [Fact]
+    public void DesktopThemeControllerIsTheOnlyThemeSwitchOwner()
+    {
+        var desktopRoot = Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop");
+        var desktopSources = Directory
+            .EnumerateFiles(desktopRoot, "*.cs", SearchOption.AllDirectories)
+            .Where(IsRepositorySourcePath)
+            .ToArray();
+        var requestedThemeOwners = desktopSources
+            .Where(path => File.ReadAllText(path).Contains("RequestedThemeVariant", StringComparison.Ordinal))
+            .Select(path => Path.GetRelativePath(RepositoryRoot, path).Replace('\\', '/'))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        var presentationSources = desktopSources
+            .Where(path => path.Contains(
+                $"{Path.DirectorySeparatorChar}ViewModels{Path.DirectorySeparatorChar}",
+                StringComparison.OrdinalIgnoreCase) ||
+                path.Contains(
+                    $"{Path.DirectorySeparatorChar}Presentation{Path.DirectorySeparatorChar}",
+                    StringComparison.OrdinalIgnoreCase))
+            .Select(File.ReadAllText)
+            .ToArray();
+
+        Assert.Equal(
+            ["src/DownKyi.Desktop/Appearance/DesktopThemeController.cs"],
+            requestedThemeOwners);
+        Assert.DoesNotContain(
+            desktopSources,
+            path => File.ReadAllText(path).Contains("ActualThemeVariantChanged", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            presentationSources,
+            source => source.Contains("DictionaryResource.GetColor", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            presentationSources,
+            source => source.Contains("Application.Current", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            presentationSources,
+            source => source.Contains("ActualThemeVariant", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            presentationSources,
+            source => source.Contains("ResourceDictionary", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void SettingsThemeChoicesUseExplicitThemeModes()
+    {
+        var settingsView = ReadSource(
+            "src", "DownKyi.Desktop", "Views", "Settings", "ViewBasic.axaml");
+        var resourceLookup = ReadSource(
+            "src", "DownKyi.Desktop", "Utils", "DictionaryResource.cs");
+
+        Assert.Contains(
+            "CommandParameter=\"{x:Static settings:ThemeMode.Light}\"",
+            settingsView,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "CommandParameter=\"{x:Static settings:ThemeMode.Dark}\"",
+            settingsView,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "CommandParameter=\"{x:Static settings:ThemeMode.Default}\"",
+            settingsView,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("CommandParameter=\"Auto\"", settingsView, StringComparison.Ordinal);
+        Assert.DoesNotContain("GetColor", resourceLookup, StringComparison.Ordinal);
+        Assert.DoesNotContain("#00000000", resourceLookup, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void VectorImageFillBindingsAreLimitedToFixedStatusSemantics()
+    {
+        var desktopRoot = Path.Combine(RepositoryRoot, "src", "DownKyi.Desktop");
+        var fillBindingOwners = Directory
+            .EnumerateFiles(Path.Combine(desktopRoot, "Views"), "*.axaml", SearchOption.AllDirectories)
+            .Where(IsRepositorySourcePath)
+            .Where(path => Regex.IsMatch(
+                File.ReadAllText(path),
+                "Fill=\\\"\\{Binding [^\\\"]+\\.Fill\\}\\\""))
+            .Select(path => Path.GetRelativePath(RepositoryRoot, path).Replace('\\', '/'))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(
+            [
+                "src/DownKyi.Desktop/Views/Dialogs/ViewAlertDialog.axaml",
+                "src/DownKyi.Desktop/Views/Dialogs/ViewAlreadyDownloadedDialog.axaml"
+            ],
+            fillBindingOwners);
     }
 
     [Fact]
@@ -54,6 +189,20 @@ public sealed class UiThemeArchitectureTests
     private static string ReadSource(params string[] pathParts)
     {
         return File.ReadAllText(Path.Combine([RepositoryRoot, .. pathParts]));
+    }
+
+    private static IEnumerable<string> ExtractKeys(string source)
+    {
+        return Regex.Matches(source, "x:Key=\\\"(?<key>[^\\\"]+)\\\"")
+            .Select(static match => match.Groups["key"].Value);
+    }
+
+    private static IEnumerable<string> ExtractSemanticResourceReferences(string source)
+    {
+        return Regex.Matches(
+                source,
+                "\\{(?:Dynamic|Static)Resource\\s+(?<key>(?:Color|Brush)[A-Za-z0-9]+)\\s*\\}")
+            .Select(static match => match.Groups["key"].Value);
     }
 
     private static bool IsRepositorySourcePath(string path)

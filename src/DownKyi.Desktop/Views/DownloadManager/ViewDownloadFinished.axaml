@@ -94,7 +94,7 @@
                                                 Width="{Binding OpenFolder.Width}"
                                                 Height="{Binding OpenFolder.Height}"
                                                 Data="{Binding OpenFolder.Data}"
-                                                Fill="{Binding OpenFolder.Fill}"
+                                                Fill="{DynamicResource BrushPrimary}"
                                                 Stretch="Uniform" />
                                         </ContentControl>
                                     </Button>
@@ -112,7 +112,7 @@
                                                 Width="{Binding OpenVideo.Width}"
                                                 Height="{Binding OpenVideo.Height}"
                                                 Data="{Binding OpenVideo.Data}"
-                                                Fill="{Binding OpenVideo.Fill}"
+                                                Fill="{DynamicResource BrushPrimary}"
                                                 Stretch="Uniform" />
                                         </ContentControl>
                                     </Button>
@@ -130,7 +130,7 @@
                                                 Width="{Binding RemoveVideo.Width}"
                                                 Height="{Binding RemoveVideo.Height}"
                                                 Data="{Binding RemoveVideo.Data}"
-                                                Fill="{Binding RemoveVideo.Fill}"
+                                                Fill="{DynamicResource BrushWarning}"
                                                 Stretch="Uniform" />
                                         </ContentControl>
                                     </Button>
