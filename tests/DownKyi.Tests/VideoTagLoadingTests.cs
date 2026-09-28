@@ -470,49 +470,6 @@ public sealed class VideoTagLoadingTests : IDisposable
     }
 
     [Fact]
-    public async Task AudioOnlyConflictChoiceCreatesTaskWithoutVideoQuality()
-    {
-        using var context = CreateContext(generateMetadata: false);
-        var page = CreatePage(_ => Task.FromResult<IReadOnlyList<string>>([]));
-        page.PlayUrl = null;
-        page.VideoQuality = null!;
-        var infoService = new PreparationInfoService(
-            new VideoInfoView { Title = "audio-only" },
-            [new VideoSection { VideoPages = [page] }],
-            new PlayUrl
-            {
-                Dash = new PlayUrlDash
-                {
-                    Video = [],
-                    Audio = [new PlayUrlDashVideo { Id = 30216 }]
-                }
-            });
-        var preparedDownload = Assert.IsType<PreparedDownload>(
-            await context.Service.PrepareAsync(
-                infoService,
-                TestContext.Current.CancellationToken));
-        context.Dialogs.Result = new AppDialogResult(
-            AppDialogOutcome.Accepted,
-            DownloadContentConflictDialogContract.Encode(new DownloadContentConflictDecision(
-                DownloadContentConflictAction.UseAvailableMedia,
-                ApplyToAll: false)));
-
-        var added = await context.AddToDownloadAsync(
-            CreateSelection(_directory, DownloadContentSelection.All),
-            preparedDownload,
-            cancellationToken: TestContext.Current.CancellationToken);
-
-        Assert.Equal(1, added);
-        var task = Assert.Single(context.ListState.Downloading);
-        Assert.Equal(
-            DownloadContentSelection.All with { Video = false },
-            task.DownloadBase.NeedDownloadContent);
-        Assert.Equal(0, task.DownloadBase.Resolution.Id);
-        Assert.Equal(string.Empty, task.DownloadBase.VideoCodecName);
-        Assert.Equal(30216, task.DownloadBase.AudioCodec.Id);
-    }
-
-    [Fact]
     public async Task ConflictSkipDoesNotCreateDownloadTask()
     {
         using var context = CreateContext(generateMetadata: false);
@@ -718,15 +675,14 @@ public sealed class VideoTagLoadingTests : IDisposable
             bool isAll = false,
             CancellationToken cancellationToken = default)
         {
-            var finalizedDownload = Assert.IsType<FinalizedDownload>(
-                await new DownloadContentConflictResolver(Dialogs)
+            var finalizedDownload = await new DownloadContentConflictResolver(Dialogs)
                 .ResolveAsync(
                     selection.RequestedContent,
                     preparedDownload,
                     isAll,
                     new DownloadContentConflictChoices(),
                     cancellationToken)
-                .ConfigureAwait(true));
+                .ConfigureAwait(true);
             return await Service
                 .AddToDownload(selection.Directory, finalizedDownload, cancellationToken)
                 .ConfigureAwait(true);

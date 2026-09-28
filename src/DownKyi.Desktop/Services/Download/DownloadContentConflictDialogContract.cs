@@ -36,7 +36,7 @@ internal static class DownloadContentConflictDialogContract
         };
     }
 
-    public static async Task<DownloadContentConflictDecision?> ShowAsync(
+    public static async Task<DownloadContentConflictDecision> ShowAsync(
         IAppDialogService dialogService,
         DownloadContentConflictPrompt prompt,
         CancellationToken cancellationToken = default)
@@ -47,7 +47,8 @@ internal static class DownloadContentConflictDialogContract
             .ConfigureAwait(true);
         if (result.Outcome != AppDialogOutcome.Accepted)
         {
-            return null;
+            throw new InvalidOperationException(
+                "Download content conflict dialog requires an explicit decision.");
         }
 
         if (!result.Parameters.TryGetValue(DecisionParameter, out var value)

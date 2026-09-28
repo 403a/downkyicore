@@ -58,6 +58,7 @@ internal sealed record PreparedDownload(
 
 internal sealed record FinalizedDownloadPage(
     VideoPage Page,
+    VideoQuality VideoQuality,
     DownloadContentSelection RequestedContent);
 
 internal sealed record FinalizedDownloadSection(

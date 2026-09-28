@@ -44,6 +44,11 @@ internal sealed class DownloadContentConflictDialogViewModel : BaseDialogViewMod
 
     public RelayCommand SkipPageCommand { get; }
 
+    public override bool CanCloseDialog()
+    {
+        return false;
+    }
+
     public override void OnDialogOpened(AppDialogRequest request)
     {
         var prompt = GetRequiredParameter<DownloadContentConflictPrompt>(

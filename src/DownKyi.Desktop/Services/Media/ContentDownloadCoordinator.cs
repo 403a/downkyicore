@@ -161,11 +161,6 @@ internal sealed class ContentDownloadCoordinator : IContentDownloadCoordinator
                         conflictChoices,
                         cancellationToken)
                     .ConfigureAwait(true);
-                if (finalizedDownload == null)
-                {
-                    return addedCount;
-                }
-
                 addedCount += await addToDownloadSession
                     .AddToDownload(selection.Directory, finalizedDownload, cancellationToken)
                     .ConfigureAwait(false);
