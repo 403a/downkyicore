@@ -43,13 +43,10 @@ public class Creater
             // 创建显示方式对象
             var display = Display.Factory(Config, danmaku);
             var collision = collisions[danmaku.Style];
-            var (lineIndex, waitingOffset) = collision.Detect(display);
+            var (lineIndex, overlap) = collision.Detect(display);
 
-            // 超过容忍的偏移量，丢弃掉此条弹幕
-            if (waitingOffset > Config.DropOffset)
-            {
-                continue;
-            }
+            // 保留容忍范围内的等待行为；超出时改为在原时间重叠最少的轨道显示。
+            var waitingOffset = overlap <= Config.DropOffset ? overlap : 0f;
 
             // 接受偏移，更新碰撞信息
             display.Relayout(lineIndex);

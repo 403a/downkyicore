@@ -31,28 +31,28 @@ public class Collision
     {
         ArgumentNullException.ThrowIfNull(display);
 
-        var beyonds = new List<float>();
+        var overlaps = new List<float>(leaves.Count);
         for (var i = 0; i < leaves.Count; i++)
         {
-            var beyond = display.Danmaku.Start - leaves[i];
+            var overlap = leaves[i] - display.Danmaku.Start;
             // 某一行有足够空间，直接返回行号和 0 偏移
-            if (beyond >= 0)
+            if (overlap <= 0)
             {
                 return Tuple.Create(i, 0f);
             }
 
-            beyonds.Add(beyond);
+            overlaps.Add(overlap);
         }
 
-        // 所有行都没有空间了，那么找出哪一行能在最短时间内让出空间
-        var soon = beyonds.Max();
-        var lineIndex = beyonds.IndexOf(soon);
-        var offset = -soon;
-        return Tuple.Create(lineIndex, offset);
+        // 所有行都会碰撞时，选择时间重叠最少的一行
+        var leastOverlap = overlaps.Min();
+        var lineIndex = overlaps.IndexOf(leastOverlap);
+        return Tuple.Create(lineIndex, leastOverlap);
     }
 
     public void Update(float leave, int lineIndex, float offset)
     {
-        leaves[lineIndex] = DanmakuAssFormatting.IntCeiling(leave + offset);
+        var occupiedUntil = DanmakuAssFormatting.IntCeiling(leave + offset);
+        leaves[lineIndex] = Math.Max(leaves[lineIndex], occupiedUntil);
     }
 }
