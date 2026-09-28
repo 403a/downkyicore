@@ -1,0 +1,22 @@
+{
+  "code": 0,
+  "message": "success",
+  "result": {
+    "play_check": {
+      "play_detail": "PLAY_PREVIEW"
+    },
+    "video_info": {
+      "is_preview": 1,
+      "quality": 80,
+      "timelength": 1228032,
+      "durl": [
+        {
+          "order": 1,
+          "length": 180124,
+          "size": 4096,
+          "url": "https://media.example.test/preview.flv"
+        }
+      ]
+    }
+  }
+}
