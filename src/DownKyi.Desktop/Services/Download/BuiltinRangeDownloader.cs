@@ -28,6 +28,7 @@ internal sealed class BuiltinRangeDownloader : IDisposable
     internal static readonly TimeSpan DefaultReadStallTimeout = TimeSpan.FromSeconds(60);
 
     private const int BufferSize = 256 * 1024;
+    private const int ResumeOverlapSize = 64 * 1024;
     private const int MaximumResumeMetadataBytes = 4 * 1024 * 1024;
     private static readonly JsonSerializerOptions ResumeJsonOptions = new()
     {
@@ -286,26 +287,48 @@ internal sealed class BuiltinRangeDownloader : IDisposable
 
         if (document == null
             || document.TotalFileSize != totalBytes
-            || document.ResourceIdentity == null
-            || !document.ResourceIdentity.CanResume
-            || !document.ResourceIdentity.Matches(resourceIdentity)
             || !TryValidateChunks(document.Chunks, totalBytes, out var chunks))
         {
             throw new BuiltinResumeRejectedException(
                 "The built-in resume metadata does not match the media file.");
         }
 
-        if (!supportsRanges && chunks.Any(static chunk => chunk.Position > 0))
+        var hasResumedBytes = chunks.Any(static chunk => chunk.Position > 0);
+        if (!supportsRanges && hasResumedBytes)
         {
             throw new BuiltinResumeRejectedException(
                 "The server no longer supports resuming the partial media file.");
         }
 
+        if (hasResumedBytes)
+        {
+            var continuity = document.ResourceIdentity?.CompareContinuity(resourceIdentity)
+                ?? BuiltinRangeContinuity.Unavailable;
+            switch (continuity)
+            {
+                case BuiltinRangeContinuity.Match:
+                    break;
+                case BuiltinRangeContinuity.Mismatch:
+                    throw new BuiltinResumeRejectedException(
+                        "The built-in resume metadata does not match the media file.");
+                case BuiltinRangeContinuity.Unavailable:
+                    resourceIdentity = await VerifyResumeOverlapAsync(
+                        stream,
+                        chunks,
+                        totalBytes,
+                        document.ResourceIdentity,
+                        resourceIdentity,
+                        cancellationToken).ConfigureAwait(false);
+                    break;
+                default:
+                    throw new UnreachableException();
+            }
+        }
+
         return new BuiltinRangeResumeState(
             totalBytes,
             chunks,
-            resourceIdentity,
-            HasResumedBytes: chunks.Any(static chunk => chunk.Position > 0));
+            resourceIdentity);
     }
 
     private async Task<BuiltinRangeResumeState> CreateFreshStateAsync(
@@ -340,8 +363,78 @@ internal sealed class BuiltinRangeDownloader : IDisposable
         return new BuiltinRangeResumeState(
             totalBytes,
             chunks,
-            resourceIdentity,
-            HasResumedBytes: false);
+            resourceIdentity);
+    }
+
+    private async Task<BuiltinRangeResourceIdentity> VerifyResumeOverlapAsync(
+        FileStream partialFile,
+        BuiltinRangeChunk[] chunks,
+        long totalBytes,
+        BuiltinRangeResourceIdentity? persistedIdentity,
+        BuiltinRangeResourceIdentity resourceIdentity,
+        CancellationToken cancellationToken)
+    {
+        var resumeChunk = chunks
+            .Where(static chunk => chunk.Position > 0)
+            .MaxBy(static chunk => checked(chunk.Start + chunk.Position))!;
+        var resumeOffset = checked(resumeChunk.Start + resumeChunk.Position);
+        var overlapStart = Math.Max(resumeChunk.Start, resumeOffset - ResumeOverlapSize);
+        var overlapEnd = resumeOffset - 1;
+        var overlapLength = checked((int)(overlapEnd - overlapStart + 1));
+        var localBytes = new byte[overlapLength];
+        partialFile.Position = overlapStart;
+        await partialFile.ReadExactlyAsync(localBytes, cancellationToken).ConfigureAwait(false);
+
+        using var request = CreateRequest(overlapStart, overlapEnd);
+        using var response = await SendWithStallTimeoutAsync(request, cancellationToken)
+            .ConfigureAwait(false);
+        ValidateChunkResponse(
+            response,
+            overlapStart,
+            overlapEnd,
+            totalBytes,
+            supportsRanges: true,
+            resourceIdentity);
+        var overlapIdentity = BuiltinRangeResourceIdentity.Create(_address, response);
+        if (persistedIdentity?.CompareContinuity(overlapIdentity)
+            == BuiltinRangeContinuity.Mismatch)
+        {
+            throw new BuiltinResumeRejectedException(
+                "The persisted resource identity changed before overlap verification.");
+        }
+
+        var source = await response.Content
+            .ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        await using var sourceLifetime = source.ConfigureAwait(false);
+        var remoteBytes = new byte[overlapLength];
+        var offset = 0;
+        while (offset < remoteBytes.Length)
+        {
+            var read = await ReadWithStallTimeoutAsync(
+                source,
+                remoteBytes.AsMemory(offset),
+                cancellationToken).ConfigureAwait(false);
+            if (read == 0)
+            {
+                throw new HttpIOException(
+                    HttpRequestError.ResponseEnded,
+                    "The media overlap response ended before verification completed.");
+            }
+
+            offset += read;
+        }
+
+        if (!localBytes.AsSpan().SequenceEqual(remoteBytes))
+        {
+            throw new BuiltinResumeRejectedException(
+                "The persisted partial media does not match the current resource.");
+        }
+
+        return resourceIdentity with
+        {
+            StrongETag = overlapIdentity.StrongETag ?? resourceIdentity.StrongETag,
+            LastModified = overlapIdentity.LastModified ?? resourceIdentity.LastModified
+        };
     }
 
     private async Task<long> DownloadPendingChunksAsync(
@@ -437,8 +530,7 @@ internal sealed class BuiltinRangeDownloader : IDisposable
             chunk.End,
             state.TotalBytes,
             supportsRanges,
-            state.ResourceIdentity,
-            state.HasResumedBytes);
+            state.ResourceIdentity);
 
         var remaining = checked(chunk.End - requestStart + 1);
         var source = await response.Content
@@ -658,14 +750,13 @@ internal sealed class BuiltinRangeDownloader : IDisposable
         return request;
     }
 
-    private static void ValidateChunkResponse(
+    private void ValidateChunkResponse(
         HttpResponseMessage response,
         long requestStart,
         long requestEnd,
         long totalBytes,
         bool supportsRanges,
-        BuiltinRangeResourceIdentity resourceIdentity,
-        bool requireResourceValidator)
+        BuiltinRangeResourceIdentity resourceIdentity)
     {
         ThrowForHttpFailure(response);
         var expectedLength = checked(requestEnd - requestStart + 1);
@@ -696,7 +787,9 @@ internal sealed class BuiltinRangeDownloader : IDisposable
         }
 
         if (supportsRanges
-            && !resourceIdentity.IsCompatibleWith(response, requireResourceValidator))
+            && resourceIdentity.CompareContinuity(
+                BuiltinRangeResourceIdentity.Create(_address, response))
+            == BuiltinRangeContinuity.Mismatch)
         {
             throw new BuiltinResumeRejectedException(
                 "The media response resource identity changed during the transfer.");
@@ -812,8 +905,7 @@ internal sealed record BuiltinRangeProbe(
 internal sealed record BuiltinRangeResumeState(
     long TotalBytes,
     BuiltinRangeChunk[] Chunks,
-    BuiltinRangeResourceIdentity ResourceIdentity,
-    bool HasResumedBytes);
+    BuiltinRangeResourceIdentity ResourceIdentity);
 
 internal sealed record BuiltinRangeResumeDocument(
     long TotalFileSize,
@@ -823,14 +915,12 @@ internal sealed record BuiltinRangeResumeDocument(
 internal sealed record BuiltinRangeResumeChunk(long Start, long End, long Position);
 
 internal sealed record BuiltinRangeResourceIdentity(
-    string AddressHash,
+    string? AddressHash,
     string? StrongETag,
     DateTimeOffset? LastModified)
 {
     private static readonly TimeSpan MinimumStrongLastModifiedAge =
         TimeSpan.FromSeconds(60);
-
-    public bool CanResume => StrongETag != null || LastModified != null;
 
     public string? IfRangeValue => StrongETag ?? LastModified?.ToString("R");
 
@@ -855,43 +945,40 @@ internal sealed record BuiltinRangeResourceIdentity(
             lastModified);
     }
 
-    public bool Matches(BuiltinRangeResourceIdentity current)
+    public BuiltinRangeContinuity CompareContinuity(
+        BuiltinRangeResourceIdentity current)
     {
         ArgumentNullException.ThrowIfNull(current);
-        if (!string.Equals(AddressHash, current.AddressHash, StringComparison.Ordinal))
+        if (AddressHash == null
+            || current.AddressHash == null
+            || !string.Equals(AddressHash, current.AddressHash, StringComparison.Ordinal))
         {
-            return false;
+            return BuiltinRangeContinuity.Unavailable;
         }
 
         if (StrongETag != null && current.StrongETag != null)
         {
-            return string.Equals(StrongETag, current.StrongETag, StringComparison.Ordinal);
+            return string.Equals(StrongETag, current.StrongETag, StringComparison.Ordinal)
+                ? BuiltinRangeContinuity.Match
+                : BuiltinRangeContinuity.Mismatch;
         }
 
-        return LastModified != null
-               && current.LastModified != null
-               && LastModified == current.LastModified;
-    }
-
-    public bool IsCompatibleWith(
-        HttpResponseMessage response,
-        bool requireValidator)
-    {
-        ArgumentNullException.ThrowIfNull(response);
-        if (StrongETag != null
-            && response.Headers.ETag is { IsWeak: false } entityTag)
+        if (LastModified != null && current.LastModified != null)
         {
-            return string.Equals(StrongETag, entityTag.ToString(), StringComparison.Ordinal);
+            return LastModified == current.LastModified
+                ? BuiltinRangeContinuity.Match
+                : BuiltinRangeContinuity.Mismatch;
         }
 
-        if (LastModified != null
-            && response.Content.Headers.LastModified is { } currentLastModified)
-        {
-            return LastModified == currentLastModified;
-        }
-
-        return !requireValidator;
+        return BuiltinRangeContinuity.Unavailable;
     }
+}
+
+internal enum BuiltinRangeContinuity
+{
+    Unavailable,
+    Match,
+    Mismatch
 }
 
 internal sealed class BuiltinResumeRejectedException : IOException
