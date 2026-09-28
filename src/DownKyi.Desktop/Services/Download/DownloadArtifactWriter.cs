@@ -210,13 +210,16 @@ internal sealed partial class DownloadArtifactWriter
         DownloadTaskId taskId,
         DownloadTaskMetadata metadata,
         string outputBasePath,
+        DownloadContentSelection content,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(taskId);
         ArgumentNullException.ThrowIfNull(metadata);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputBasePath);
+        ArgumentNullException.ThrowIfNull(content);
 
         var srtFiles = new List<string>();
+        string? defaultSubtitleSource = null;
         Exception? parseFailure = null;
         IReadOnlyList<SubRipText> subRipTexts;
         try
@@ -230,7 +233,8 @@ internal sealed partial class DownloadArtifactWriter
                     metadata.Media.Bvid,
                     metadata.Media.Cid,
                     e => parseFailure ??= e,
-                    cancellationToken),
+                    cancellationToken,
+                    content.SelectedSubtitleTrackIds is { } selectedIds ? selectedIds : null),
                 TimeProvider.System,
                 cancellationToken).ConfigureAwait(false);
         }
@@ -288,6 +292,10 @@ internal sealed partial class DownloadArtifactWriter
                 }
 
                 srtFiles.Add(srtFile);
+                if (subRip.TrackId == content.DefaultSubtitleTrackId)
+                {
+                    defaultSubtitleSource = srtFile;
+                }
             }
             catch (IOException e)
             {
@@ -305,37 +313,42 @@ internal sealed partial class DownloadArtifactWriter
             }
         }
 
-        var defaultSubtitleFile = $"{outputBasePath}.srt";
-        try
+        var defaultSubtitleSourceToWrite = defaultSubtitleSource ??
+                                           (content.SelectedSubtitleTrackIds == null ? srtFiles[0] : null);
+        if (defaultSubtitleSourceToWrite != null)
         {
-            await _stateWriter.ClaimTransferFileAsync(
-                taskId,
-                DefaultSubtitleTransferKey,
-                defaultSubtitleFile,
-                cancellationToken).ConfigureAwait(false);
-            File.Copy(srtFiles[0], defaultSubtitleFile, true);
-            if (!DownloadFileIntegrity.Check(defaultSubtitleFile).IsUsable)
+            var defaultSubtitleFile = $"{outputBasePath}.srt";
+            try
             {
-                return ArtifactFailure(
-                    "download.artifact.subtitle.invalid",
-                    "The default subtitle output is missing or invalid.");
-            }
+                await _stateWriter.ClaimTransferFileAsync(
+                    taskId,
+                    DefaultSubtitleTransferKey,
+                    defaultSubtitleFile,
+                    cancellationToken).ConfigureAwait(false);
+                File.Copy(defaultSubtitleSourceToWrite, defaultSubtitleFile, true);
+                if (!DownloadFileIntegrity.Check(defaultSubtitleFile).IsUsable)
+                {
+                    return ArtifactFailure(
+                        "download.artifact.subtitle.invalid",
+                        "The default subtitle output is missing or invalid.");
+                }
 
-            srtFiles.Add(defaultSubtitleFile);
-        }
-        catch (IOException e)
-        {
-            _logger.LogErrorMessage("Default subtitle write failed.", e);
-            return ArtifactFailure(
-                "download.artifact.subtitle.io",
-                "The default subtitle could not be written.");
-        }
-        catch (UnauthorizedAccessException e)
-        {
-            _logger.LogErrorMessage("Default subtitle write was denied.", e);
-            return ArtifactFailure(
-                "download.artifact.subtitle.permission",
-                "Permission was denied while writing the default subtitle.");
+                srtFiles.Add(defaultSubtitleFile);
+            }
+            catch (IOException e)
+            {
+                _logger.LogErrorMessage("Default subtitle write failed.", e);
+                return ArtifactFailure(
+                    "download.artifact.subtitle.io",
+                    "The default subtitle could not be written.");
+            }
+            catch (UnauthorizedAccessException e)
+            {
+                _logger.LogErrorMessage("Default subtitle write was denied.", e);
+                return ArtifactFailure(
+                    "download.artifact.subtitle.permission",
+                    "Permission was denied while writing the default subtitle.");
+            }
         }
 
         return OperationResult.Success(DownloadArtifactWriteResult.Created(srtFiles));

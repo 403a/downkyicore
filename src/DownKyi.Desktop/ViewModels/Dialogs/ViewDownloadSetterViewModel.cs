@@ -5,6 +5,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DownKyi.Application.Desktop;
 using DownKyi.Application.Diagnostics;
@@ -13,6 +14,7 @@ using DownKyi.Core.Settings;
 using DownKyi.Core.Utils;
 using DownKyi.Domain.Downloads;
 using DownKyi.Images;
+using DownKyi.Services.Download;
 using DownKyi.Utils;
 using Microsoft.Extensions.Logging;
 
@@ -57,6 +59,10 @@ internal class ViewDownloadSetterViewModel : BaseDialogViewModel
 
 
     public ObservableCollection<string> DirectoryList { get; private set; }
+
+    public ObservableCollection<SubtitleTrackItem> SubtitleTracks { get; } = [];
+
+    public bool HasSubtitleTracks => SubtitleTracks.Count > 0;
 
 
     private string _directory = string.Empty;
@@ -183,14 +189,7 @@ internal class ViewDownloadSetterViewModel : BaseDialogViewModel
         DownloadSubtitle = videoContent.DownloadSubtitle;
         DownloadCover = videoContent.DownloadCover;
 
-        if (DownloadAudio && DownloadVideo && DownloadDanmaku && DownloadSubtitle && DownloadCover)
-        {
-            DownloadAll = true;
-        }
-        else
-        {
-            DownloadAll = false;
-        }
+        UpdateDownloadAll();
 
         // 历史下载目录
         DirectoryList = new ObservableCollection<string>(videoSettings.HistoryVideoRootPaths);
@@ -206,6 +205,19 @@ internal class ViewDownloadSetterViewModel : BaseDialogViewModel
         IsDefaultDownloadDirectory = videoSettings.IsUseSaveVideoRootPath == AllowStatus.Yes;
 
         #endregion
+    }
+
+    public override void OnDialogOpened(AppDialogRequest request)
+    {
+        var tracks = DownloadSettingsDialog.ReadSubtitleTracks(request);
+
+        for (var index = 0; index < tracks.Count; index++)
+        {
+            SubtitleTracks.Add(new SubtitleTrackItem(
+                tracks[index], DownloadSubtitle, DownloadSubtitle && index == 0));
+        }
+
+        OnPropertyChanged(nameof(HasSubtitleTracks));
     }
 
     #region 命令申明
@@ -278,16 +290,7 @@ internal class ViewDownloadSetterViewModel : BaseDialogViewModel
     /// </summary>
     private void ExecuteDownloadAudioCommand()
     {
-        if (!DownloadAudio)
-        {
-            DownloadAll = false;
-        }
-
-        if (DownloadAudio && DownloadVideo && DownloadDanmaku && DownloadSubtitle && DownloadCover)
-        {
-            DownloadAll = true;
-        }
-
+        UpdateDownloadAll();
         SetVideoContent();
     }
 
@@ -301,16 +304,7 @@ internal class ViewDownloadSetterViewModel : BaseDialogViewModel
     /// </summary>
     private void ExecuteDownloadVideoCommand()
     {
-        if (!DownloadVideo)
-        {
-            DownloadAll = false;
-        }
-
-        if (DownloadAudio && DownloadVideo && DownloadDanmaku && DownloadSubtitle && DownloadCover)
-        {
-            DownloadAll = true;
-        }
-
+        UpdateDownloadAll();
         SetVideoContent();
     }
 
@@ -324,16 +318,7 @@ internal class ViewDownloadSetterViewModel : BaseDialogViewModel
     /// </summary>
     private void ExecuteDownloadDanmakuCommand()
     {
-        if (!DownloadDanmaku)
-        {
-            DownloadAll = false;
-        }
-
-        if (DownloadAudio && DownloadVideo && DownloadDanmaku && DownloadSubtitle && DownloadCover)
-        {
-            DownloadAll = true;
-        }
-
+        UpdateDownloadAll();
         SetVideoContent();
     }
 
@@ -347,16 +332,7 @@ internal class ViewDownloadSetterViewModel : BaseDialogViewModel
     /// </summary>
     private void ExecuteDownloadSubtitleCommand()
     {
-        if (!DownloadSubtitle)
-        {
-            DownloadAll = false;
-        }
-
-        if (DownloadAudio && DownloadVideo && DownloadDanmaku && DownloadSubtitle && DownloadCover)
-        {
-            DownloadAll = true;
-        }
-
+        UpdateDownloadAll();
         SetVideoContent();
     }
 
@@ -370,17 +346,13 @@ internal class ViewDownloadSetterViewModel : BaseDialogViewModel
     /// </summary>
     private void ExecuteDownloadCoverCommand()
     {
-        if (!DownloadCover)
-        {
-            DownloadAll = false;
-        }
-
-        if (DownloadAudio && DownloadVideo && DownloadDanmaku && DownloadSubtitle && DownloadCover)
-        {
-            DownloadAll = true;
-        }
-
+        UpdateDownloadAll();
         SetVideoContent();
+    }
+
+    private void UpdateDownloadAll()
+    {
+        DownloadAll = DownloadAudio && DownloadVideo && DownloadDanmaku && DownloadSubtitle && DownloadCover;
     }
 
     // 确认下载事件
@@ -417,17 +389,18 @@ internal class ViewDownloadSetterViewModel : BaseDialogViewModel
         });
 
         // 返回数据
-        var parameters = new DownloadContentSelection(
-                DownloadAudio,
-                DownloadVideo,
-                DownloadDanmaku,
-                DownloadSubtitle,
-                DownloadCover)
-            .ToLegacyMap()
-            .ToDictionary(entry => entry.Key, entry => (object?)entry.Value, StringComparer.Ordinal);
-        parameters["directory"] = Directory;
-
-        CloseDialog(AppDialogOutcome.Accepted, parameters);
+        var requestedContent = new DownloadContentSelection(
+            DownloadAudio,
+            DownloadVideo,
+            DownloadDanmaku,
+            DownloadSubtitle,
+            DownloadCover);
+        var selectedIds = HasSubtitleTracks
+            ? SubtitleTracks.Where(track => track.IsSelected).Select(track => track.TrackId).ToArray()
+            : null;
+        var defaultTrackId = SubtitleTracks.FirstOrDefault(track => track.IsDefault)?.TrackId;
+        CloseDialog(AppDialogOutcome.Accepted, DownloadSettingsDialog.EncodeResult(
+            Directory, requestedContent, selectedIds, defaultTrackId));
     }
 
     #endregion
@@ -463,4 +436,28 @@ internal class ViewDownloadSetterViewModel : BaseDialogViewModel
         // 弹出选择下载目录的窗口
         return await _filePickerService.SelectFolderAsync().ConfigureAwait(true);
     }
+}
+
+internal sealed partial class SubtitleTrackItem(
+    DownloadSettingsDialog.SubtitleTrack track, bool isSelected, bool isDefault) : ObservableObject
+{
+    [ObservableProperty]
+    private bool _isSelected = isSelected;
+
+    [ObservableProperty]
+    private bool _isDefault = isDefault;
+
+    partial void OnIsSelectedChanged(bool value)
+    {
+        if (!value)
+        {
+            IsDefault = false;
+        }
+    }
+
+    public long TrackId { get; } = track.TrackId;
+    public string Language { get; } = track.Language;
+    public string DisplayLanguage { get; } = track.DisplayLanguage;
+    public int Type { get; } = track.Type;
+    public string Url { get; } = track.Url;
 }

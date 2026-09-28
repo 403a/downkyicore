@@ -523,12 +523,23 @@ public sealed class DownloadRuntimeArchitectureTests
             "ViewModels",
             "Dialogs",
             "ViewDownloadSetterViewModel.cs"));
+        var dialogContractSource = File.ReadAllText(Path.Combine(
+            RepositoryRoot,
+            "src",
+            "DownKyi.Desktop",
+            "Services",
+            "Download",
+            "DownloadSettingsDialog.cs"));
 
         Assert.Empty(unexpectedFiles);
         Assert.Contains("DownloadContentSelection RequestedContent", planSource, StringComparison.Ordinal);
         Assert.DoesNotContain("RequestedAssets", planSource, StringComparison.Ordinal);
-        Assert.Contains("DownloadContentSelection.FromLegacyMap", addSource, StringComparison.Ordinal);
-        Assert.Contains(".ToLegacyMap()", dialogSource, StringComparison.Ordinal);
+        Assert.Contains("DownloadSettingsDialog.DecodeResult", addSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("FromLegacyMap", addSource, StringComparison.Ordinal);
+        Assert.Contains("DownloadSettingsDialog.EncodeResult", dialogSource, StringComparison.Ordinal);
+        Assert.DoesNotContain(".ToLegacyMap()", dialogSource, StringComparison.Ordinal);
+        Assert.Contains("SubtitleTracksParameter", dialogContractSource, StringComparison.Ordinal);
+        Assert.Contains("ResultParameter", dialogContractSource, StringComparison.Ordinal);
     }
 
     [Fact]

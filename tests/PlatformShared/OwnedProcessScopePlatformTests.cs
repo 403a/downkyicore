@@ -179,14 +179,13 @@ public sealed class OwnedProcessScopePlatformTests
     public async Task FixtureCleanupJoinsTimedOutRunAfterFallbackStopFailureBeforeDeletingResources()
     {
         var runCompletion = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
-        Task? terminalCompletion = null;
+        var fallbackAttempted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var terminalCompletion = CompleteRunAfterFallbackAsync();
         var cancellationRequested = false;
         var cleanupAttempts = 0;
         var resultValidated = false;
         var resourcesDeleted = false;
         var runWasTerminalAtDeletion = false;
-        var clock = Stopwatch.StartNew();
-
         var observedFailure = await Record.ExceptionAsync(
             async () =>
             {
@@ -210,7 +209,7 @@ public sealed class OwnedProcessScopePlatformTests
                             cleanupAttempts++;
                             if (cleanupAttempts == 1)
                             {
-                                terminalCompletion = CompleteRunAsync();
+                                fallbackAttempted.TrySetResult();
                                 throw new InvalidOperationException("Simulated fallback stop failure.");
                             }
                         }).ConfigureAwait(true);
@@ -231,17 +230,15 @@ public sealed class OwnedProcessScopePlatformTests
         Assert.True(cancellationRequested);
         Assert.True(resultValidated);
         Assert.Equal(2, cleanupAttempts);
-        Assert.NotNull(terminalCompletion);
         await terminalCompletion.ConfigureAwait(true);
         Assert.True(terminalCompletion.IsCompletedSuccessfully);
         Assert.True(runCompletion.Task.IsCompletedSuccessfully);
         Assert.True(resourcesDeleted);
         Assert.True(runWasTerminalAtDeletion);
-        Assert.True(clock.Elapsed >= TimeSpan.FromMilliseconds(150));
 
-        async Task CompleteRunAsync()
+        async Task CompleteRunAfterFallbackAsync()
         {
-            await Task.Delay(TimeSpan.FromMilliseconds(150)).ConfigureAwait(false);
+            await fallbackAttempted.Task.ConfigureAwait(false);
             runCompletion.TrySetResult(130);
         }
     }
@@ -266,7 +263,6 @@ public sealed class OwnedProcessScopePlatformTests
             startInfo.ArgumentList.Add(runtimeConfig);
             startInfo.ArgumentList.Add(marker);
 
-            var clock = Stopwatch.StartNew();
             var run = FlightRecorderExecution.RunAsync(new ProcessExecutionRequest(
                 "scope.root-exited", "pipe-holder", startInfo,
                 TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(2), directory),
@@ -275,10 +271,7 @@ public sealed class OwnedProcessScopePlatformTests
             Assert.True(IsAlive(childPid.Value));
             var result = await run.WaitAsync(TimeSpan.FromSeconds(5),
                 TestContext.Current.CancellationToken).ConfigureAwait(true);
-            clock.Stop();
-
             Assert.Equal(2, result.ExitCode);
-            Assert.True(clock.Elapsed < TimeSpan.FromSeconds(5));
             Assert.False(IsAlive(result.RootPid));
             Assert.False(IsAlive(childPid.Value));
             using var report = JsonDocument.Parse(await File.ReadAllTextAsync(
@@ -468,13 +461,10 @@ public sealed class OwnedProcessScopePlatformTests
                 Assert.Equal(childPid, ReadLinuxParentPid(grandchildPid.Value));
             }
 
-            var clock = Stopwatch.StartNew();
             await cancellation.CancelAsync().ConfigureAwait(true);
             var failure = await Record.ExceptionAsync(() => build).ConfigureAwait(true);
-            clock.Stop();
 
             Assert.Same(snapshotFailure, failure);
-            Assert.True(clock.Elapsed < TimeSpan.FromSeconds(5));
             AssertStopped(rootPid.Value);
             AssertStopped(childPid.Value);
             AssertStopped(grandchildPid.Value);

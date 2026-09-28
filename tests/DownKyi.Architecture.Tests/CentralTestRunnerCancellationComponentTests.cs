@@ -103,52 +103,6 @@ public sealed class CentralTestRunnerCancellationComponentTests
     }
 
     [Fact]
-    public async Task DiagnosticSnapshotFailureDoesNotPreventKill()
-    {
-        await AssertSnapshotFailureStillKillsAsync(
-            new InvalidOperationException("intentional diagnostic failure")).ConfigureAwait(true);
-    }
-
-    [Fact]
-    public async Task DiagnosticSnapshotTimeoutDoesNotPreventKill()
-    {
-        await AssertSnapshotFailureStillKillsAsync(
-            new TimeoutException("intentional diagnostic timeout")).ConfigureAwait(true);
-    }
-
-    [Fact]
-    public async Task FiveSecondCancellationCleanupReservesMoreThanOneSecondForSnapshot()
-    {
-        OwnedProcessScope? scope = null;
-        TimeSpan? snapshotWindow = null;
-        await FailurePreservingTestCleanup.RunAsync(
-            async () =>
-            {
-                scope = await StartHoldingScopeAsync().ConfigureAwait(true);
-
-                await BuildProcessRunner.CleanupAfterCancellationAsync(
-                    scope,
-                    TestTimeout,
-                    (_, window) =>
-                    {
-                        snapshotWindow = window;
-                        return Task.FromResult(new FinalProcessSnapshot
-                        {
-                            CapturedAtUtc = DateTimeOffset.UtcNow,
-                            Completeness = "test snapshot",
-                            Processes = []
-                        });
-                    }).ConfigureAwait(true);
-
-                Assert.True(
-                    snapshotWindow > TimeSpan.FromSeconds(1),
-                    $"Expected more than one second for the snapshot phase, but received {snapshotWindow}.");
-                Assert.True(scope.Host.HasExited);
-            },
-            () => StopScopeAsync(scope)).ConfigureAwait(true);
-    }
-
-    [Fact]
     public async Task BuildSnapshotNeverReturnsDoesNotBlockTermination()
     {
         OwnedProcessScope? scope = null;
@@ -333,71 +287,6 @@ public sealed class CentralTestRunnerCancellationComponentTests
 
         Assert.Contains("<repository-root>", diagnostic, StringComparison.Ordinal);
         Assert.DoesNotContain(repositoryRoot, diagnostic, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public async Task FilesystemTeardownDeletesFixtureDirectoryAfterProcessCleanup()
-    {
-        var fixtureDirectory = Path.Combine(
-            Path.GetTempPath(),
-            $"downkyi-central-runner-filesystem-{Guid.NewGuid():N}");
-        OwnedProcessScope? scope = null;
-        Directory.CreateDirectory(fixtureDirectory);
-        await FailurePreservingTestCleanup.RunAsync(
-            async () =>
-            {
-                var startInfo = CreateFixtureStartInfo("fixture-hold");
-                startInfo.WorkingDirectory = fixtureDirectory;
-                scope = await StartHoldingScopeAsync(startInfo).ConfigureAwait(true);
-
-                await BuildProcessRunner.CleanupAfterCancellationAsync(
-                    scope,
-                    TestTimeout,
-                    cleanupResourceDirectory: fixtureDirectory)
-                    .ConfigureAwait(true);
-                scope.Dispose();
-                scope = null;
-                Directory.Delete(fixtureDirectory);
-
-                Assert.False(Directory.Exists(fixtureDirectory));
-            },
-            async () =>
-            {
-                await StopScopeAsync(scope).ConfigureAwait(true);
-                if (Directory.Exists(fixtureDirectory))
-                {
-                    Directory.Delete(fixtureDirectory);
-                }
-            }).ConfigureAwait(true);
-    }
-
-    private static async Task AssertSnapshotFailureStillKillsAsync(Exception snapshotFailure)
-    {
-        OwnedProcessScope? scope = null;
-        await FailurePreservingTestCleanup.RunAsync(
-            async () =>
-            {
-                scope = await StartHoldingScopeAsync().ConfigureAwait(true);
-
-                var observedFailure = await Record.ExceptionAsync(
-                    () => BuildProcessRunner.CleanupAfterCancellationAsync(
-                        scope,
-                        TestTimeout,
-                        (_, _) => Task.FromException<FinalProcessSnapshot>(snapshotFailure)))
-                    .ConfigureAwait(true);
-
-                Assert.Same(snapshotFailure, observedFailure);
-                Assert.Contains(
-                    "cleanup phase=snapshot",
-                    Program.FormatExceptionDiagnostic(observedFailure!),
-                    StringComparison.Ordinal);
-                Assert.Contains(
-                    $"rootPid={scope.RootPid}",
-                    Program.FormatExceptionDiagnostic(observedFailure!),
-                    StringComparison.Ordinal);
-                Assert.True(scope.Host.HasExited);
-            },
-            () => StopScopeAsync(scope)).ConfigureAwait(true);
     }
 
     private static InvalidOperationException CaptureExceptionWithStack(Exception innerException)

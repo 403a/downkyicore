@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using DownKyi.Application.Downloads;
@@ -50,9 +51,15 @@ internal sealed class VideoDetailDownloadCoordinator : IVideoDetailDownloadCoord
         }
 
         var addService = _serviceFactory.Create(streamType.Value);
+        var selectedPages = videoSections.SelectMany(section => section.VideoPages)
+            .Where(page => (isAll || page.IsSelected) && page.PlayUrl != null)
+            .Take(2)
+            .ToArray();
         return DownloadAddCoordinator.AddToDownloadIfSelectionAcceptedAsync(
             () => addService.EnsureAdmissionAsync(cancellationToken),
-            () => addService.SelectDownloadAsync(cancellationToken),
+            () => addService.SelectDownloadAsync(
+                selectedPages.Length == 1 ? selectedPages[0] : null,
+                cancellationToken),
             async selection =>
             {
                 cancellationToken.ThrowIfCancellationRequested();
