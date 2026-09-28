@@ -71,6 +71,7 @@ internal static class DesktopInteractionComposition
         services.AddTransient<NewVersionAvailableDialogViewModel>();
         services.AddTransient<ViewUpgradingDialogViewModel>();
         services.AddTransient<DownloadRuntimeFailureDialogViewModel>();
+        services.AddTransient<DownloadContentConflictDialogViewModel>();
         services.AddTransient<ViewAlertDialog>();
         services.AddTransient<ViewDownloadSetter>();
         services.AddTransient<ViewParsingSelector>();
@@ -78,5 +79,6 @@ internal static class DesktopInteractionComposition
         services.AddTransient<NewVersionAvailableDialog>();
         services.AddTransient<ViewUpgradingDialog>();
         services.AddTransient<DownloadRuntimeFailureDialog>();
+        services.AddTransient<DownloadContentConflictDialog>();
     }
 }
