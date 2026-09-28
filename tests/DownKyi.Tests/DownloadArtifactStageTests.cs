@@ -4,6 +4,7 @@ using System.Xml.Linq;
 using Bilibili.Community.Service.Dm.V1;
 using DownKyi.Application.Bilibili;
 using DownKyi.Application.Downloads;
+using DownKyi.Core.BiliApi.BiliUtils;
 using DownKyi.Core.Settings;
 using DownKyi.Domain.Downloads;
 using DownKyi.Domain.Results;
@@ -99,6 +100,107 @@ public sealed class DownloadArtifactStageTests
             $"{context.Downloading.DownloadBase.FilePath}.xml",
             task.Plan.TransferFiles[DownloadArtifactWriter.DanmakuXmlTransferKey]);
         AssertPhysicalArtifactsAreDurablyOwned(context, task);
+    }
+
+    [Fact]
+    public async Task AssAndXmlShareExplicitlyFilteredSnapshotWhileXmlKeepsOriginalSourceData()
+    {
+        const long blockedSenderUid = 123456;
+        var blockedSenderHash = DanmakuSender.GetMidHash(blockedSenderUid);
+        var elements = new[]
+        {
+            new DanmakuElem
+            {
+                Id = 1,
+                Progress = 1_000,
+                Mode = 5,
+                Fontsize = 25,
+                Color = 0xFFFFFF,
+                MidHash = "top",
+                Content = "blocked-mode"
+            },
+            new DanmakuElem
+            {
+                Id = 2,
+                Progress = 2_000,
+                Mode = 1,
+                Fontsize = 25,
+                Color = 0xFFFFFF,
+                MidHash = "keyword",
+                Content = "前方劇透"
+            },
+            new DanmakuElem
+            {
+                Id = 3,
+                Progress = 3_000,
+                Mode = 1,
+                Fontsize = 25,
+                Color = 0xFFFFFF,
+                MidHash = blockedSenderHash,
+                Content = "blocked-sender"
+            },
+            new DanmakuElem
+            {
+                Id = 4,
+                Progress = 4_321,
+                Mode = 1,
+                Fontsize = 30,
+                Color = 16_711_680,
+                Ctime = 1_700_000_000,
+                Pool = 1,
+                MidHash = "kept-source",
+                Content = "保留😂\n<>&\"'"
+            },
+            new DanmakuElem
+            {
+                Id = 5,
+                Progress = 5_000,
+                Mode = 1,
+                Fontsize = 25,
+                Color = 0xFFFFFF,
+                MidHash = "emoji-only",
+                Content = "😂"
+            }
+        };
+        using var context = await ArtifactTestContext.CreateAsync(
+            CreateDanmakuClient(elements),
+            danmaku: true,
+            danmakuOutputFormat: DanmakuOutputFormat.AssAndXml,
+            configureDanmaku: settings => settings with
+            {
+                TopFilter = AllowStatus.Yes,
+                RemoveEmojiAndSpecialCharacters = AllowStatus.Yes,
+                BlockedKeywords = ["劇透"],
+                BlockedSenderUids = [blockedSenderUid]
+            }).ConfigureAwait(true);
+
+        var result = await context.Stage.ExecuteAsync(
+            context.Execution,
+            TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        var outputBasePath = context.Downloading.DownloadBase!.FilePath;
+        var document = XDocument.Load($"{outputBasePath}.xml");
+        var xmlDanmakus = document.Root!.Elements("d").ToArray();
+        Assert.Equal(2, xmlDanmakus.Length);
+        var kept = Assert.Single(xmlDanmakus, element => element.Value.StartsWith("保留", StringComparison.Ordinal));
+        Assert.Equal("保留😂\n<>&\"'", kept.Value);
+        Assert.Equal(
+            "4.321,1,30,16711680,1700000000,1,kept-source,4",
+            kept.Attribute("p")?.Value);
+        Assert.Contains(xmlDanmakus, element => element.Value == "😂");
+        Assert.DoesNotContain(xmlDanmakus, element => element.Value == "blocked-mode");
+        Assert.DoesNotContain(xmlDanmakus, element => element.Value == "前方劇透");
+        Assert.DoesNotContain(xmlDanmakus, element => element.Value == "blocked-sender");
+
+        var ass = await File.ReadAllTextAsync(
+            $"{outputBasePath}.ass",
+            TestContext.Current.CancellationToken).ConfigureAwait(true);
+        Assert.Contains("保留", ass, StringComparison.Ordinal);
+        Assert.DoesNotContain("😂", ass, StringComparison.Ordinal);
+        Assert.DoesNotContain("blocked-mode", ass, StringComparison.Ordinal);
+        Assert.DoesNotContain("前方劇透", ass, StringComparison.Ordinal);
+        Assert.DoesNotContain("blocked-sender", ass, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1220,7 +1322,8 @@ public sealed class DownloadArtifactStageTests
             string? coverUrl = null,
             string? pageCoverUrl = null,
             long[]? selectedSubtitleTrackIds = null,
-            long? defaultSubtitleTrackId = null)
+            long? defaultSubtitleTrackId = null,
+            Func<DanmakuApplicationSettings, DanmakuApplicationSettings>? configureDanmaku = null)
         {
             var directory = Path.Combine(
                 Path.GetTempPath(),
@@ -1229,11 +1332,17 @@ public sealed class DownloadArtifactStageTests
             Directory.CreateDirectory(directory);
             var settings = new DownKyi.Core.Settings.SettingsStore(
                 Path.Combine(directory, "settings.json"));
-            if (danmakuOutputFormat is { } outputFormat)
+            if (danmakuOutputFormat is not null || configureDanmaku is not null)
             {
                 settings.Update(current => current with
                 {
-                    Danmaku = current.Danmaku with { OutputFormat = outputFormat }
+                    Danmaku = configureDanmaku?.Invoke(current.Danmaku with
+                    {
+                        OutputFormat = danmakuOutputFormat ?? current.Danmaku.OutputFormat
+                    }) ?? current.Danmaku with
+                    {
+                        OutputFormat = danmakuOutputFormat ?? current.Danmaku.OutputFormat
+                    }
                 });
             }
 

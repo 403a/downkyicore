@@ -84,6 +84,23 @@ public sealed class CustomDanmakuFilter : Filter
     public bool IsEnabled =>
         _removeEmojiAndSpecialCharacters || _blockedKeywords.Length > 0 || _blockedCommenters.Count > 0;
 
+    internal bool IsExplicitlyExcluded(
+        string content,
+        string commenter,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_blockedCommenters.Contains(commenter))
+        {
+            return true;
+        }
+
+        var contentForKeywordMatch = _removeEmojiAndSpecialCharacters
+            ? RemoveEmojiAndSpecialCharacters(content)
+            : content;
+        return ContainsBlockedKeyword(contentForKeywordMatch, cancellationToken);
+    }
+
     public override IReadOnlyList<Danmaku> DoFilter(IReadOnlyList<Danmaku> danmakus)
     {
         return DoFilter(danmakus, CancellationToken.None);

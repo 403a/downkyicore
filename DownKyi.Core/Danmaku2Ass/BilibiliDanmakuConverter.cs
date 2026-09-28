@@ -143,22 +143,43 @@ public sealed class BilibiliDanmakuConverter
                 cancellationToken).ConfigureAwait(false))
             .OrderBy(danmaku => danmaku.Progress)
             .ToArray();
+        var survivingDanmakus = CreateSurvivingSnapshot(biliDanmakus, cancellationToken);
 
         if (!string.IsNullOrWhiteSpace(assFile))
         {
-            CreateAss(subtitleConfig, assFile, biliDanmakus, cancellationToken);
+            CreateAss(subtitleConfig, assFile, survivingDanmakus, cancellationToken);
         }
 
         if (!string.IsNullOrWhiteSpace(xmlFile))
         {
-            var xmlDanmakus = biliDanmakus
-                .Where(danmaku => !IsExplicitlyFiltered(danmaku.Mode))
-                .ToArray();
             await BilibiliDanmakuXmlWriter.WriteAsync(
-                xmlDanmakus,
+                survivingDanmakus,
                 xmlFile,
                 cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private List<BiliDanmaku> CreateSurvivingSnapshot(
+        BiliDanmaku[] biliDanmakus,
+        CancellationToken cancellationToken)
+    {
+        var survivingDanmakus = new List<BiliDanmaku>(biliDanmakus.Length);
+        foreach (var biliDanmaku in biliDanmakus)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (IsExplicitlyFiltered(biliDanmaku.Mode)
+                || _customFilter?.IsExplicitlyExcluded(
+                    biliDanmaku.Content,
+                    biliDanmaku.MidHash,
+                    cancellationToken) == true)
+            {
+                continue;
+            }
+
+            survivingDanmakus.Add(biliDanmaku);
+        }
+
+        return survivingDanmakus;
     }
 
     private void CreateAss(
