@@ -9,6 +9,36 @@ namespace DownKyi.Core.Tests;
 public sealed class SettingsStoreTests
 {
     [Fact]
+    public async Task LegacyDanmakuSettingsWithoutOutputFormatDefaultToAss()
+    {
+        var directory = CreateTestDirectory();
+        var settingsPath = Path.Combine(directory, "settings.json");
+        const string source = """
+            {
+              "Danmaku": {
+                "DanmakuFontSize": 42
+              }
+            }
+            """;
+
+        try
+        {
+            await File.WriteAllTextAsync(
+                settingsPath,
+                source,
+                TestContext.Current.CancellationToken);
+            using var store = new SettingsStore(settingsPath);
+
+            Assert.Equal(DanmakuOutputFormat.Ass, store.Current.Danmaku.OutputFormat);
+            Assert.Equal(42, store.Current.Danmaku.FontSize);
+        }
+        finally
+        {
+            DeleteDirectory(directory);
+        }
+    }
+
+    [Fact]
     public void SkipVersionAcceptsPrereleaseAndBuildMetadata()
     {
         var directory = CreateTestDirectory();

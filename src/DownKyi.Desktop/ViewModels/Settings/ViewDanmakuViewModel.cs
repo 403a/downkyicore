@@ -19,6 +19,14 @@ internal class ViewDanmakuViewModel : ViewModelBase
 
     #region 页面属性申明
 
+    private DanmakuOutputFormat _outputFormat;
+
+    public DanmakuOutputFormat OutputFormat
+    {
+        get => _outputFormat;
+        set => SetProperty(ref _outputFormat, value);
+    }
+
     private bool _topFilter;
 
     public bool TopFilter
@@ -132,6 +140,8 @@ internal class ViewDanmakuViewModel : ViewModelBase
 
         _isOnNavigatedTo = true;
 
+        OutputFormat = _settingsStore.Current.Danmaku.OutputFormat;
+
         // 屏蔽顶部弹幕
         var danmaku = _settingsStore.Current.Danmaku;
         var danmakuTopFilter = danmaku.TopFilter;
@@ -173,6 +183,26 @@ internal class ViewDanmakuViewModel : ViewModelBase
     }
 
     #region 命令申明
+
+    private RelayCommand<object>? _outputFormatCommand;
+
+    public RelayCommand<object> OutputFormatCommand =>
+        _outputFormatCommand ??= new RelayCommand<object>(ExecuteOutputFormatCommand);
+
+    private void ExecuteOutputFormatCommand(object? parameter)
+    {
+        if (parameter is not DanmakuOutputFormat outputFormat)
+        {
+            return;
+        }
+
+        var updated = UpdateDanmaku(settings => settings with
+        {
+            OutputFormat = outputFormat
+        });
+        OutputFormat = updated.OutputFormat;
+        PublishTip(OutputFormat == outputFormat);
+    }
 
     // 屏蔽顶部弹幕事件
     private RelayCommand? _topFilterCommand;

@@ -101,6 +101,7 @@ public partial class SettingsManager
                 GetFileNamePartTimeFormat(),
                 GetOrderFormat()),
             new DanmakuApplicationSettings(
+                GetDanmakuOutputFormat(),
                 GetDanmakuTopFilter(),
                 GetDanmakuBottomFilter(),
                 GetDanmakuScrollFilter(),
@@ -198,6 +199,7 @@ public partial class SettingsManager
                 SetFileNamePartTimeFormat(validated.Video.FileNamePartTimeFormat);
                 SetOrderFormat(validated.Video.OrderFormat);
 
+                SetDanmakuOutputFormat(validated.Danmaku.OutputFormat);
                 SetDanmakuTopFilter(validated.Danmaku.TopFilter);
                 SetDanmakuBottomFilter(validated.Danmaku.BottomFilter);
                 SetDanmakuScrollFilter(validated.Danmaku.ScrollFilter);

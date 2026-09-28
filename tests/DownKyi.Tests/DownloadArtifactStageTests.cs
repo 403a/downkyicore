@@ -1,8 +1,10 @@
 using System.Collections.Immutable;
 using System.Net;
+using System.Xml.Linq;
 using Bilibili.Community.Service.Dm.V1;
 using DownKyi.Application.Bilibili;
 using DownKyi.Application.Downloads;
+using DownKyi.Core.Settings;
 using DownKyi.Domain.Downloads;
 using DownKyi.Domain.Results;
 using DownKyi.Infrastructure.Bilibili;
@@ -20,6 +22,171 @@ namespace DownKyi.Tests;
 
 public sealed class DownloadArtifactStageTests
 {
+    [Theory]
+    [InlineData(DanmakuOutputFormat.Ass, true, false)]
+    [InlineData(DanmakuOutputFormat.Xml, false, true)]
+    public async Task SingleDanmakuOutputFormatsCreateOnlyTheSelectedFile(
+        DanmakuOutputFormat outputFormat,
+        bool expectsAss,
+        bool expectsXml)
+    {
+        var client = CreateDanmakuClient(
+        [
+            new DanmakuElem
+            {
+                Id = 1,
+                Progress = 1_000,
+                Mode = 1,
+                Fontsize = 25,
+                Color = 0xFFFFFF,
+                MidHash = "synthetic",
+                Content = "hello"
+            }
+        ]);
+        using var context = await ArtifactTestContext.CreateAsync(
+            client,
+            danmaku: true,
+            danmakuOutputFormat: outputFormat).ConfigureAwait(true);
+
+        var result = await context.Stage.ExecuteAsync(
+            context.Execution,
+            TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.Equal(expectsAss, File.Exists($"{context.Downloading.DownloadBase!.FilePath}.ass"));
+        Assert.Equal(expectsXml, File.Exists($"{context.Downloading.DownloadBase.FilePath}.xml"));
+    }
+
+    [Fact]
+    public async Task AssAndXmlShareOneSourceSnapshotAndHaveDistinctDurableOwners()
+    {
+        var requests = new List<string>();
+        var client = CreateDanmakuClient(
+        [
+            new DanmakuElem
+            {
+                Id = 2,
+                Progress = 2_000,
+                Mode = 1,
+                Fontsize = 25,
+                Color = 0xFFFFFF,
+                MidHash = "synthetic",
+                Content = "shared snapshot"
+            }
+        ], requests);
+        using var context = await ArtifactTestContext.CreateAsync(
+            client,
+            danmaku: true,
+            danmakuOutputFormat: DanmakuOutputFormat.AssAndXml).ConfigureAwait(true);
+
+        var result = await context.Stage.ExecuteAsync(
+            context.Execution,
+            TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.Equal(2, requests.Count);
+        Assert.Single(requests, request =>
+            request.Contains("/x/v2/dm/web/view", StringComparison.Ordinal));
+        Assert.Single(requests, request =>
+            request.Contains("/x/v2/dm/web/seg.so", StringComparison.Ordinal));
+        Assert.True(File.Exists($"{context.Downloading.DownloadBase!.FilePath}.ass"));
+        Assert.True(File.Exists($"{context.Downloading.DownloadBase.FilePath}.xml"));
+        var task = await context.GetTaskAsync().ConfigureAwait(true);
+        Assert.Equal(
+            $"{context.Downloading.DownloadBase.FilePath}.ass",
+            task.Plan.TransferFiles[DownloadArtifactWriter.DanmakuAssTransferKey]);
+        Assert.Equal(
+            $"{context.Downloading.DownloadBase.FilePath}.xml",
+            task.Plan.TransferFiles[DownloadArtifactWriter.DanmakuXmlTransferKey]);
+        AssertPhysicalArtifactsAreDurablyOwned(context, task);
+    }
+
+    [Fact]
+    public async Task XmlKeepsUnsupportedAndCrowdedSourceDanmakus()
+    {
+        var elements = Enumerable.Range(1, 30)
+            .Select(index => new DanmakuElem
+            {
+                Id = index,
+                Progress = 1_000,
+                Mode = 5,
+                Fontsize = 25,
+                Color = 0xFFFFFF,
+                MidHash = "synthetic",
+                Content = $"crowded-{index}"
+            })
+            .Prepend(new DanmakuElem
+            {
+                Id = 100,
+                Progress = 500,
+                Mode = 7,
+                Fontsize = 25,
+                Color = 0xFFFFFF,
+                MidHash = "synthetic",
+                Content = "unsupported-mode"
+            })
+            .ToArray();
+        using var context = await ArtifactTestContext.CreateAsync(
+            CreateDanmakuClient(elements),
+            danmaku: true,
+            danmakuOutputFormat: DanmakuOutputFormat.Xml).ConfigureAwait(true);
+
+        var result = await context.Stage.ExecuteAsync(
+            context.Execution,
+            TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        var document = XDocument.Load($"{context.Downloading.DownloadBase!.FilePath}.xml");
+        var danmakus = document.Root!.Elements("d").ToArray();
+        Assert.Equal(elements.Length, danmakus.Length);
+        Assert.Contains(danmakus, element => element.Value == "unsupported-mode");
+        Assert.Equal(30, danmakus.Count(element => element.Value.StartsWith(
+            "crowded-", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task XmlWriteFailureIsTypedAndTheClaimRemainsDurable()
+    {
+        using var context = await ArtifactTestContext.CreateAsync(
+            CreateDanmakuClient([]),
+            danmaku: true,
+            useMissingOutputDirectory: true,
+            danmakuOutputFormat: DanmakuOutputFormat.Xml).ConfigureAwait(true);
+
+        var result = await context.Stage.ExecuteAsync(
+            context.Execution,
+            TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("download.artifact.danmaku.io", result.Error?.Code);
+        var task = await context.GetTaskAsync().ConfigureAwait(true);
+        Assert.Equal(
+            $"{context.Downloading.DownloadBase!.FilePath}.xml",
+            task.Plan.TransferFiles[DownloadArtifactWriter.DanmakuXmlTransferKey]);
+        Assert.Empty(context.GetPhysicalArtifactFiles());
+    }
+
+    [Fact]
+    public async Task XmlCancellationRemainsVisibleAfterDurableClaim()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var client = CreateDanmakuClient(
+            [],
+            segmentStarted: () => cancellation.Cancel());
+        using var context = await ArtifactTestContext.CreateAsync(
+            client,
+            danmaku: true,
+            danmakuOutputFormat: DanmakuOutputFormat.Xml).ConfigureAwait(true);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            context.Stage.ExecuteAsync(context.Execution, cancellation.Token)).ConfigureAwait(true);
+
+        var task = await context.GetTaskAsync().ConfigureAwait(true);
+        Assert.Equal(
+            $"{context.Downloading.DownloadBase!.FilePath}.xml",
+            task.Plan.TransferFiles[DownloadArtifactWriter.DanmakuXmlTransferKey]);
+    }
+
     [Fact]
     public async Task RecordedDanmakuDoesNotCompleteRetryAfterPublishedFileDisappears()
     {
@@ -831,6 +998,36 @@ public sealed class DownloadArtifactStageTests
         };
     }
 
+    private static TestBilibiliApiClient CreateDanmakuClient(
+        IEnumerable<DanmakuElem> elements,
+        List<string>? requests = null,
+        Action? segmentStarted = null)
+    {
+        var segment = new DmSegMobileReply();
+        segment.Elems.Add(elements);
+        var payloads = new Queue<byte[]>(
+        [
+            new DmWebViewReply
+            {
+                DmSge = new DmSegConfig { PageSize = 360_000, Total = 1 }
+            }.ToByteArray(),
+            segment.ToByteArray()
+        ]);
+        return new TestBilibiliApiClient
+        {
+            OpenReadAsyncHandler = (request, _) =>
+            {
+                requests?.Add(request.RequestAddress);
+                if (request.RequestAddress.Contains("/x/v2/dm/web/seg.so", StringComparison.Ordinal))
+                {
+                    segmentStarted?.Invoke();
+                }
+
+                return Task.FromResult<Stream>(new MemoryStream(payloads.Dequeue()));
+            }
+        };
+    }
+
     private sealed class CallbackStage(Action callback) : IDownloadPipelineStage
     {
         public string Name => "finalize";
@@ -937,6 +1134,7 @@ public sealed class DownloadArtifactStageTests
             bool danmaku = false,
             bool generateMetadata = false,
             bool useMissingOutputDirectory = false,
+            DanmakuOutputFormat? danmakuOutputFormat = null,
             string? coverUrl = null,
             string? pageCoverUrl = null,
             long[]? selectedSubtitleTrackIds = null,
@@ -949,6 +1147,14 @@ public sealed class DownloadArtifactStageTests
             Directory.CreateDirectory(directory);
             var settings = new DownKyi.Core.Settings.SettingsStore(
                 Path.Combine(directory, "settings.json"));
+            if (danmakuOutputFormat is { } outputFormat)
+            {
+                settings.Update(current => current with
+                {
+                    Danmaku = current.Danmaku with { OutputFormat = outputFormat }
+                });
+            }
+
             if (generateMetadata)
             {
                 settings.Update(current => current with

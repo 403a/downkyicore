@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using DownKyi.Core.Settings;
 using DownKyi.Domain.Results;
 
 namespace DownKyi.Services.Download;
@@ -51,19 +53,43 @@ internal sealed class DownloadArtifactsStage : IDownloadPipelineStage
                 context,
                 "DownloadingDanmaku",
                 cancellationToken).ConfigureAwait(true);
-            var danmakuFile = $"{context.WorkingBasePath}.ass";
-            var danmakuResult = await ProduceAndPublishAsync(
-                context, "danmaku", danmakuFile,
-                () => _artifactWriter.DownloadDanmakuAsync(
+            var danmakuOutputs = GetDanmakuOutputs(
+                context.WorkingBasePath,
+                input.DanmakuSettings.OutputFormat);
+            var canReuseOutputs = danmakuOutputs.All(output =>
+                context.HasPublished(output.Key) ||
+                DownloadFileIntegrity.Check(output.File).IsUsable);
+            if (!canReuseOutputs && danmakuOutputs.Any(output => context.HasPublished(output.Key)))
+            {
+                return StageFailure(OperationError.Unexpected(
+                    "download.artifact.danmaku.snapshot-incomplete",
+                    "The shared danmaku snapshot is incomplete and cannot be recreated safely."));
+            }
+
+            var danmakuResult = canReuseOutputs
+                ? OperationResult.Success(DownloadArtifactWriteResult.Created(
+                    danmakuOutputs.Select(output => output.File).ToArray()))
+                : await _artifactWriter.DownloadDanmakuAsync(
                     context.TaskId, input.Metadata, context.WorkingBasePath,
-                    input.DanmakuSettings, cancellationToken),
-                cancellationToken).ConfigureAwait(true);
-            if (!danmakuResult.TryGetValue(out var danmaku))
+                    input.DanmakuSettings, cancellationToken).ConfigureAwait(true);
+            if (!danmakuResult.IsSuccess)
             {
                 return StageFailure(danmakuResult.Error);
             }
 
-            context.DanmakuFile = danmaku.Files.SingleOrDefault();
+            foreach (var output in danmakuOutputs)
+            {
+                var published = await PublishAsync(
+                    context, output.Key, output.File, cancellationToken).ConfigureAwait(true);
+                if (!published.IsSuccess)
+                {
+                    return StageFailure(published.Error);
+                }
+            }
+
+            context.DanmakuFile = input.DanmakuSettings.OutputFormat.IncludesAss()
+                ? $"{context.WorkingBasePath}.ass"
+                : null;
         }
 
         context.EnsureActive(cancellationToken);
@@ -196,6 +222,28 @@ internal sealed class DownloadArtifactsStage : IDownloadPipelineStage
                 "A requested download artifact could not be created."));
     }
 
+    internal static IReadOnlyList<DanmakuOutput> GetDanmakuOutputs(
+        string outputBasePath,
+        DanmakuOutputFormat outputFormat)
+    {
+        var outputs = new List<DanmakuOutput>(2);
+        if (outputFormat.IncludesAss())
+        {
+            outputs.Add(new DanmakuOutput(
+                DownloadArtifactWriter.DanmakuAssTransferKey,
+                $"{outputBasePath}.ass"));
+        }
+
+        if (outputFormat.IncludesXml())
+        {
+            outputs.Add(new DanmakuOutput(
+                DownloadArtifactWriter.DanmakuXmlTransferKey,
+                $"{outputBasePath}.xml"));
+        }
+
+        return outputs;
+    }
+
     internal static string GetImageExtension(string? coverUrl)
     {
         if (string.IsNullOrWhiteSpace(coverUrl))
@@ -212,3 +260,5 @@ internal sealed class DownloadArtifactsStage : IDownloadPipelineStage
         return Path.GetExtension(path).TrimStart('.');
     }
 }
+
+internal readonly record struct DanmakuOutput(string Key, string File);

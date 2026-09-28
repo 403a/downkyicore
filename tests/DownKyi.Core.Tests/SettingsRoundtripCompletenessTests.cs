@@ -285,6 +285,7 @@ public sealed class SettingsRoundtripCompletenessTests
                 "Network.AriaFileAllocation" => AriaConfigFileAllocation.PREALLOC,
                 "Video.FfmpegHardwareAcceleration" => FfmpegHardwareAcceleration.Disabled,
                 "Video.OrderFormat" => OrderFormat.LeadingZeros,
+                "Danmaku.OutputFormat" => DanmakuOutputFormat.AssAndXml,
                 "Danmaku.LayoutAlgorithm" => DanmakuLayoutAlgorithm.Async,
                 _ => throw UnsupportedLeaf(path, valueType)
             };

@@ -28,8 +28,11 @@ internal sealed class ValidateStage : IDownloadPipelineStage
                 "The finalized media file is missing or invalid."));
         }
 
-        if (context.NeedsDanmaku && !context.HasPublished("danmaku") &&
-            !File.Exists(context.DanmakuFile))
+        if (context.NeedsDanmaku &&
+            DownloadArtifactsStage.GetDanmakuOutputs(
+                    context.WorkingBasePath,
+                    context.Input.DanmakuSettings.OutputFormat)
+                .Any(output => !context.HasPublished(output.Key) && !File.Exists(output.File)))
         {
             return Task.FromResult(DownloadStageResult.Failure(
                 "download.validate.danmaku",

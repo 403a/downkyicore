@@ -2,6 +2,26 @@ namespace DownKyi.Core.Settings;
 
 public partial class SettingsManager
 {
+    private const DanmakuOutputFormat DefaultDanmakuOutputFormat = DanmakuOutputFormat.Ass;
+
+    public DanmakuOutputFormat GetDanmakuOutputFormat()
+    {
+        return Enum.IsDefined(_appSettings.Danmaku.OutputFormat)
+            ? _appSettings.Danmaku.OutputFormat
+            : DefaultDanmakuOutputFormat;
+    }
+
+    public bool SetDanmakuOutputFormat(DanmakuOutputFormat outputFormat)
+    {
+        var validated = Enum.IsDefined(outputFormat)
+            ? outputFormat
+            : DefaultDanmakuOutputFormat;
+        return SetProperty(
+            _appSettings.Danmaku.OutputFormat,
+            validated,
+            value => _appSettings.Danmaku.OutputFormat = value);
+    }
+
     // 是否屏蔽顶部弹幕
     private const AllowStatus DanmakuTopFilter = AllowStatus.No;
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -121,7 +122,21 @@ internal sealed partial class DownloadArtifactWriter
         ArgumentException.ThrowIfNullOrWhiteSpace(outputBasePath);
         ArgumentNullException.ThrowIfNull(settings);
 
-        var assFile = $"{outputBasePath}.ass";
+        var writeAss = settings.OutputFormat.IncludesAss();
+        var writeXml = settings.OutputFormat.IncludesXml();
+        var assFile = writeAss ? $"{outputBasePath}.ass" : null;
+        var xmlFile = writeXml ? $"{outputBasePath}.xml" : null;
+        var outputFiles = new List<string>();
+        if (assFile != null)
+        {
+            outputFiles.Add(assFile);
+        }
+
+        if (xmlFile != null)
+        {
+            outputFiles.Add(xmlFile);
+        }
+
         var subtitleConfig = new Config
         {
             Title = metadata.Name,
@@ -143,27 +158,40 @@ internal sealed partial class DownloadArtifactWriter
             .SetScrollFilter(settings.ScrollFilter == AllowStatus.Yes);
         try
         {
-            await _stateWriter.ClaimTransferFileAsync(
-                taskId,
-                "danmaku",
-                assFile,
-                cancellationToken).ConfigureAwait(false);
+            if (assFile != null)
+            {
+                await _stateWriter.ClaimTransferFileAsync(
+                    taskId,
+                    DanmakuAssTransferKey,
+                    assFile,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            if (xmlFile != null)
+            {
+                await _stateWriter.ClaimTransferFileAsync(
+                    taskId,
+                    DanmakuXmlTransferKey,
+                    xmlFile,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
             await converter.CreateAsync(
                 _client,
                 metadata.Media.Avid,
                 metadata.Media.Cid,
                 subtitleConfig,
                 assFile,
+                xmlFile,
                 cancellationToken).ConfigureAwait(false);
-            var integrity = DownloadFileIntegrity.Check(assFile);
-            if (!integrity.IsUsable)
+            if (outputFiles.Any(file => !DownloadFileIntegrity.Check(file).IsUsable))
             {
                 return ArtifactFailure(
                     "download.artifact.danmaku.invalid",
                     "The requested danmaku output is missing or invalid.");
             }
 
-            return OperationResult.Success(DownloadArtifactWriteResult.Created(assFile));
+            return OperationResult.Success(DownloadArtifactWriteResult.Created(outputFiles));
         }
         catch (OperationCanceledException)
         {
@@ -189,6 +217,20 @@ internal sealed partial class DownloadArtifactWriter
             return ArtifactFailure(
                 "download.artifact.danmaku.parse",
                 "The requested danmaku response was invalid.");
+        }
+        catch (XmlException e)
+        {
+            _logger.LogErrorMessage("Danmaku XML generation failed.", e);
+            return ArtifactFailure(
+                "download.artifact.danmaku.xml",
+                "The requested danmaku XML could not be generated.");
+        }
+        catch (ArgumentException e)
+        {
+            _logger.LogErrorMessage("Danmaku output contained invalid data.", e);
+            return ArtifactFailure(
+                "download.artifact.danmaku.data",
+                "The requested danmaku output contained invalid data.");
         }
         catch (IOException e)
         {
