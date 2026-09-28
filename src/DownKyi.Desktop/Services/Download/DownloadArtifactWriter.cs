@@ -127,14 +127,17 @@ internal sealed partial class DownloadArtifactWriter
         var assFile = writeAss ? $"{outputBasePath}.ass" : null;
         var xmlFile = writeXml ? $"{outputBasePath}.xml" : null;
         var outputFiles = new List<string>();
+        var outputClaims = new List<KeyValuePair<string, string>>(2);
         if (assFile != null)
         {
             outputFiles.Add(assFile);
+            outputClaims.Add(new KeyValuePair<string, string>(DanmakuAssTransferKey, assFile));
         }
 
         if (xmlFile != null)
         {
             outputFiles.Add(xmlFile);
+            outputClaims.Add(new KeyValuePair<string, string>(DanmakuXmlTransferKey, xmlFile));
         }
 
         var subtitleConfig = new Config
@@ -158,23 +161,10 @@ internal sealed partial class DownloadArtifactWriter
             .SetScrollFilter(settings.ScrollFilter == AllowStatus.Yes);
         try
         {
-            if (assFile != null)
-            {
-                await _stateWriter.ClaimTransferFileAsync(
-                    taskId,
-                    DanmakuAssTransferKey,
-                    assFile,
-                    cancellationToken).ConfigureAwait(false);
-            }
-
-            if (xmlFile != null)
-            {
-                await _stateWriter.ClaimTransferFileAsync(
-                    taskId,
-                    DanmakuXmlTransferKey,
-                    xmlFile,
-                    cancellationToken).ConfigureAwait(false);
-            }
+            await _stateWriter.ClaimTransferFilesAsync(
+                taskId,
+                outputClaims,
+                cancellationToken).ConfigureAwait(false);
 
             await converter.CreateAsync(
                 _client,

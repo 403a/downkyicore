@@ -90,6 +90,11 @@ public interface IDownloadTaskApplicationService
         string filePath,
         CancellationToken cancellationToken);
 
+    Task<OperationResult<DownloadTask>> ClaimTransferFilesAsync(
+        DownloadTaskId taskId,
+        IReadOnlyCollection<KeyValuePair<string, string>> files,
+        CancellationToken cancellationToken);
+
     Task<OperationResult<DownloadTask>> InvalidateCompletedFileAsync(
         DownloadTaskId taskId,
         string key,

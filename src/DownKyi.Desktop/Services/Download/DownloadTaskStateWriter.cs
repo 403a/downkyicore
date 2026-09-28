@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using DownKyi.Application.Downloads;
@@ -101,6 +102,12 @@ internal sealed class DownloadTaskStateWriter
         string filePath,
         CancellationToken cancellationToken = default) =>
         RequireAsync(_tasks.ClaimTransferFileAsync(taskId, key, filePath, cancellationToken));
+
+    public Task<DownloadTask> ClaimTransferFilesAsync(
+        DownloadTaskId taskId,
+        IReadOnlyCollection<KeyValuePair<string, string>> files,
+        CancellationToken cancellationToken = default) =>
+        RequireAsync(_tasks.ClaimTransferFilesAsync(taskId, files, cancellationToken));
 
     public Task<DownloadTask> InvalidateCompletedFileAsync(
         DownloadTaskId taskId,

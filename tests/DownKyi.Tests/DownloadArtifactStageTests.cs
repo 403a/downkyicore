@@ -188,6 +188,29 @@ public sealed class DownloadArtifactStageTests
     }
 
     [Fact]
+    public async Task AssAndXmlCancellationPreservesTheCombinedDurablePlan()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var client = CreateDanmakuClient(
+            [],
+            segmentStarted: () => cancellation.Cancel());
+        using var context = await ArtifactTestContext.CreateAsync(
+            client,
+            danmaku: true,
+            danmakuOutputFormat: DanmakuOutputFormat.AssAndXml).ConfigureAwait(true);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            context.Stage.ExecuteAsync(context.Execution, cancellation.Token)).ConfigureAwait(true);
+
+        var task = await context.GetTaskAsync().ConfigureAwait(true);
+        Assert.Contains(DownloadArtifactWriter.DanmakuAssTransferKey, task.Plan.TransferFiles);
+        Assert.Contains(DownloadArtifactWriter.DanmakuXmlTransferKey, task.Plan.TransferFiles);
+        var currentSettings = context.SetDanmakuOutputFormat(DanmakuOutputFormat.Ass);
+        var resumedInput = DownloadExecutionContextFactory.CreateInput(task, currentSettings);
+        Assert.Equal(DanmakuOutputFormat.AssAndXml, resumedInput.DanmakuSettings.OutputFormat);
+    }
+
+    [Fact]
     public async Task MalformedOwnedStagedXmlIsRegeneratedBeforePublishing()
     {
         var requests = new List<string>();
@@ -1168,6 +1191,14 @@ public sealed class DownloadArtifactStageTests
                 file,
                 TestContext.Current.CancellationToken).ConfigureAwait(true);
             Assert.True(result.IsSuccess, result.Error?.Message);
+        }
+
+        public ApplicationSettings SetDanmakuOutputFormat(DanmakuOutputFormat outputFormat)
+        {
+            return _settings.Update(current => current with
+            {
+                Danmaku = current.Danmaku with { OutputFormat = outputFormat }
+            });
         }
 
         public string[] GetPhysicalArtifactFiles()

@@ -201,29 +201,51 @@ public sealed partial class DownloadTaskApplicationService : IDownloadTaskApplic
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        return ClaimTransferFilesAsync(
+            taskId,
+            [new KeyValuePair<string, string>(key, filePath)],
+            cancellationToken);
+    }
+
+    public Task<OperationResult<DownloadTask>> ClaimTransferFilesAsync(
+        DownloadTaskId taskId,
+        IReadOnlyCollection<KeyValuePair<string, string>> files,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(files);
+        foreach (var claim in files)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(claim.Key);
+            ArgumentException.ThrowIfNullOrWhiteSpace(claim.Value);
+        }
+
         return MutateAsync(taskId, (task, now) =>
         {
-            var files = task.Plan.TransferFiles;
-            if (files.Values.Contains(filePath, StringComparer.Ordinal))
+            var claimedFiles = task.Plan.TransferFiles;
+            foreach (var claim in files)
             {
-                return task.UpdatePlan(task.Plan, task.Transfer, now);
-            }
-
-            var claimKey = key;
-            if (files.ContainsKey(claimKey))
-            {
-                for (var suffix = 1; suffix <= files.Count + 1; suffix++)
+                if (claimedFiles.Values.Contains(claim.Value, StringComparer.Ordinal))
                 {
-                    var candidate = $"{key}-owner-{suffix:D4}";
-                    if (!files.ContainsKey(candidate))
+                    continue;
+                }
+
+                var claimKey = claim.Key;
+                if (claimedFiles.ContainsKey(claimKey))
+                {
+                    for (var suffix = 1; suffix <= claimedFiles.Count + 1; suffix++)
                     {
-                        claimKey = candidate;
-                        break;
+                        var candidate = $"{claim.Key}-owner-{suffix:D4}";
+                        if (!claimedFiles.ContainsKey(candidate))
+                        {
+                            claimKey = candidate;
+                            break;
+                        }
                     }
                 }
+
+                claimedFiles = claimedFiles.Add(claimKey, claim.Value);
             }
 
-            var claimedFiles = files.Add(claimKey, filePath);
             var plan = task.Plan.WithTransferFiles(claimedFiles);
             return task.UpdatePlan(plan, task.Transfer, now);
         }, cancellationToken);
