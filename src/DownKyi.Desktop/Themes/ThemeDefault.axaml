@@ -18,6 +18,11 @@
                 <ResourceInclude Source="/Themes/Colors/ColorDefault.axaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
+        <ResourceDictionary x:Key="Light">
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="/Themes/Colors/ColorDefault.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
         <ResourceDictionary x:Key="Dark">
             <ResourceDictionary.MergedDictionaries>
                 <ResourceInclude Source="/Themes/Colors/ColorDark.axaml" />

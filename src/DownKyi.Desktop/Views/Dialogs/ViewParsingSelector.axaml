@@ -30,7 +30,7 @@
                         Width="{Binding CloseIcon.Width}"
                         Height="{Binding CloseIcon.Height}"
                         Data="{Binding CloseIcon.Data}"
-                        Fill="{Binding CloseIcon.Fill}"
+                        Fill="{DynamicResource BrushSystemBtnTintDark}"
                         Stretch="UniformToFill" />
                 </Button>
 

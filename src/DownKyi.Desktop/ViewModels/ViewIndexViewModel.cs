@@ -10,7 +10,6 @@ using DownKyi.Core.Settings;
 using DownKyi.Images;
 using DownKyi.Services;
 using DownKyi.Services.Account;
-using DownKyi.Utils;
 using Microsoft.Extensions.Logging;
 
 namespace DownKyi.ViewModels;
@@ -114,19 +113,14 @@ internal class ViewIndexViewModel : ViewModelBase
         Header = "avares://DownKyi.Desktop/Resources/default_header.jpg";
 
         TextLogo = LogoIcon.Instance().TextLogo;
-        TextLogo.Fill = DictionaryResource.GetColor("ColorPrimary");
 
         GeneralSearch = ButtonIcon.Instance().GeneralSearch;
-        GeneralSearch.Fill = DictionaryResource.GetColor("ColorPrimary");
 
         Settings = ButtonIcon.Instance().Settings;
-        Settings.Fill = DictionaryResource.GetColor("ColorPrimary");
 
         DownloadManager = ButtonIcon.Instance().DownloadManage;
-        DownloadManager.Fill = DictionaryResource.GetColor("ColorPrimary");
 
         Toolbox = ButtonIcon.Instance().Toolbox;
-        Toolbox.Fill = DictionaryResource.GetColor("ColorPrimary");
 
     }
 
@@ -313,7 +307,6 @@ internal class ViewIndexViewModel : ViewModelBase
         DownloadManager = ButtonIcon.Instance().DownloadManage;
         DownloadManager.Height = 27;
         DownloadManager.Width = 32;
-        DownloadManager.Fill = DictionaryResource.GetColor("ColorPrimary");
 
         // 根据传入参数不同执行不同任务
         var parameter = navigationContext.Parameters.GetValue<string>("Parameter");

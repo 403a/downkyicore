@@ -135,7 +135,7 @@
                             Width="{Binding ArrowBack.Width}"
                             Height="{Binding ArrowBack.Height}"
                             Data="{Binding ArrowBack.Data}"
-                            Fill="{Binding ArrowBack.Fill}"
+                            Fill="{DynamicResource BrushTextDark}"
                             Stretch="None" />
                     </ContentControl>
                     <TextBlock
@@ -161,7 +161,7 @@
                         Width="{Binding DownloadManage.Width}"
                         Height="{Binding DownloadManage.Height}"
                         Data="{Binding DownloadManage.Data}"
-                        Fill="{Binding DownloadManage.Fill}"
+                        Fill="{DynamicResource BrushPrimary}"
                         Stretch="Uniform" />
                 </ContentControl>
             </Button>

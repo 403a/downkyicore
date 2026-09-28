@@ -166,7 +166,7 @@
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
                 FontSize="14"
-                Foreground="{StaticResource ColorText}"
+                Foreground="{DynamicResource BrushText}"
                 Text="{Binding Current, Mode=TwoWay}" />
         </Border>
         <Button

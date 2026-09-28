@@ -151,13 +151,11 @@ internal class ViewPublicFavoritesViewModel : ViewModelBase
         MediaNoDataVisibility = false;
 
         ArrowBack = NavigationIcon.CreateArrowBack();
-        ArrowBack.Fill = DictionaryResource.GetColor("ColorTextDark");
 
         // 下载管理按钮
         DownloadManage = ButtonIcon.Instance().DownloadManage;
         DownloadManage.Height = 24;
         DownloadManage.Width = 24;
-        DownloadManage.Fill = DictionaryResource.GetColor("ColorPrimary");
 
         FavoritesMedias = new RangeObservableCollection<FavoritesMedia>();
 
@@ -314,12 +312,9 @@ internal class ViewPublicFavoritesViewModel : ViewModelBase
     {
         _logger.LogDebugMessage("Initializing public favorites view.");
 
-        ArrowBack.Fill = DictionaryResource.GetColor("ColorTextDark");
-
         DownloadManage = ButtonIcon.Instance().DownloadManage;
         DownloadManage.Height = 24;
         DownloadManage.Width = 24;
-        DownloadManage.Fill = DictionaryResource.GetColor("ColorPrimary");
 
         ContentVisibility = false;
         LoadingVisibility = false;

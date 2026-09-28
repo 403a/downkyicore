@@ -54,7 +54,6 @@ public sealed class UserSpaceArchitectureTests
             "LoadingVisibility",
             "ViewVisibility",
             "ContentVisibility",
-            "TopNavigationBg",
             "Background",
             "Header",
             "UserName",
@@ -79,6 +78,7 @@ public sealed class UserSpaceArchitectureTests
             "CancellationToken",
             "AppNavigation",
             "ILogger",
+            "TopNavigationBg",
             "LoadAsync(",
             "Navigate("
         })

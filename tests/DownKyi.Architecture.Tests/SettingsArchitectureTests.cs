@@ -5,7 +5,6 @@ public sealed class SettingsArchitectureTests
     private static readonly string RepositoryRoot = FindRepositoryRoot();
 
     [Theory]
-    [InlineData("src", "DownKyi.Desktop", "App.axaml.cs")]
     [InlineData("src", "DownKyi.Desktop", "ViewModels", "ViewVideoDetailViewModel.cs")]
     [InlineData("src", "DownKyi.Desktop", "ViewModels", "Settings", "ViewAboutViewModel.cs")]
     [InlineData("src", "DownKyi.Desktop", "ViewModels", "Settings", "ViewBasicViewModel.cs")]
@@ -48,6 +47,22 @@ public sealed class SettingsArchitectureTests
 
         Assert.DoesNotContain("SettingsManager.Instance", source, StringComparison.Ordinal);
         Assert.Contains("ISettingsStore", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ApplicationStartupDelegatesThemeSettingsToTheDesktopThemeController()
+    {
+        var applicationSource = ReadSource("src", "DownKyi.Desktop", "App.axaml.cs");
+        var controllerSource = ReadSource(
+            "src", "DownKyi.Desktop", "Appearance", "DesktopThemeController.cs");
+
+        Assert.DoesNotContain("ISettingsStore", applicationSource, StringComparison.Ordinal);
+        Assert.Contains(
+            "GetRequiredService<DesktopThemeController>().ApplySavedMode()",
+            applicationSource,
+            StringComparison.Ordinal);
+        Assert.Contains("ISettingsStore", controllerSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("SettingsManager.Instance", controllerSource, StringComparison.Ordinal);
     }
 
     [Fact]

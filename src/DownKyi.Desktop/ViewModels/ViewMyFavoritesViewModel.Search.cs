@@ -7,7 +7,6 @@ using DownKyi.Application.Diagnostics;
 using DownKyi.CustomControl;
 using DownKyi.Images;
 using DownKyi.Presentation;
-using DownKyi.Utils;
 
 namespace DownKyi.ViewModels;
 
@@ -122,11 +121,9 @@ internal partial class ViewMyFavoritesViewModel
 
     private void InitView()
     {
-        ArrowBack.Fill = DictionaryResource.GetColor("ColorTextDark");
         DownloadManage = ButtonIcon.Instance().DownloadManage;
         DownloadManage.Height = 24;
         DownloadManage.Width = 24;
-        DownloadManage.Fill = DictionaryResource.GetColor("ColorPrimary");
         ContentVisibility = false;
         LoadingVisibility = true;
         NoDataVisibility = false;
@@ -153,7 +150,6 @@ internal partial class ViewMyFavoritesViewModel
             return;
         }
 
-        ArrowBack.Fill = DictionaryResource.GetColor("ColorTextDark");
         if (_loadedMid == mid && _foldersLoaded)
         {
             if (!_hasLoadedMediaPage)

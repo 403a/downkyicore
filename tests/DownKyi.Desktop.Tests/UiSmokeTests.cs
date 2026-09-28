@@ -287,7 +287,7 @@ public sealed class UiSmokeTests
     }
 
     [AvaloniaFact]
-    public Task PublicFavoritesBackArrowRemainsVisibleInLightAndDarkThemes()
+    public Task PublicFavoritesThemeResourcesUpdateImmediatelyAcrossLightDarkLight()
     {
         return AvaloniaTestDispatcher.RunAsync(() =>
         {
@@ -305,15 +305,30 @@ public sealed class UiSmokeTests
             {
                 window.Show();
                 var arrow = view.FindControl<Avalonia.Controls.Shapes.Path>("BackArrowPath");
+                var download = view.FindControl<Avalonia.Controls.Shapes.Path>("DownloadManagePath");
                 Assert.NotNull(arrow);
+                Assert.NotNull(download);
 
                 application.RequestedThemeVariant = ThemeVariant.Light;
                 window.UpdateLayout();
                 Assert.Equal(Colors.Black, Assert.IsType<SolidColorBrush>(arrow.Fill).Color);
+                Assert.Equal(
+                    Color.Parse("#FF00A1D6"),
+                    Assert.IsType<SolidColorBrush>(download.Fill).Color);
 
                 application.RequestedThemeVariant = ThemeVariant.Dark;
                 window.UpdateLayout();
                 Assert.Equal(Colors.White, Assert.IsType<SolidColorBrush>(arrow.Fill).Color);
+                Assert.Equal(
+                    Color.Parse("#FF00A1D6"),
+                    Assert.IsType<SolidColorBrush>(download.Fill).Color);
+
+                application.RequestedThemeVariant = ThemeVariant.Light;
+                window.UpdateLayout();
+                Assert.Equal(Colors.Black, Assert.IsType<SolidColorBrush>(arrow.Fill).Color);
+                Assert.Equal(
+                    Color.Parse("#FF00A1D6"),
+                    Assert.IsType<SolidColorBrush>(download.Fill).Color);
             }
             finally
             {

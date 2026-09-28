@@ -85,13 +85,11 @@ internal partial class ViewMyBangumiFollowViewModel : ViewModelBase
         NoDataVisibility = false;
 
         ArrowBack = NavigationIcon.CreateArrowBack();
-        ArrowBack.Fill = DictionaryResource.GetColor("ColorTextDark");
 
         // 下载管理按钮
         DownloadManage = ButtonIcon.Instance().DownloadManage;
         DownloadManage.Height = 24;
         DownloadManage.Width = 24;
-        DownloadManage.Fill = DictionaryResource.GetColor("ColorPrimary");
 
         TabHeaders = new RangeObservableCollection<TabHeader>
         {
@@ -114,7 +112,6 @@ internal partial class ViewMyBangumiFollowViewModel : ViewModelBase
     {
         InitView();
 
-        ArrowBack.Fill = DictionaryResource.GetColor("ColorText");
 
         CancelOperations();
 
@@ -378,7 +375,6 @@ internal partial class ViewMyBangumiFollowViewModel : ViewModelBase
     /// </summary>
     private void InitView()
     {
-        ArrowBack.Fill = DictionaryResource.GetColor("ColorTextDark");
 
         ContentVisibility = false;
         LoadingVisibility = true;
@@ -397,12 +393,9 @@ internal partial class ViewMyBangumiFollowViewModel : ViewModelBase
         ArgumentNullException.ThrowIfNull(navigationContext);
         base.OnNavigatedTo(navigationContext);
 
-        ArrowBack.Fill = DictionaryResource.GetColor("ColorTextDark");
-
         DownloadManage = ButtonIcon.Instance().DownloadManage;
         DownloadManage.Height = 24;
         DownloadManage.Width = 24;
-        DownloadManage.Fill = DictionaryResource.GetColor("ColorPrimary");
 
         // 根据传入参数不同执行不同任务
         _mid = navigationContext.Parameters.GetValue<long>("Parameter");

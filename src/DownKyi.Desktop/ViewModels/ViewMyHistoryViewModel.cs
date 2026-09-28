@@ -122,13 +122,11 @@ internal class ViewMyHistoryViewModel : ViewModelBase
         NoDataVisibility = false;
 
         ArrowBack = NavigationIcon.CreateArrowBack();
-        ArrowBack.Fill = DictionaryResource.GetColor("ColorTextDark");
 
         // 下载管理按钮
         DownloadManage = ButtonIcon.Instance().DownloadManage;
         DownloadManage.Height = 24;
         DownloadManage.Width = 24;
-        DownloadManage.Fill = DictionaryResource.GetColor("ColorPrimary");
 
         Medias = new RangeObservableCollection<HistoryMedia>();
 
@@ -152,7 +150,6 @@ internal class ViewMyHistoryViewModel : ViewModelBase
         CancelOperations();
         InitView();
 
-        ArrowBack.Fill = DictionaryResource.GetColor("ColorText");
 
         if (TryNavigateBack())
         {
@@ -407,12 +404,10 @@ internal class ViewMyHistoryViewModel : ViewModelBase
     /// </summary>
     private void InitView()
     {
-        ArrowBack.Fill = DictionaryResource.GetColor("ColorTextDark");
 
         DownloadManage = ButtonIcon.Instance().DownloadManage;
         DownloadManage.Height = 24;
         DownloadManage.Width = 24;
-        DownloadManage.Fill = DictionaryResource.GetColor("ColorPrimary");
 
         ContentVisibility = false;
         LoadingVisibility = false;
@@ -434,12 +429,9 @@ internal class ViewMyHistoryViewModel : ViewModelBase
         ArgumentNullException.ThrowIfNull(navigationContext);
         base.OnNavigatedTo(navigationContext);
 
-        ArrowBack.Fill = DictionaryResource.GetColor("ColorTextDark");
-
         DownloadManage = ButtonIcon.Instance().DownloadManage;
         DownloadManage.Height = 24;
         DownloadManage.Width = 24;
-        DownloadManage.Fill = DictionaryResource.GetColor("ColorPrimary");
 
         // 根据传入参数不同执行不同任务
         var mid = navigationContext.Parameters.GetValue<long>("Parameter");

@@ -46,26 +46,18 @@ internal partial class ViewMySpaceViewModel : ViewModelBase
 
         // 返回按钮
         ArrowBack = NavigationIcon.CreateArrowBack();
-        ArrowBack.Fill = DictionaryResource.GetColor("ColorTextDark");
 
         // 退出登录按钮
         Logout = NavigationIcon.CreateLogout();
-        Logout.Fill = DictionaryResource.GetColor("ColorTextDark");
 
         // 初始化loading
         Loading = true;
 
-        TopNavigationBg = "#00FFFFFF"; // 透明
-
         // B站图标
         CoinIcon = NormalIcon.Instance().CoinIcon;
-        CoinIcon.Fill = DictionaryResource.GetColor("ColorPrimary");
         MoneyIcon = NormalIcon.Instance().MoneyIcon;
-        MoneyIcon.Fill = DictionaryResource.GetColor("ColorMoney");
         BindingEmail = NormalIcon.Instance().BindingEmail;
-        BindingEmail.Fill = DictionaryResource.GetColor("ColorPrimary");
         BindingPhone = NormalIcon.Instance().BindingPhone;
-        BindingPhone.Fill = DictionaryResource.GetColor("ColorPrimary");
 
         StatusList = new ObservableCollection<SpaceItem>();
         PackageList = new ObservableCollection<SpaceItem>();
@@ -213,9 +205,6 @@ internal partial class ViewMySpaceViewModel : ViewModelBase
     /// </summary>
     private void InitView()
     {
-        TopNavigationBg = "#00FFFFFF"; // 透明
-        ArrowBack.Fill = DictionaryResource.GetColor("ColorTextDark");
-        Logout.Fill = DictionaryResource.GetColor("ColorTextDark");
         Background = null;
 
         Header = null;
@@ -270,12 +259,6 @@ internal partial class ViewMySpaceViewModel : ViewModelBase
             Image = NormalIcon.Instance().Channel,
             Title = DictionaryResource.GetString("BilibiliDynamics")
         });
-        NormalIcon.Instance().FavoriteOutline.Fill = DictionaryResource.GetColor("ColorPrimary");
-        NormalIcon.Instance().Subscription.Fill = DictionaryResource.GetColor("ColorPrimary");
-        NormalIcon.Instance().ToView.Fill = DictionaryResource.GetColor("ColorPrimary");
-        NormalIcon.Instance().History.Fill = DictionaryResource.GetColor("ColorPrimary");
-        NormalIcon.Instance().Channel.Fill = DictionaryResource.GetColor("ColorPrimary");
-
         SelectedStatus = -1;
         SelectedPackage = -1;
 
@@ -345,9 +328,6 @@ internal partial class ViewMySpaceViewModel : ViewModelBase
         StatusList[3].Subtitle = profile.Moral;
         StatusList[4].Subtitle = profile.Silence;
 
-        ArrowBack.Fill = DictionaryResource.GetColor("ColorText");
-        Logout.Fill = DictionaryResource.GetColor("ColorText");
-        TopNavigationBg = DictionaryResource.GetColor("ColorMask100");
         Background = profile.Background;
         ViewVisibility = true;
         LoadingVisibility = false;
@@ -366,9 +346,6 @@ internal partial class ViewMySpaceViewModel : ViewModelBase
 
     private void ShowNoData()
     {
-        TopNavigationBg = "#00FFFFFF";
-        ArrowBack.Fill = DictionaryResource.GetColor("ColorTextDark");
-        Logout.Fill = DictionaryResource.GetColor("ColorTextDark");
         Background = null;
         ViewVisibility = false;
         LoadingVisibility = false;

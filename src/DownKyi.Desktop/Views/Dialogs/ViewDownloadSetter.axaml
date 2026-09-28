@@ -29,7 +29,7 @@
                         Width="{Binding CloseIcon.Width}"
                         Height="{Binding CloseIcon.Height}"
                         Data="{Binding CloseIcon.Data}"
-                        Fill="{Binding CloseIcon.Fill}"
+                        Fill="{DynamicResource BrushSystemBtnTintDark}"
                         Stretch="UniformToFill" />
                 </Button>
             </Grid>
@@ -48,7 +48,7 @@
                             Width="{Binding CloudDownloadIcon.Width}"
                             Height="{Binding CloudDownloadIcon.Height}"
                             Data="{Binding CloudDownloadIcon.Data}"
-                            Fill="{Binding CloudDownloadIcon.Fill}"
+                            Fill="{DynamicResource BrushPrimary}"
                             Stretch="UniformToFill" />
                     </ContentControl>
 
@@ -67,7 +67,7 @@
                             Width="{Binding FolderIcon.Width}"
                             Height="{Binding FolderIcon.Height}"
                             Data="{Binding FolderIcon.Data}"
-                            Fill="{Binding FolderIcon.Fill}"
+                            Fill="{DynamicResource BrushPrimary}"
                             Stretch="UniformToFill" />
                     </ContentControl>
                 </Grid>
