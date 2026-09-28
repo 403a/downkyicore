@@ -101,6 +101,7 @@ public sealed record VideoContentApplicationSettings(
     bool GenerateMovieMetadata);
 
 public sealed record DanmakuApplicationSettings(
+    DanmakuOutputFormat OutputFormat,
     AllowStatus TopFilter,
     AllowStatus BottomFilter,
     AllowStatus ScrollFilter,
@@ -255,6 +256,7 @@ internal static class ApplicationSettingsValidator
         };
         var danmaku = settings.Danmaku with
         {
+            OutputFormat = EnumValue(settings.Danmaku.OutputFormat, DanmakuOutputFormat.Ass, "Danmaku.OutputFormat", corrections),
             TopFilter = AllowValue(settings.Danmaku.TopFilter, AllowStatus.No, "Danmaku.TopFilter", corrections),
             BottomFilter = AllowValue(settings.Danmaku.BottomFilter, AllowStatus.No, "Danmaku.BottomFilter", corrections),
             ScrollFilter = AllowValue(settings.Danmaku.ScrollFilter, AllowStatus.No, "Danmaku.ScrollFilter", corrections),

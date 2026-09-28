@@ -7,6 +7,8 @@ internal sealed partial class DownloadArtifactWriter
     internal const string MainCoverTransferKey = "cover";
     internal const string PageCoverTransferKey = "page-cover";
     internal const string DefaultSubtitleTransferKey = "subtitle";
+    internal const string DanmakuAssTransferKey = "danmaku";
+    internal const string DanmakuXmlTransferKey = "danmaku-xml";
 
     internal static string GetSubtitleTrackTransferKey(int index)
     {

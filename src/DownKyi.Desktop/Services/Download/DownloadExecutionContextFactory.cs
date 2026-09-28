@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Immutable;
 using System.Threading;
 using DownKyi.Core.Settings;
 using DownKyi.Domain.Downloads;
@@ -53,6 +54,12 @@ internal sealed class DownloadExecutionContextFactory
     {
         ArgumentNullException.ThrowIfNull(task);
         ArgumentNullException.ThrowIfNull(settings);
+        var danmakuSettings = settings.Danmaku with
+        {
+            OutputFormat = ResolveDanmakuOutputFormat(
+                task.Plan.TransferFiles,
+                settings.Danmaku.OutputFormat)
+        };
         return new DownloadExecutionInput(
             task.Metadata,
             task.Plan.RequestedContent,
@@ -61,8 +68,23 @@ internal sealed class DownloadExecutionContextFactory
             (Core.BiliApi.VideoStream.PlayStreamType)task.Plan.StreamType,
             task.Plan.NfoRequest,
             settings.Video,
-            settings.Danmaku,
+            danmakuSettings,
             settings.Basic.DownloadFinishedSort);
+    }
+
+    private static DanmakuOutputFormat ResolveDanmakuOutputFormat(
+        ImmutableDictionary<string, string> transferFiles,
+        DanmakuOutputFormat currentFormat)
+    {
+        var hasAss = transferFiles.ContainsKey(DownloadArtifactWriter.DanmakuAssTransferKey);
+        var hasXml = transferFiles.ContainsKey(DownloadArtifactWriter.DanmakuXmlTransferKey);
+        return (hasAss, hasXml) switch
+        {
+            (true, true) => DanmakuOutputFormat.AssAndXml,
+            (true, false) => DanmakuOutputFormat.Ass,
+            (false, true) => DanmakuOutputFormat.Xml,
+            _ => currentFormat
+        };
     }
 
     private void EnsureActive(

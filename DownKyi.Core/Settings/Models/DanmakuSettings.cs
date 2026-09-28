@@ -5,6 +5,7 @@ namespace DownKyi.Core.Settings.Models;
 /// </summary>
 public class DanmakuSettings
 {
+    public DanmakuOutputFormat OutputFormat { get; set; } = DanmakuOutputFormat.Ass;
     public AllowStatus DanmakuTopFilter { get; set; } = AllowStatus.None;
     public AllowStatus DanmakuBottomFilter { get; set; } = AllowStatus.None;
     public AllowStatus DanmakuScrollFilter { get; set; } = AllowStatus.None;

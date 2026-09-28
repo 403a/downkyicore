@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="DownKyi.Views.Settings.ViewDanmaku"
+             xmlns:settings="clr-namespace:DownKyi.Core.Settings;assembly=DownKyi.Core"
              xmlns:vms="clr-namespace:DownKyi.ViewModels.Settings"
              x:DataType="vms:ViewDanmakuViewModel">
     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
@@ -10,6 +11,35 @@
                     FontSize="18"
                     Foreground="{DynamicResource BrushTextDark}"
                     Text="{DynamicResource SettingDanmaku}" />
+            </StackPanel>
+
+            <StackPanel Margin="0,20,0,0" Orientation="Horizontal">
+                <TextBlock
+                    VerticalAlignment="Center"
+                    FontSize="12"
+                    Foreground="{DynamicResource BrushTextDark}"
+                    Text="{DynamicResource DanmakuOutputFormat}" />
+                <RadioButton
+                    Margin="10,0,0,0"
+                    Command="{Binding OutputFormatCommand}"
+                    CommandParameter="{x:Static settings:DanmakuOutputFormat.Ass}"
+                    Content="{DynamicResource DanmakuOutputAss}"
+                    GroupName="danmaku-output-format"
+                    IsChecked="{Binding OutputFormat,Converter={x:Static ObjectConverters.Equal},ConverterParameter={x:Static settings:DanmakuOutputFormat.Ass}}" />
+                <RadioButton
+                    Margin="20,0,0,0"
+                    Command="{Binding OutputFormatCommand}"
+                    CommandParameter="{x:Static settings:DanmakuOutputFormat.Xml}"
+                    Content="{DynamicResource DanmakuOutputXml}"
+                    GroupName="danmaku-output-format"
+                    IsChecked="{Binding OutputFormat,Converter={x:Static ObjectConverters.Equal},ConverterParameter={x:Static settings:DanmakuOutputFormat.Xml}}" />
+                <RadioButton
+                    Margin="20,0,0,0"
+                    Command="{Binding OutputFormatCommand}"
+                    CommandParameter="{x:Static settings:DanmakuOutputFormat.AssAndXml}"
+                    Content="{DynamicResource DanmakuOutputAssAndXml}"
+                    GroupName="danmaku-output-format"
+                    IsChecked="{Binding OutputFormat,Converter={x:Static ObjectConverters.Equal},ConverterParameter={x:Static settings:DanmakuOutputFormat.AssAndXml}}" />
             </StackPanel>
 
             <HeaderedContentControl

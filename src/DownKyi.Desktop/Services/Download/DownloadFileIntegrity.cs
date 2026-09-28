@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 using System.Text;
+using System.Xml;
+using System.Xml.Linq;
 
 namespace DownKyi.Services.Download;
 
@@ -48,6 +50,42 @@ internal static class DownloadFileIntegrity
         long totalBytesToReceive = 0)
     {
         return Check(file, expectedBytes, receivedBytes, totalBytesToReceive).IsUsable;
+    }
+
+    public static DownloadFileIntegrityResult CheckXml(string? file, XName expectedRoot)
+    {
+        ArgumentNullException.ThrowIfNull(expectedRoot);
+        var basicIntegrity = Check(file);
+        if (!basicIntegrity.IsUsable)
+        {
+            return basicIntegrity;
+        }
+
+        try
+        {
+            using var stream = File.OpenRead(file!);
+            using var reader = XmlReader.Create(stream, new XmlReaderSettings
+            {
+                DtdProcessing = DtdProcessing.Prohibit,
+                XmlResolver = null
+            });
+            var document = XDocument.Load(reader, LoadOptions.None);
+            return document.Root?.Name == expectedRoot
+                ? DownloadFileIntegrityResult.Valid()
+                : DownloadFileIntegrityResult.Invalid("XML file has an unexpected root element.");
+        }
+        catch (XmlException)
+        {
+            return DownloadFileIntegrityResult.Invalid("XML file is malformed.");
+        }
+        catch (IOException)
+        {
+            return DownloadFileIntegrityResult.Invalid("XML file could not be read.");
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return DownloadFileIntegrityResult.Invalid("XML file could not be read.");
+        }
     }
 
     private static bool LooksLikeErrorPayload(string file)

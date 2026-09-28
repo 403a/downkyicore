@@ -2,6 +2,7 @@ using System.Collections.Frozen;
 using DownKyi.Application.Bilibili;
 using DownKyi.Core.BiliApi.BiliUtils;
 using DownKyi.Core.BiliApi.DanmakuApi;
+using DownKyi.Core.BiliApi.DanmakuApi.Models;
 
 namespace DownKyi.Core.Danmaku2Ass;
 
@@ -110,12 +111,84 @@ public sealed class BilibiliDanmakuConverter
         string assFile,
         CancellationToken cancellationToken = default)
     {
-        // 弹幕转换
+        await CreateAsync(
+            client,
+            avid,
+            cid,
+            subtitleConfig,
+            assFile,
+            xmlFile: null,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task CreateAsync(
+        IBilibiliApiClient client,
+        long avid,
+        long cid,
+        Config subtitleConfig,
+        string? assFile,
+        string? xmlFile,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+        ArgumentNullException.ThrowIfNull(subtitleConfig);
+        if (string.IsNullOrWhiteSpace(assFile) && string.IsNullOrWhiteSpace(xmlFile))
+        {
+            throw new ArgumentException("At least one danmaku output file is required.");
+        }
+
         var biliDanmakus = (await client.GetAllDanmakuProtoAsync(
                 avid,
                 cid,
                 cancellationToken).ConfigureAwait(false))
-            .OrderBy(danmaku => danmaku.Progress);
+            .OrderBy(danmaku => danmaku.Progress)
+            .ToArray();
+        var survivingDanmakus = CreateSurvivingSnapshot(biliDanmakus, cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(assFile))
+        {
+            CreateAss(subtitleConfig, assFile, survivingDanmakus, cancellationToken);
+        }
+
+        if (!string.IsNullOrWhiteSpace(xmlFile))
+        {
+            await BilibiliDanmakuXmlWriter.WriteAsync(
+                survivingDanmakus,
+                xmlFile,
+                cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private List<BiliDanmaku> CreateSurvivingSnapshot(
+        BiliDanmaku[] biliDanmakus,
+        CancellationToken cancellationToken)
+    {
+        var survivingDanmakus = new List<BiliDanmaku>(biliDanmakus.Length);
+        foreach (var biliDanmaku in biliDanmakus)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (IsExplicitlyFiltered(biliDanmaku.Mode)
+                || _customFilter?.IsExplicitlyExcluded(
+                    biliDanmaku.Content,
+                    biliDanmaku.MidHash,
+                    cancellationToken) == true)
+            {
+                continue;
+            }
+
+            survivingDanmakus.Add(biliDanmaku);
+        }
+
+        return survivingDanmakus;
+    }
+
+    private void CreateAss(
+        Config subtitleConfig,
+        string assFile,
+        IReadOnlyList<BiliDanmaku> biliDanmakus,
+        CancellationToken cancellationToken)
+    {
+        // 弹幕转换
 
         var danmakus = new List<Danmaku>();
         foreach (var biliDanmaku in biliDanmakus)
@@ -144,6 +217,13 @@ public sealed class BilibiliDanmakuConverter
         var studio = new Studio(subtitleConfig, keepedDanmakus);
         studio.StartHandle();
         studio.CreateAssFile(assFile);
+    }
+
+    private bool IsExplicitlyFiltered(int mode)
+    {
+        return (mode == 5 && _config["top_filter"])
+               || (mode == 4 && _config["bottom_filter"])
+               || (mode is 1 or 2 or 3 or 6 && _config["scroll_filter"]);
     }
 
     public static Dictionary<string, int> GetResolution(int quality)
