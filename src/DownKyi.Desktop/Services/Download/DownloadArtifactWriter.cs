@@ -158,7 +158,11 @@ internal sealed partial class DownloadArtifactWriter
         var converter = new BilibiliDanmakuConverter()
             .SetTopFilter(settings.TopFilter == AllowStatus.Yes)
             .SetBottomFilter(settings.BottomFilter == AllowStatus.Yes)
-            .SetScrollFilter(settings.ScrollFilter == AllowStatus.Yes);
+            .SetScrollFilter(settings.ScrollFilter == AllowStatus.Yes)
+            .SetCustomFilter(
+                settings.RemoveEmojiAndSpecialCharacters == AllowStatus.Yes,
+                settings.BlockedKeywords,
+                settings.BlockedSenderUids);
         try
         {
             await _stateWriter.ClaimTransferFilesAsync(

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Globalization;
 using System.Linq;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.Input;
@@ -49,6 +51,30 @@ internal class ViewDanmakuViewModel : ViewModelBase
     {
         get => _scrollFilter;
         set => SetProperty(ref _scrollFilter, value);
+    }
+
+    private bool _removeEmojiAndSpecialCharacters;
+
+    public bool RemoveEmojiAndSpecialCharacters
+    {
+        get => _removeEmojiAndSpecialCharacters;
+        set => SetProperty(ref _removeEmojiAndSpecialCharacters, value);
+    }
+
+    private string _blockedKeywordsText = string.Empty;
+
+    public string BlockedKeywordsText
+    {
+        get => _blockedKeywordsText;
+        set => SetProperty(ref _blockedKeywordsText, value);
+    }
+
+    private string _blockedSenderUidsText = string.Empty;
+
+    public string BlockedSenderUidsText
+    {
+        get => _blockedSenderUidsText;
+        set => SetProperty(ref _blockedSenderUidsText, value);
     }
 
     private int _screenWidth;
@@ -155,6 +181,10 @@ internal class ViewDanmakuViewModel : ViewModelBase
         var danmakuScrollFilter = danmaku.ScrollFilter;
         ScrollFilter = danmakuScrollFilter == AllowStatus.Yes;
 
+        RemoveEmojiAndSpecialCharacters = danmaku.RemoveEmojiAndSpecialCharacters == AllowStatus.Yes;
+        BlockedKeywordsText = string.Join(Environment.NewLine, danmaku.BlockedKeywords);
+        BlockedSenderUidsText = string.Join(Environment.NewLine, danmaku.BlockedSenderUids);
+
         // 分辨率-宽
         ScreenWidth = danmaku.ScreenWidth;
 
@@ -250,6 +280,40 @@ internal class ViewDanmakuViewModel : ViewModelBase
 
         var isSucceed = UpdateDanmaku(settings => settings with { ScrollFilter = isScrollFilter }).ScrollFilter == isScrollFilter;
         PublishTip(isSucceed);
+    }
+
+    private RelayCommand? _removeEmojiAndSpecialCharactersCommand;
+
+    public RelayCommand RemoveEmojiAndSpecialCharactersCommand =>
+        _removeEmojiAndSpecialCharactersCommand ??= new RelayCommand(ExecuteRemoveEmojiAndSpecialCharactersCommand);
+
+    private void ExecuteRemoveEmojiAndSpecialCharactersCommand()
+    {
+        var value = RemoveEmojiAndSpecialCharacters ? AllowStatus.Yes : AllowStatus.No;
+        var isSucceed = UpdateDanmaku(settings => settings with
+        {
+            RemoveEmojiAndSpecialCharacters = value
+        }).RemoveEmojiAndSpecialCharacters == value;
+        PublishTip(isSucceed);
+    }
+
+    private RelayCommand? _saveCustomFilterListsCommand;
+
+    public RelayCommand SaveCustomFilterListsCommand =>
+        _saveCustomFilterListsCommand ??= new RelayCommand(ExecuteSaveCustomFilterListsCommand);
+
+    private void ExecuteSaveCustomFilterListsCommand()
+    {
+        var keywords = ParseKeywords(BlockedKeywordsText);
+        var senderUids = ParseSenderUids(BlockedSenderUidsText);
+        var updated = UpdateDanmaku(settings => settings with
+        {
+            BlockedKeywords = keywords,
+            BlockedSenderUids = senderUids
+        });
+        BlockedKeywordsText = string.Join(Environment.NewLine, updated.BlockedKeywords);
+        BlockedSenderUidsText = string.Join(Environment.NewLine, updated.BlockedSenderUids);
+        PublishTip(true);
     }
 
     // 设置分辨率-宽事件
@@ -378,6 +442,36 @@ internal class ViewDanmakuViewModel : ViewModelBase
         {
             Danmaku = update(settings.Danmaku)
         }).Danmaku;
+    }
+
+    private static ImmutableArray<string> ParseKeywords(string text)
+    {
+        return SplitLines(text)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToImmutableArray();
+    }
+
+    private static ImmutableArray<long> ParseSenderUids(string text)
+    {
+        return SplitLines(text)
+            .Select(value => value.Trim())
+            .Select(value => long.TryParse(
+                value,
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var userId)
+                ? userId
+                : 0)
+            .Where(userId => userId > 0)
+            .Distinct()
+            .ToImmutableArray();
+    }
+
+    private static string[] SplitLines(string text)
+    {
+        return text.Split(["\r\n", "\n", "\r"], StringSplitOptions.None);
     }
 
     /// <summary>

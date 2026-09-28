@@ -9,6 +9,9 @@ public class DanmakuSettings
     public AllowStatus DanmakuTopFilter { get; set; } = AllowStatus.None;
     public AllowStatus DanmakuBottomFilter { get; set; } = AllowStatus.None;
     public AllowStatus DanmakuScrollFilter { get; set; } = AllowStatus.None;
+    public AllowStatus DanmakuRemoveEmojiAndSpecialCharacters { get; set; } = AllowStatus.None;
+    public IReadOnlyList<string>? DanmakuBlockedKeywords { get; set; }
+    public IReadOnlyList<long>? DanmakuBlockedSenderUids { get; set; }
     public AllowStatus IsCustomDanmakuResolution { get; set; } = AllowStatus.None;
     public int DanmakuScreenWidth { get; set; } = -1;
     public int DanmakuScreenHeight { get; set; } = -1;

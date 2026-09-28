@@ -296,6 +296,11 @@ public sealed class SettingsRoundtripCompletenessTests
             return ImmutableArray.Create("C:/DownKyi/Previous", "D:/DownKyi/Previous");
         }
 
+        if (valueType == typeof(ImmutableArray<long>))
+        {
+            return ImmutableArray.Create(123L, 456L);
+        }
+
         if (valueType == typeof(ImmutableArray<FileNamePart>))
         {
             return ImmutableArray.Create(FileNamePart.MainTitle, FileNamePart.Hyphen, FileNamePart.Bvid);
@@ -348,6 +353,7 @@ public sealed class SettingsRoundtripCompletenessTests
         }
 
         return type == typeof(ImmutableArray<string>)
+               || type == typeof(ImmutableArray<long>)
                || type == typeof(ImmutableArray<FileNamePart>);
     }
 

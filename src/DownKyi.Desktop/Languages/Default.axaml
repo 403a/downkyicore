@@ -283,6 +283,10 @@
     <system:String x:Key="TopFilter">顶部</system:String>
     <system:String x:Key="BottomFilter">底部</system:String>
     <system:String x:Key="ScrollFilter">滚动</system:String>
+    <system:String x:Key="RemoveEmojiAndSpecialCharacters">清理 Emoji / 特殊字符</system:String>
+    <system:String x:Key="BlockedDanmakuKeywords">关键词黑名单（每行一个）</system:String>
+    <system:String x:Key="BlockedDanmakuSenderUids">发送者 UID 黑名单（每行一个）</system:String>
+    <system:String x:Key="SaveDanmakuBlacklists">保存黑名单</system:String>
     <system:String x:Key="Resolution">分辨率：</system:String>
     <system:String x:Key="FontName">字体名称：</system:String>
     <system:String x:Key="FontSize">字体大小：</system:String>

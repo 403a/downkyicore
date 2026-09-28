@@ -31,6 +31,9 @@ public partial class SettingsManager
     // 是否屏蔽滚动弹幕
     private const AllowStatus DanmakuScrollFilter = AllowStatus.No;
 
+    // 是否清理 Emoji 与特殊字符
+    private const AllowStatus DanmakuRemoveEmojiAndSpecialCharacters = AllowStatus.No;
+
     // 是否自定义分辨率
     private const AllowStatus IsCustomDanmakuResolution = AllowStatus.No;
 
@@ -138,6 +141,53 @@ public partial class SettingsManager
             _appSettings.Danmaku.DanmakuScrollFilter,
             danmakuFilter,
             v => _appSettings.Danmaku.DanmakuScrollFilter = v);
+    }
+
+    public AllowStatus GetDanmakuRemoveEmojiAndSpecialCharacters()
+    {
+        if (_appSettings.Danmaku.DanmakuRemoveEmojiAndSpecialCharacters == AllowStatus.None)
+        {
+            SetDanmakuRemoveEmojiAndSpecialCharacters(DanmakuRemoveEmojiAndSpecialCharacters);
+            return DanmakuRemoveEmojiAndSpecialCharacters;
+        }
+
+        return _appSettings.Danmaku.DanmakuRemoveEmojiAndSpecialCharacters;
+    }
+
+    public bool SetDanmakuRemoveEmojiAndSpecialCharacters(AllowStatus value)
+    {
+        return SetProperty(
+            _appSettings.Danmaku.DanmakuRemoveEmojiAndSpecialCharacters,
+            value,
+            current => _appSettings.Danmaku.DanmakuRemoveEmojiAndSpecialCharacters = current);
+    }
+
+    private IReadOnlyList<string> GetDanmakuBlockedKeywords()
+    {
+        return _appSettings.Danmaku.DanmakuBlockedKeywords ?? [];
+    }
+
+    private bool SetDanmakuBlockedKeywords(IEnumerable<string> values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        return SetProperty(
+            _appSettings.Danmaku.DanmakuBlockedKeywords,
+            values.ToList(),
+            current => _appSettings.Danmaku.DanmakuBlockedKeywords = current);
+    }
+
+    private IReadOnlyList<long> GetDanmakuBlockedSenderUids()
+    {
+        return _appSettings.Danmaku.DanmakuBlockedSenderUids ?? [];
+    }
+
+    private bool SetDanmakuBlockedSenderUids(IEnumerable<long> values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        return SetProperty(
+            _appSettings.Danmaku.DanmakuBlockedSenderUids,
+            values.ToList(),
+            current => _appSettings.Danmaku.DanmakuBlockedSenderUids = current);
     }
 
     /// <summary>

@@ -1,5 +1,6 @@
 using System.Collections.Frozen;
 using DownKyi.Application.Bilibili;
+using DownKyi.Core.BiliApi.BiliUtils;
 using DownKyi.Core.BiliApi.DanmakuApi;
 using DownKyi.Core.BiliApi.DanmakuApi.Models;
 
@@ -47,6 +48,7 @@ public sealed class BilibiliDanmakuConverter
         { "bottom_filter", false },
         { "scroll_filter", false }
     };
+    private CustomDanmakuFilter? _customFilter;
 
     /// <summary>
     /// 是否屏蔽顶部弹幕
@@ -78,6 +80,26 @@ public sealed class BilibiliDanmakuConverter
     public BilibiliDanmakuConverter SetScrollFilter(bool isFilter)
     {
         _config["scroll_filter"] = isFilter;
+        return this;
+    }
+
+    public BilibiliDanmakuConverter SetCustomFilter(
+        bool removeEmojiAndSpecialCharacters,
+        IEnumerable<string> blockedKeywords,
+        IEnumerable<long> blockedSenderUids)
+    {
+        ArgumentNullException.ThrowIfNull(blockedKeywords);
+        ArgumentNullException.ThrowIfNull(blockedSenderUids);
+
+        var blockedCommenters = blockedSenderUids
+            .Where(userId => userId > 0)
+            .Distinct()
+            .Select(DanmakuSender.GetMidHash);
+        var customFilter = new CustomDanmakuFilter(
+            removeEmojiAndSpecialCharacters,
+            blockedKeywords,
+            blockedCommenters);
+        _customFilter = customFilter.IsEnabled ? customFilter : null;
         return this;
     }
 
@@ -166,7 +188,7 @@ public sealed class BilibiliDanmakuConverter
         }
 
         // 弹幕预处理
-        var producer = new Producer(_config, danmakus);
+        var producer = new Producer(_config, danmakus, _customFilter, cancellationToken);
         producer.StartHandle();
 
         // 字幕生成

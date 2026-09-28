@@ -46,6 +46,16 @@ public static class DanmakuSender
         return crcstart;
     }
 
+    /// <summary>
+    /// 将 Bilibili 用户 UID 转换为弹幕中的 midHash。
+    /// </summary>
+    public static string GetMidHash(long userId)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(userId);
+        var crc = Crc32(userId.ToString(CultureInfo.InvariantCulture)) ^ uint.MaxValue;
+        return crc.ToString("x", CultureInfo.InvariantCulture);
+    }
+
     private static uint Crc32LastIndex(string userId)
     {
         uint index = 0;

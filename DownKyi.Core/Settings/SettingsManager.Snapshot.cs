@@ -105,6 +105,9 @@ public partial class SettingsManager
                 GetDanmakuTopFilter(),
                 GetDanmakuBottomFilter(),
                 GetDanmakuScrollFilter(),
+                GetDanmakuRemoveEmojiAndSpecialCharacters(),
+                GetDanmakuBlockedKeywords().ToImmutableArray(),
+                GetDanmakuBlockedSenderUids().ToImmutableArray(),
                 GetIsCustomDanmakuResolution(),
                 GetDanmakuScreenWidth(),
                 GetDanmakuScreenHeight(),
@@ -203,6 +206,9 @@ public partial class SettingsManager
                 SetDanmakuTopFilter(validated.Danmaku.TopFilter);
                 SetDanmakuBottomFilter(validated.Danmaku.BottomFilter);
                 SetDanmakuScrollFilter(validated.Danmaku.ScrollFilter);
+                SetDanmakuRemoveEmojiAndSpecialCharacters(validated.Danmaku.RemoveEmojiAndSpecialCharacters);
+                SetDanmakuBlockedKeywords(validated.Danmaku.BlockedKeywords);
+                SetDanmakuBlockedSenderUids(validated.Danmaku.BlockedSenderUids);
                 SetIsCustomDanmakuResolution(validated.Danmaku.IsCustomResolution);
                 SetDanmakuScreenWidth(validated.Danmaku.ScreenWidth);
                 SetDanmakuScreenHeight(validated.Danmaku.ScreenHeight);

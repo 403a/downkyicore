@@ -105,6 +105,9 @@ public sealed record DanmakuApplicationSettings(
     AllowStatus TopFilter,
     AllowStatus BottomFilter,
     AllowStatus ScrollFilter,
+    AllowStatus RemoveEmojiAndSpecialCharacters,
+    ImmutableArray<string> BlockedKeywords,
+    ImmutableArray<long> BlockedSenderUids,
     AllowStatus IsCustomResolution,
     int ScreenWidth,
     int ScreenHeight,
@@ -257,6 +260,19 @@ internal static class ApplicationSettingsValidator
             TopFilter = AllowValue(settings.Danmaku.TopFilter, AllowStatus.No, "Danmaku.TopFilter", corrections),
             BottomFilter = AllowValue(settings.Danmaku.BottomFilter, AllowStatus.No, "Danmaku.BottomFilter", corrections),
             ScrollFilter = AllowValue(settings.Danmaku.ScrollFilter, AllowStatus.No, "Danmaku.ScrollFilter", corrections),
+            RemoveEmojiAndSpecialCharacters = AllowValue(
+                settings.Danmaku.RemoveEmojiAndSpecialCharacters,
+                AllowStatus.No,
+                "Danmaku.RemoveEmojiAndSpecialCharacters",
+                corrections),
+            BlockedKeywords = NormalizeTextList(
+                settings.Danmaku.BlockedKeywords,
+                "Danmaku.BlockedKeywords",
+                corrections),
+            BlockedSenderUids = NormalizePositiveIds(
+                settings.Danmaku.BlockedSenderUids,
+                "Danmaku.BlockedSenderUids",
+                corrections),
             IsCustomResolution = AllowValue(settings.Danmaku.IsCustomResolution, AllowStatus.No, "Danmaku.IsCustomResolution", corrections),
             ScreenWidth = Range(settings.Danmaku.ScreenWidth, 1, 16384, 1920, "Danmaku.ScreenWidth", corrections),
             ScreenHeight = Range(settings.Danmaku.ScreenHeight, 1, 16384, 1080, "Danmaku.ScreenHeight", corrections),
@@ -378,6 +394,34 @@ internal static class ApplicationSettingsValidator
         ImmutableArray<string>.Builder corrections)
     {
         return string.IsNullOrWhiteSpace(value) ? Corrected(field, fallback, corrections) : value;
+    }
+
+    private static ImmutableArray<string> NormalizeTextList(
+        ImmutableArray<string> values,
+        string field,
+        ImmutableArray<string>.Builder corrections)
+    {
+        var source = values.IsDefault ? ImmutableArray<string>.Empty : values;
+        var normalized = source
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToImmutableArray();
+        return source.SequenceEqual(normalized, StringComparer.Ordinal)
+            ? source
+            : Corrected(field, normalized, corrections);
+    }
+
+    private static ImmutableArray<long> NormalizePositiveIds(
+        ImmutableArray<long> values,
+        string field,
+        ImmutableArray<string>.Builder corrections)
+    {
+        var source = values.IsDefault ? ImmutableArray<long>.Empty : values;
+        var normalized = source.Where(value => value > 0).Distinct().ToImmutableArray();
+        return source.SequenceEqual(normalized)
+            ? source
+            : Corrected(field, normalized, corrections);
     }
 
     private static bool IsHttpUri(string? value)
