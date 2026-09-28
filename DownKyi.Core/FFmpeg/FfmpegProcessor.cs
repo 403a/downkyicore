@@ -4,6 +4,13 @@ using Microsoft.Extensions.Logging;
 
 namespace DownKyi.Core.FFmpeg;
 
+public enum FfmpegEmbeddedAudioMode
+{
+    Optional,
+    Required,
+    Excluded
+}
+
 public interface IFfmpegMediaMuxer
 {
     Task<FfmpegOperationResult> ConcatDurlVideosAsync(
@@ -12,6 +19,7 @@ public interface IFfmpegMediaMuxer
         string outputVideo,
         bool overwriteDestination,
         Action<string>? action = null,
+        FfmpegEmbeddedAudioMode embeddedAudioMode = FfmpegEmbeddedAudioMode.Optional,
         CancellationToken cancellationToken = default);
 
     Task<FfmpegOperationResult> MergeMediaAsync(
@@ -20,6 +28,7 @@ public interface IFfmpegMediaMuxer
         string? video,
         string destination,
         bool overwriteDestination,
+        FfmpegEmbeddedAudioMode embeddedAudioMode = FfmpegEmbeddedAudioMode.Optional,
         CancellationToken cancellationToken = default);
 }
 
@@ -65,6 +74,7 @@ public sealed class FfmpegProcessor : IFfmpegMediaMuxer
         string outputVideo,
         bool overwriteDestination,
         Action<string>? action = null,
+        FfmpegEmbeddedAudioMode embeddedAudioMode = FfmpegEmbeddedAudioMode.Optional,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(videoSettings);
@@ -79,6 +89,7 @@ public sealed class FfmpegProcessor : IFfmpegMediaMuxer
                 allowStreamCopy: false,
                 overwriteDestination,
                 action,
+                embeddedAudioMode,
                 cancellationToken)
             .ConfigureAwait(false);
     }
@@ -97,6 +108,7 @@ public sealed class FfmpegProcessor : IFfmpegMediaMuxer
             video,
             destination,
             overwriteDestination,
+            embeddedAudioMode: FfmpegEmbeddedAudioMode.Optional,
             cancellationToken).ConfigureAwait(false);
         return result.Succeeded;
     }
@@ -107,6 +119,7 @@ public sealed class FfmpegProcessor : IFfmpegMediaMuxer
         string? video,
         string destination,
         bool overwriteDestination,
+        FfmpegEmbeddedAudioMode embeddedAudioMode = FfmpegEmbeddedAudioMode.Optional,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(videoSettings);
@@ -141,7 +154,8 @@ public sealed class FfmpegProcessor : IFfmpegMediaMuxer
                 audioPath,
                 videoPath,
                 temporaryOutput,
-                videoSettings.IsTranscodingAacToMp3 == AllowStatus.Yes),
+                videoSettings.IsTranscodingAacToMp3 == AllowStatus.Yes,
+                embeddedAudioMode),
             destination,
             overwriteDestination,
             action: null,

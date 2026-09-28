@@ -40,7 +40,10 @@ public sealed class DownloadExecutionContextFactoryTests : IDisposable
                 FontName = "original-font"
             }
         });
-        var originalContent = new DownloadContentSelection(true, false, true, false, true);
+        var originalContent = new DownloadContentSelection(true, false, true, false, true)
+        {
+            MediaKind = DownloadMediaKind.Dash
+        };
         var originalPlayUrl = new PlayUrl();
         var downloadBase = new DownloadBase
         {

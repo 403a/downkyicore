@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DownKyi.Core.FFmpeg;
 using DownKyi.Core.Settings;
+using DownKyi.Domain.Downloads;
 using DownKyi.Domain.Results;
 using Microsoft.Extensions.Logging;
 
@@ -74,6 +75,7 @@ internal sealed class MuxStage : IDownloadPipelineStage
             context.VideoFile,
             finalFile,
             overwriteDestination: false,
+            embeddedAudioMode: FfmpegEmbeddedAudioMode.Excluded,
             cancellationToken).ConfigureAwait(true);
         var invalidation = result.Succeeded
             ? SourceInvalidationOutcome.None
@@ -116,6 +118,7 @@ internal sealed class MuxStage : IDownloadPipelineStage
                 video: context.DurlDownloads[0].FilePath,
                 destination: finalFile,
                 overwriteDestination: false,
+                embeddedAudioMode: GetEmbeddedAudioMode(context),
                 cancellationToken).ConfigureAwait(true);
             var singleInvalidation = mergeResult.Succeeded
                 ? SourceInvalidationOutcome.None
@@ -151,6 +154,7 @@ internal sealed class MuxStage : IDownloadPipelineStage
             segments,
             outputPath,
             overwriteDestination: false,
+            embeddedAudioMode: GetEmbeddedAudioMode(context),
             cancellationToken: cancellationToken).ConfigureAwait(true);
         var invalidation = result.Succeeded
             ? SourceInvalidationOutcome.None
@@ -171,6 +175,12 @@ internal sealed class MuxStage : IDownloadPipelineStage
                 GetFailureCode("download.mux.concat", invalidation),
                 "Segmented media could not be concatenated.");
     }
+
+    private static FfmpegEmbeddedAudioMode GetEmbeddedAudioMode(
+        DownloadExecutionContext context) =>
+        context.NeedsAudio
+            ? FfmpegEmbeddedAudioMode.Required
+            : FfmpegEmbeddedAudioMode.Excluded;
 
     private async Task<SourceInvalidationOutcome> InvalidateSourcesAsync(
         DownloadExecutionContext context,

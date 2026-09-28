@@ -8,7 +8,8 @@ internal static class FfmpegCommandFactory
         string? audioFile,
         string? videoFile,
         string outputFile,
-        bool transcodeAudioToMp3)
+        bool transcodeAudioToMp3,
+        FfmpegEmbeddedAudioMode embeddedAudioMode)
     {
         var arguments = CreateBaseArguments();
         if (audioFile != null)
@@ -27,7 +28,19 @@ internal static class FfmpegCommandFactory
         }
         else if (videoFile != null)
         {
-            arguments.AddRange(["-map", "0:v:0", "-map", "0:a?", "-c", "copy"]);
+            arguments.AddRange(["-map", "0:v:0"]);
+            if (embeddedAudioMode == FfmpegEmbeddedAudioMode.Required)
+            {
+                arguments.AddRange(["-map", "0:a:0", "-c:v", "copy", "-c:a", "copy"]);
+            }
+            else if (embeddedAudioMode == FfmpegEmbeddedAudioMode.Excluded)
+            {
+                arguments.AddRange(["-an", "-c:v", "copy"]);
+            }
+            else
+            {
+                arguments.AddRange(["-map", "0:a?", "-c", "copy"]);
+            }
         }
         else if (transcodeAudioToMp3)
         {
@@ -98,7 +111,8 @@ internal static class FfmpegCommandFactory
         string listFile,
         string outputFile,
         FfmpegConcatStrategy strategy,
-        FfmpegHardwareEncoderProfile? hardwareEncoder)
+        FfmpegHardwareEncoderProfile? hardwareEncoder,
+        FfmpegEmbeddedAudioMode embeddedAudioMode)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(listFile);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputFile);
@@ -117,10 +131,20 @@ internal static class FfmpegCommandFactory
             "-i",
             listFile,
             "-map",
-            "0:v:0",
-            "-map",
-            "0:a?"
+            "0:v:0"
         };
+        if (embeddedAudioMode == FfmpegEmbeddedAudioMode.Required)
+        {
+            arguments.AddRange(["-map", "0:a:0"]);
+        }
+        else if (embeddedAudioMode == FfmpegEmbeddedAudioMode.Excluded)
+        {
+            arguments.Add("-an");
+        }
+        else
+        {
+            arguments.AddRange(["-map", "0:a?"]);
+        }
 
         switch (strategy)
         {

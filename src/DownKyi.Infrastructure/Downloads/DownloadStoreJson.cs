@@ -9,6 +9,7 @@ internal static class DownloadStoreJson
 {
     private const string SelectedSubtitleTrackIds = "selectedSubtitleTrackIds";
     private const string DefaultSubtitleTrackId = "defaultSubtitleTrackId";
+    private const string MediaKind = "mediaKind";
 
     public static string WriteContentSelection(DownloadContentSelection value)
     {
@@ -23,6 +24,11 @@ internal static class DownloadStoreJson
         if (value.DefaultSubtitleTrackId is { } defaultId)
         {
             payload[DefaultSubtitleTrackId] = defaultId;
+        }
+
+        if (value.MediaKind is { } mediaKind)
+        {
+            payload[MediaKind] = WriteMediaKind(mediaKind);
         }
 
         return JsonSerializer.Serialize(payload);
@@ -127,7 +133,9 @@ internal static class DownloadStoreJson
             var builder = ImmutableDictionary.CreateBuilder<string, bool>(StringComparer.Ordinal);
             foreach (var property in root.EnumerateObject())
             {
-                if (property.NameEquals(SelectedSubtitleTrackIds) || property.NameEquals(DefaultSubtitleTrackId))
+                if (property.NameEquals(SelectedSubtitleTrackIds) ||
+                    property.NameEquals(DefaultSubtitleTrackId) ||
+                    property.NameEquals(MediaKind))
                 {
                     continue;
                 }
@@ -156,6 +164,9 @@ internal static class DownloadStoreJson
             var defaultId = root.TryGetProperty(DefaultSubtitleTrackId, out var defaultTrack)
                 ? defaultTrack.Deserialize<long>()
                 : (long?)null;
+            var mediaKind = root.TryGetProperty(MediaKind, out var storedMediaKind)
+                ? ReadMediaKind(storedMediaKind, fieldName)
+                : (DownloadMediaKind?)null;
 
             if (defaultId is { } selectedDefault &&
                 (selectedIds is not { } ids || !ids.Contains(selectedDefault)))
@@ -165,10 +176,40 @@ internal static class DownloadStoreJson
 
             return result with
             {
+                MediaKind = mediaKind,
                 SelectedSubtitleTrackIds = selectedIds,
                 DefaultSubtitleTrackId = defaultId
             };
         });
+    }
+
+    private static string WriteMediaKind(DownloadMediaKind mediaKind)
+    {
+        return mediaKind switch
+        {
+            DownloadMediaKind.None => "none",
+            DownloadMediaKind.Dash => "dash",
+            DownloadMediaKind.Durl => "durl",
+            _ => throw new ArgumentOutOfRangeException(nameof(mediaKind), mediaKind, "Unsupported media kind.")
+        };
+    }
+
+    private static DownloadMediaKind ReadMediaKind(JsonElement value, string fieldName)
+    {
+        if (value.ValueKind != JsonValueKind.String)
+        {
+            throw Corrupt(fieldName, "Media kind is not a string.");
+        }
+
+        return value.GetString() switch
+        {
+            "none" => DownloadMediaKind.None,
+            "dash" => DownloadMediaKind.Dash,
+            "durl" => DownloadMediaKind.Durl,
+            var unsupported => throw Corrupt(
+                fieldName,
+                $"Unsupported media kind '{unsupported ?? "null"}'.")
+        };
     }
 
     public static ImmutableDictionary<string, string> ReadStringMap(string json, string fieldName)

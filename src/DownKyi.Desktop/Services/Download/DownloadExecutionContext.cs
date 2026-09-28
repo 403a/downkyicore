@@ -61,7 +61,12 @@ internal sealed class DownloadExecutionContext
             return false;
         }
 
-        foreach (var extension in new[] { ".mp4", ".mp3", ".aac", ".flac" })
+        var extensions = NeedsVideo
+            ? new[] { ".mp4" }
+            : NeedsAudio
+                ? new[] { ".mp3", ".aac", ".flac" }
+                : [];
+        foreach (var extension in extensions)
         {
             var path = WorkingBasePath + extension;
             if (DownloadFileIntegrity.Check(path).IsUsable)
@@ -137,13 +142,6 @@ internal sealed record DownloadExecutionInput(
     VideoApplicationSettings VideoSettings,
     DanmakuApplicationSettings DanmakuSettings,
     DownloadFinishedSort FinishedSort);
-
-internal enum DownloadMediaKind
-{
-    None,
-    Dash,
-    Durl
-}
 
 internal sealed record DurlDownloadResult(
     PlayUrlDurl Durl,

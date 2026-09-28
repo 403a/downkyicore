@@ -99,7 +99,7 @@ public sealed class FfmpegSeekabilityIntegrationTests : IDisposable
             validVideo,
             Path.Combine(_testDirectory, "invalid-output.mp4"),
             overwriteDestination: false,
-            cancellationToken).ConfigureAwait(true);
+            cancellationToken: cancellationToken).ConfigureAwait(true);
 
         Assert.False(result.Succeeded);
         Assert.Equal(invalidAudio, Assert.Single(result.InvalidInputPaths));
