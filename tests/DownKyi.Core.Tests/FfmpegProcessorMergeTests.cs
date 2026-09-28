@@ -34,7 +34,7 @@ public sealed class FfmpegProcessorMergeTests : IDisposable
             video,
             Path.Combine(_directory, "output.mp4"),
             overwriteDestination: false,
-            TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(result.Succeeded);
         Assert.Equal(FfmpegOperationFailureKind.InvalidInput, result.FailureKind);
@@ -63,7 +63,7 @@ public sealed class FfmpegProcessorMergeTests : IDisposable
             video,
             Path.Combine(_directory, "output.mp4"),
             overwriteDestination: false,
-            TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(result.Succeeded);
         Assert.Equal(FfmpegOperationFailureKind.ProcessUnavailable, result.FailureKind);
@@ -88,7 +88,7 @@ public sealed class FfmpegProcessorMergeTests : IDisposable
             video,
             Path.Combine(_directory, "started-infrastructure-output.mp4"),
             overwriteDestination: false,
-            TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(result.Succeeded);
         Assert.Equal(FfmpegOperationFailureKind.ProcessFailure, result.FailureKind);
@@ -118,7 +118,7 @@ public sealed class FfmpegProcessorMergeTests : IDisposable
             video,
             Path.Combine(_directory, "directory-input-output.mp4"),
             overwriteDestination: false,
-            TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(result.Succeeded);
         Assert.Equal(FfmpegOperationFailureKind.InputAccess, result.FailureKind);
@@ -154,7 +154,7 @@ public sealed class FfmpegProcessorMergeTests : IDisposable
             video,
             destination,
             overwriteDestination: false,
-            TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(result.Succeeded);
         Assert.Equal(FfmpegOperationFailureKind.DestinationConflict, result.FailureKind);
@@ -191,7 +191,7 @@ public sealed class FfmpegProcessorMergeTests : IDisposable
             firstVideo,
             Path.Combine(_directory, "concurrency-first.mp4"),
             overwriteDestination: false,
-            TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken);
         await runner.ValidationStarted.Task.WaitAsync(
             TimeSpan.FromSeconds(5),
             TestContext.Current.CancellationToken);
@@ -201,7 +201,7 @@ public sealed class FfmpegProcessorMergeTests : IDisposable
             secondVideo,
             Path.Combine(_directory, "concurrency-second.mp4"),
             overwriteDestination: false,
-            TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken);
 
         await Task.WhenAny(
             runner.ConcurrentCallObserved.Task,

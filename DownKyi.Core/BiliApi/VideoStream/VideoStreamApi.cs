@@ -85,6 +85,7 @@ public static partial class VideoStreamApi
         string bvid,
         long cid,
         int p,
+        int quality = 125,
         CancellationToken cancellationToken = default)
     {
         var url = BuildVideoPlayPageUrl(avid, bvid, p);
@@ -98,6 +99,7 @@ public static partial class VideoStreamApi
                 avid,
                 bvid,
                 cid,
+                quality,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 

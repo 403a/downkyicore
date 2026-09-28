@@ -5,9 +5,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using DownKyi.Application.Diagnostics;
-using DownKyi.Core.BiliApi.BiliUtils;
 using DownKyi.Core.BiliApi.VideoStream.Models;
-using DownKyi.Core.Settings;
+using DownKyi.Domain.Downloads;
 using DownKyi.Domain.Results;
 using Microsoft.Extensions.Logging;
 
@@ -49,13 +48,25 @@ internal sealed class DownloadMediaStage : IDownloadPipelineStage
     {
         ArgumentNullException.ThrowIfNull(context);
         context.EnsureActive(cancellationToken);
-        if (context.NeedsMedia && context.TryReuseStagedMedia())
+        var playUrl = context.PlayUrl;
+        var contractFailure = DownloadMediaContract.Validate(context, playUrl);
+        if (contractFailure != null)
+        {
+            return OperationResult.Failure<DownloadStageResult>(contractFailure);
+        }
+
+        if (!context.NeedsMedia)
+        {
+            context.MediaKind = DownloadMediaKind.None;
+            return DownloadStageResult.Success(Name);
+        }
+
+        context.MediaKind = context.Input.RequestedContent.MediaKind!.Value;
+        if (context.TryReuseStagedMedia())
         {
             return DownloadStageResult.Success(Name);
         }
 
-        var playUrl = context.PlayUrl;
-        context.MediaKind = DetectMediaKind(playUrl);
         if (context.MediaKind == DownloadMediaKind.Dash)
         {
             return await DownloadDashAsync(context, cancellationToken).ConfigureAwait(true);
@@ -75,17 +86,7 @@ internal sealed class DownloadMediaStage : IDownloadPipelineStage
     }
 
     internal static DownloadMediaKind DetectMediaKind(PlayUrl? playUrl)
-    {
-        if (playUrl?.Dash is { } dash &&
-            (dash.Video.Count > 0 || dash.Audio.Count > 0))
-        {
-            return DownloadMediaKind.Dash;
-        }
-
-        return playUrl?.Durl.Count > 0
-            ? DownloadMediaKind.Durl
-            : DownloadMediaKind.None;
-    }
+        => DownloadMediaContract.Detect(playUrl);
 
     internal static PlayUrlDashVideo? CreateDurlDownloadDescriptor(
         IEnumerable<PlayUrlDurl> durls)
@@ -111,42 +112,21 @@ internal sealed class DownloadMediaStage : IDownloadPipelineStage
         if (context.NeedsAudio)
         {
             var audio = SelectAudio(context);
-            if (audio == null &&
-                !DownloadAudioSelection.HasAnyAudio(context.PlayUrl?.Dash) &&
-                context.NeedsVideo)
+            _presenter.ShowDownloadingAudio(context);
+            var result = await DownloadMediaFileAsync(
+                context,
+                audio,
+                playUrl => SelectAudio(context, playUrl),
+                cancellationToken).ConfigureAwait(true);
+            if (!result.TryGetValue(out var audioTransfer))
             {
-                var completedAudio = TryGetCompletedAudioTransfer(context);
-                if (completedAudio != null)
-                {
-                    context.AudioFile = completedAudio.FilePath;
-                    context.AudioTransferKey = completedAudio.Key;
-                    _logger.LogInformationMessage(
-                        "Playback does not provide an audio stream; reusing the completed audio transfer.");
-                }
-                else
-                {
-                    _logger.LogWarningMessage(
-                        "Playback does not provide an audio stream; continuing with the requested video.");
-                }
+                return DownloadStageResult.Failure(
+                    result.Error?.Code ?? "download.media.audio",
+                    result.Error?.Message ?? "Audio transfer failed.");
             }
-            else
-            {
-                _presenter.ShowDownloadingAudio(context);
-                var result = await DownloadMediaFileAsync(
-                    context,
-                    audio,
-                    playUrl => SelectAudio(context, playUrl),
-                    cancellationToken).ConfigureAwait(true);
-                if (!result.TryGetValue(out var audioTransfer))
-                {
-                    return DownloadStageResult.Failure(
-                        result.Error?.Code ?? "download.media.audio",
-                        result.Error?.Message ?? "Audio transfer failed.");
-                }
 
-                context.AudioFile = audioTransfer.FilePath;
-                context.AudioTransferKey = audioTransfer.Key;
-            }
+            context.AudioFile = audioTransfer.FilePath;
+            context.AudioTransferKey = audioTransfer.Key;
         }
 
         context.EnsureActive(cancellationToken);
@@ -315,13 +295,29 @@ internal sealed class DownloadMediaStage : IDownloadPipelineStage
                 _stateWriter,
                 () => context.EnsureActive(cancellationToken),
                 cancellationToken);
+        OperationError? refreshFailure = null;
         var result = await _transferCoordinator.TransferAsync(
             transferRequest,
-            token => RefreshAddressesAsync(
-                context,
-                selectRefreshedMedia,
-                token),
+            async token =>
+            {
+                var refresh = await RefreshAddressesAsync(
+                    context,
+                    selectRefreshedMedia,
+                    token).ConfigureAwait(true);
+                if (refresh.TryGetValue(out var refreshedAddresses))
+                {
+                    return refreshedAddresses;
+                }
+
+                refreshFailure = refresh.Error;
+                return [];
+            },
             cancellationToken).ConfigureAwait(true);
+        if (refreshFailure != null)
+        {
+            return OperationResult.Failure<DownloadedMediaTransfer>(refreshFailure);
+        }
+
         if (result.Outcome == DownloadTransferOutcome.Succeeded)
         {
             if (!IsDownloadedMediaFileUsable(targetFile, media.ExpectedSize))
@@ -366,62 +362,22 @@ internal sealed class DownloadMediaStage : IDownloadPipelineStage
     }
 
     internal static PlayUrlDashVideo? SelectAudio(DownloadExecutionContext context) =>
-        SelectAudio(context, context.PlayUrl);
+        DownloadMediaContract.SelectAudio(context, context.PlayUrl);
 
     private static PlayUrlDashVideo? SelectAudio(
         DownloadExecutionContext context,
         PlayUrl? playUrl) =>
-        DownloadAudioSelection.Select(context.Input.Metadata.AudioCodec.Id, playUrl);
-
-    private DownloadedMediaTransfer? TryGetCompletedAudioTransfer(
-        DownloadExecutionContext context)
-    {
-        var path = context.DownloadDirectory;
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return null;
-        }
-
-        var keyPrefix = DownloadTransferKey.Create(
-            context.Input.Metadata.AudioCodec.Id,
-            string.Empty);
-        var snapshot = _projectionStore.GetRequiredSnapshot(context.TaskId);
-        foreach (var key in snapshot.Transfer.CompletedFileKeys.Where(
-                     key => key.StartsWith(keyPrefix, StringComparison.Ordinal)))
-        {
-            if (!snapshot.Plan.TransferFiles.TryGetValue(key, out var fileName))
-            {
-                continue;
-            }
-
-            var completedFile = Path.Combine(path, fileName);
-            if (IsDownloadedMediaFileUsable(completedFile))
-            {
-                return new DownloadedMediaTransfer(key, completedFile);
-            }
-        }
-
-        return null;
-    }
+        DownloadMediaContract.SelectAudio(context, playUrl);
 
     internal static PlayUrlDashVideo? SelectVideo(DownloadExecutionContext context) =>
-        SelectVideo(context, context.PlayUrl);
+        DownloadMediaContract.SelectVideo(context, context.PlayUrl);
 
     private static PlayUrlDashVideo? SelectVideo(
         DownloadExecutionContext context,
         PlayUrl? playUrl)
-    {
-        var metadata = context.Input.Metadata;
-        return playUrl?.Dash?.Video?.FirstOrDefault(item =>
-        {
-            var codec = PlaybackQualityCatalog.GetCodecIds().FirstOrDefault(candidate =>
-                candidate.Id == item.CodecId);
-            return item.Id == metadata.Resolution.Id &&
-                   codec?.Name == metadata.VideoCodecName;
-        });
-    }
+        => DownloadMediaContract.SelectVideo(context, playUrl);
 
-    private async Task<IReadOnlyList<string>> RefreshAddressesAsync(
+    private async Task<OperationResult<IReadOnlyList<string>>> RefreshAddressesAsync(
         DownloadExecutionContext context,
         Func<PlayUrl, PlayUrlDashVideo?> selectRefreshedMedia,
         CancellationToken cancellationToken)
@@ -431,19 +387,29 @@ internal sealed class DownloadMediaStage : IDownloadPipelineStage
             cancellationToken).ConfigureAwait(true);
         if (playUrl == null)
         {
-            return [];
+            return OperationResult.Failure<IReadOnlyList<string>>(OperationError.Unexpected(
+                "download.resolve.playback",
+                "Playback data could not be refreshed."));
+        }
+
+        var contractFailure = DownloadMediaContract.Validate(context, playUrl);
+        if (contractFailure != null)
+        {
+            return OperationResult.Failure<IReadOnlyList<string>>(contractFailure);
         }
 
         context.PlayUrl = playUrl;
         var media = selectRefreshedMedia(playUrl);
         if (media == null)
         {
-            return [];
+            return OperationResult.Failure<IReadOnlyList<string>>(OperationError.Unexpected(
+                "download.media.contract",
+                "The refreshed media stream does not match the finalized selection."));
         }
 
         var addresses = CreateAddresses(media);
         RequireSecureTransferSchemes(addresses);
-        return addresses;
+        return OperationResult.Success<IReadOnlyList<string>>(addresses);
     }
 
     private static PlayUrlDashVideo? SelectDurl(PlayUrl playUrl, int order)

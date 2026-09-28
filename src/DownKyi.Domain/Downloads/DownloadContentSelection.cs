@@ -2,6 +2,13 @@ using System.Collections.Immutable;
 
 namespace DownKyi.Domain.Downloads;
 
+public enum DownloadMediaKind
+{
+    None,
+    Dash,
+    Durl
+}
+
 public sealed record DownloadContentSelection(
     bool Audio,
     bool Video,
@@ -9,6 +16,8 @@ public sealed record DownloadContentSelection(
     bool Subtitle,
     bool Cover)
 {
+    public DownloadMediaKind? MediaKind { get; init; }
+
     public ImmutableArray<long>? SelectedSubtitleTrackIds { get; init; }
 
     public long? DefaultSubtitleTrackId { get; init; }

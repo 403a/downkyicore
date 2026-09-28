@@ -88,7 +88,11 @@ public sealed class DurlDownloadIdentityTests
             var downloadBase = new DownloadBase
             {
                 Id = "frozen-playback-path",
-                FilePath = frozenBasePath
+                FilePath = frozenBasePath,
+                NeedDownloadContent = DownloadContentSelection.All with
+                {
+                    MediaKind = DownloadMediaKind.Dash
+                }
             };
             var downloading = new DownloadingItem
             {
@@ -138,6 +142,84 @@ public sealed class DurlDownloadIdentityTests
             Assert.True(result.IsSuccess);
             Assert.Equal(expectedDirectory, context.DownloadDirectory);
             Assert.Equal(frozenBasePath, downloading.DownloadBase.FilePath, ignoreCase: false);
+        }
+        finally
+        {
+            using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+            {
+                DataSource = databasePath,
+                Mode = SqliteOpenMode.ReadWriteCreate,
+                Pooling = true,
+                DefaultTimeout = 5
+            }.ToString());
+            SqliteConnection.ClearPool(connection);
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task PlaybackStageRequiresLegacyUnfinishedTaskToBeRecreated()
+    {
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            "downkyi-legacy-contract-tests",
+            Guid.NewGuid().ToString("N"));
+        var databasePath = Path.Combine(directory, "download.db");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var downloadBase = new DownloadBase
+            {
+                Id = "legacy-without-media-kind",
+                FilePath = Path.Combine(directory, "video")
+            };
+            var downloading = new DownloadingItem
+            {
+                DownloadBase = downloadBase,
+                Downloading = new Downloading
+                {
+                    Id = downloadBase.Id,
+                    DownloadBase = downloadBase,
+                    DownloadStatus = DownloadStatus.WaitForDownload
+                }
+            };
+            using var store = new SqliteDownloadTaskStore(
+                new SqliteDownloadTaskStoreOptions(databasePath),
+                new SystemClock());
+            var clock = new SystemClock();
+            var historyService = DownloadHistoryService.CreateForSharedStore(store);
+            using var tasks = new DownloadTaskApplicationService(store, historyService, clock);
+            using var projectionStore = new DownloadTaskProjectionStore(
+                tasks,
+                historyService,
+                clock);
+            using var settings = new TestSettingsStore();
+            var taskId = new DownloadTaskId(downloadBase.Id);
+            var stateWriter = new DownloadTaskStateWriter(tasks);
+            await projectionStore.AddDownloadingAsync(
+                downloading,
+                TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await stateWriter.StartAsync(taskId, TestContext.Current.CancellationToken)
+                .ConfigureAwait(true);
+            var stage = new ResolvePlaybackStage(
+                new TestDesktopInteractionContext().Notifications,
+                new DownloadActivityPresenter(projectionStore, stateWriter),
+                new DownloadPlaybackResolver(
+                    new TestWbiKeyProvider(),
+                    TimeProvider.System,
+                    new TestBilibiliApiClient()),
+                NullLogger<ResolvePlaybackStage>.Instance);
+            var context = new DownloadExecutionContextFactory(
+                projectionStore,
+                settings.Store).Create(taskId);
+
+            var result = await stage.ExecuteAsync(
+                context,
+                TestContext.Current.CancellationToken);
+
+            Assert.False(result.IsSuccess);
+            Assert.Equal("download.resolve.recreate-task", result.Error?.Code);
+            Assert.Null(context.DownloadDirectory);
         }
         finally
         {

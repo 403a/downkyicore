@@ -830,6 +830,7 @@ public sealed class SqliteDownloadTaskStoreTests : IDisposable
 
         Assert.Null(restored.Plan.NfoRequest);
         Assert.Equal(DownloadContentSelection.None, restored.Plan.RequestedContent);
+        Assert.Null(restored.Plan.RequestedContent.MediaKind);
         Assert.Equal(9, await ReadSchemaVersionAsync());
         Assert.Equal(1, await CountSchemaMigrationAsync(9));
     }
@@ -869,6 +870,7 @@ public sealed class SqliteDownloadTaskStoreTests : IDisposable
             Subtitle: true,
             Cover: true) with
         {
+            MediaKind = DownloadMediaKind.Dash,
             SelectedSubtitleTrackIds = ImmutableArray.Create(11L, 22L),
             DefaultSubtitleTrackId = 22
         };
@@ -889,6 +891,7 @@ public sealed class SqliteDownloadTaskStoreTests : IDisposable
         Assert.Equal(expected.Danmaku, actual.Danmaku);
         Assert.Equal(expected.Subtitle, actual.Subtitle);
         Assert.Equal(expected.Cover, actual.Cover);
+        Assert.Equal(expected.MediaKind, actual.MediaKind);
         Assert.True(expected.SelectedSubtitleTrackIds.HasValue);
         Assert.True(actual.SelectedSubtitleTrackIds.HasValue);
         Assert.Equal(
@@ -901,7 +904,8 @@ public sealed class SqliteDownloadTaskStoreTests : IDisposable
         var json = Assert.IsType<string>(
             await command.ExecuteScalarAsync(TestContext.Current.CancellationToken));
         using var payload = System.Text.Json.JsonDocument.Parse(json);
-        Assert.Equal(7, payload.RootElement.EnumerateObject().Count());
+        Assert.Equal(8, payload.RootElement.EnumerateObject().Count());
+        Assert.Equal("dash", payload.RootElement.GetProperty("mediaKind").GetString());
         Assert.True(payload.RootElement.GetProperty("downloadAudio").GetBoolean());
         Assert.False(payload.RootElement.GetProperty("downloadVideo").GetBoolean());
         Assert.True(payload.RootElement.GetProperty("downloadDanmaku").GetBoolean());
@@ -916,7 +920,9 @@ public sealed class SqliteDownloadTaskStoreTests : IDisposable
     [InlineData("""{"downloadVideo":true,"selectedSubtitleTrackIds":"bad"}""")]
     [InlineData("""{"downloadVideo":true,"selectedSubtitleTrackIds":["bad"]}""")]
     [InlineData("""{"downloadVideo":true,"defaultSubtitleTrackId":"bad"}""")]
-    public async Task InvalidSubtitleSelectionIsQuarantinedWithoutHidingValidRecords(string payload)
+    [InlineData("""{"downloadVideo":true,"mediaKind":"unknown"}""")]
+    [InlineData("""{"downloadVideo":true,"mediaKind":7}""")]
+    public async Task InvalidRequestedContentIsQuarantinedWithoutHidingValidRecords(string payload)
     {
         using var store = CreateStore();
         Assert.True((await store.AddAsync(

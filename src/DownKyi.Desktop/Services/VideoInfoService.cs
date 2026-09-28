@@ -357,7 +357,7 @@ internal class VideoInfoService : IInfoService
                     page.Bvid,
                     page.Cid,
                     page.Page,
-                    cancellationToken),
+                    cancellationToken: cancellationToken),
                 _ => Task.FromResult<PlayUrl?>(null)
             },
             TimeProvider.System,

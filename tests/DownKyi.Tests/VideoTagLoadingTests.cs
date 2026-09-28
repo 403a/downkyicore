@@ -463,7 +463,7 @@ public sealed class VideoTagLoadingTests : IDisposable
             CreatePage(_ => Task.FromResult<IReadOnlyList<string>>([])));
         var requestedContent = DownloadContentSelection.None with
         {
-            Audio = true,
+            Video = true,
             Subtitle = true
         };
 
@@ -474,7 +474,7 @@ public sealed class VideoTagLoadingTests : IDisposable
 
         Assert.Equal(1, added);
         Assert.Equal(
-            requestedContent,
+            requestedContent with { MediaKind = DownloadMediaKind.Durl },
             Assert.Single(context.ListState.Downloading).DownloadBase.NeedDownloadContent);
     }
 
@@ -505,7 +505,11 @@ public sealed class VideoTagLoadingTests : IDisposable
 
         Assert.Equal(1, added);
         Assert.Equal(
-            DownloadContentSelection.All with { Audio = false },
+            DownloadContentSelection.All with
+            {
+                Audio = false,
+                MediaKind = DownloadMediaKind.Dash
+            },
             Assert.Single(context.ListState.Downloading).DownloadBase.NeedDownloadContent);
     }
 
@@ -613,13 +617,15 @@ public sealed class VideoTagLoadingTests : IDisposable
             PublishTime = "2024-01-02",
             PlayUrl = new DownKyi.Core.BiliApi.VideoStream.Models.PlayUrl
             {
+                Quality = 80,
+                VideoCodecid = 7,
                 Durl = [new DownKyi.Core.BiliApi.VideoStream.Models.PlayUrlDurl()]
             },
             VideoQuality = new VideoQuality
             {
                 Quality = 80,
                 QualityFormat = "1080P",
-                SelectedVideoCodec = "AVC"
+                SelectedVideoCodec = "H.264/AVC"
             },
             LoadTagsAsync = loadTagsAsync
         };
