@@ -259,6 +259,58 @@ public sealed class BuiltinRangeDownloaderTests
     }
 
     [Fact]
+    public async Task MatchingStrongEntityTagOverridesLastModifiedDriftWhenResuming()
+    {
+        var payload = CreatePayload(12);
+        var previousLastModified = new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero);
+        var currentLastModified = previousLastModified.AddMinutes(1);
+        var directory = CreateTemporaryDirectory("range-etag-precedence");
+        var target = Path.Combine(directory, "media.bin");
+        try
+        {
+            using (var firstHandler = new RangePayloadHandler(
+                payload,
+                failOnceAtStart: 4,
+                failureBytes: 2,
+                lastModified: previousLastModified,
+                responseDate: previousLastModified.AddMinutes(1)))
+            using (var firstAttempt = CreateDownloader(
+                firstHandler,
+                parallelCount: 1,
+                segmentSize: 4))
+            {
+                await Assert.ThrowsAsync<HttpIOException>(() => firstAttempt.DownloadAsync(
+                    target,
+                    payload.Length,
+                    TestContext.Current.CancellationToken));
+            }
+
+            using var secondHandler = new RangePayloadHandler(
+                payload,
+                lastModified: currentLastModified,
+                responseDate: currentLastModified.AddMinutes(1));
+            using var secondAttempt = CreateDownloader(
+                secondHandler,
+                parallelCount: 1,
+                segmentSize: 4);
+
+            await secondAttempt.DownloadAsync(
+                target,
+                payload.Length,
+                TestContext.Current.CancellationToken);
+
+            Assert.DoesNotContain(secondHandler.ChunkRanges, range => range.Start is 0 or 4);
+            Assert.Equal(payload, await File.ReadAllBytesAsync(
+                target,
+                TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
     public void LastModifiedInsideClockSkewWindowCannotResume()
     {
         var lastModified = new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero);

@@ -878,30 +878,19 @@ internal sealed record BuiltinRangeResourceIdentity(
         bool requireValidator)
     {
         ArgumentNullException.ThrowIfNull(response);
-        var validatorMatched = false;
-        if (StrongETag != null && response.Headers.ETag is { } entityTag)
+        if (StrongETag != null
+            && response.Headers.ETag is { IsWeak: false } entityTag)
         {
-            if (entityTag.IsWeak
-                || !string.Equals(StrongETag, entityTag.ToString(), StringComparison.Ordinal))
-            {
-                return false;
-            }
-
-            validatorMatched = true;
+            return string.Equals(StrongETag, entityTag.ToString(), StringComparison.Ordinal);
         }
 
         if (LastModified != null
             && response.Content.Headers.LastModified is { } currentLastModified)
         {
-            if (LastModified != currentLastModified)
-            {
-                return false;
-            }
-
-            validatorMatched = true;
+            return LastModified == currentLastModified;
         }
 
-        return !requireValidator || validatorMatched;
+        return !requireValidator;
     }
 }
 
