@@ -188,6 +188,47 @@ public sealed class DownloadArtifactStageTests
     }
 
     [Fact]
+    public async Task MalformedOwnedStagedXmlIsRegeneratedBeforePublishing()
+    {
+        var requests = new List<string>();
+        using var context = await ArtifactTestContext.CreateAsync(
+            CreateDanmakuClient(
+            [
+                new DanmakuElem
+                {
+                    Id = 3,
+                    Progress = 3_000,
+                    Mode = 1,
+                    Fontsize = 25,
+                    Color = 0xFFFFFF,
+                    MidHash = "synthetic",
+                    Content = "regenerated"
+                }
+            ],
+            requests),
+            danmaku: true,
+            danmakuOutputFormat: DanmakuOutputFormat.Xml).ConfigureAwait(true);
+        var xmlFile = $"{context.Downloading.DownloadBase!.FilePath}.xml";
+        await context.ClaimTransferFileAsync(
+            DownloadArtifactWriter.DanmakuXmlTransferKey,
+            xmlFile).ConfigureAwait(true);
+        await File.WriteAllTextAsync(
+            xmlFile,
+            "<i><d p=\"incomplete\"",
+            TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        var result = await context.Stage.ExecuteAsync(
+            context.Execution,
+            TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.Equal(2, requests.Count);
+        var document = XDocument.Load(xmlFile);
+        Assert.Equal("i", document.Root?.Name.LocalName);
+        Assert.Equal("regenerated", Assert.Single(document.Root!.Elements("d")).Value);
+    }
+
+    [Fact]
     public async Task RecordedDanmakuDoesNotCompleteRetryAfterPublishedFileDisappears()
     {
         var directory = Path.Combine(Path.GetTempPath(), "downkyi-artifact-retry",
@@ -1117,6 +1158,16 @@ public sealed class DownloadArtifactStageTests
                        Execution.TaskId,
                        TestContext.Current.CancellationToken).ConfigureAwait(true)
                    ?? throw new InvalidOperationException("Test task disappeared.");
+        }
+
+        public async Task ClaimTransferFileAsync(string key, string file)
+        {
+            var result = await _tasks.ClaimTransferFileAsync(
+                Execution.TaskId,
+                key,
+                file,
+                TestContext.Current.CancellationToken).ConfigureAwait(true);
+            Assert.True(result.IsSuccess, result.Error?.Message);
         }
 
         public string[] GetPhysicalArtifactFiles()

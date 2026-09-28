@@ -184,7 +184,8 @@ internal sealed partial class DownloadArtifactWriter
                 assFile,
                 xmlFile,
                 cancellationToken).ConfigureAwait(false);
-            if (outputFiles.Any(file => !DownloadFileIntegrity.Check(file).IsUsable))
+            if (assFile != null && !DownloadFileIntegrity.Check(assFile).IsUsable ||
+                xmlFile != null && !DownloadFileIntegrity.CheckXml(xmlFile, "i").IsUsable)
             {
                 return ArtifactFailure(
                     "download.artifact.danmaku.invalid",

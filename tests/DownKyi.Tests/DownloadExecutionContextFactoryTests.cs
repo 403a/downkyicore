@@ -83,6 +83,11 @@ public sealed class DownloadExecutionContextFactoryTests : IDisposable
         await projections.AddDownloadingAsync(admitted, TestContext.Current.CancellationToken);
         var taskId = new DownloadTaskId(downloadBase.Id);
         await stateWriter.StartAsync(taskId, TestContext.Current.CancellationToken);
+        await stateWriter.ClaimTransferFileAsync(
+            taskId,
+            DownloadArtifactWriter.DanmakuAssTransferKey,
+            $"{downloadBase.FilePath}.ass",
+            TestContext.Current.CancellationToken);
         var activeProjection = projections.GetRequiredDownloadingProjection(taskId);
 
         var replacementContent = DownloadContentSelection.None with { Video = true };
@@ -129,6 +134,7 @@ public sealed class DownloadExecutionContextFactoryTests : IDisposable
             },
             Danmaku = current.Danmaku with
             {
+                OutputFormat = DanmakuOutputFormat.AssAndXml,
                 ScreenWidth = 1280,
                 ScreenHeight = 720,
                 FontName = "replacement-font"
@@ -162,6 +168,10 @@ public sealed class DownloadExecutionContextFactoryTests : IDisposable
         Assert.Equal(DownloadFinishedSort.Number, context.Input.FinishedSort);
         Assert.Equal(originalSettings.Video, context.Input.VideoSettings);
         Assert.Equal(originalSettings.Danmaku, context.Input.DanmakuSettings);
+
+        var resumedTask = await tasks.FindAsync(taskId, TestContext.Current.CancellationToken);
+        var resumedInput = DownloadExecutionContextFactory.CreateInput(resumedTask!, replacementSettings);
+        Assert.Equal(DanmakuOutputFormat.Ass, resumedInput.DanmakuSettings.OutputFormat);
     }
 
     public void Dispose()

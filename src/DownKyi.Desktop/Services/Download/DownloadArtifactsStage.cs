@@ -58,7 +58,7 @@ internal sealed class DownloadArtifactsStage : IDownloadPipelineStage
                 input.DanmakuSettings.OutputFormat);
             var canReuseOutputs = danmakuOutputs.All(output =>
                 context.HasPublished(output.Key) ||
-                DownloadFileIntegrity.Check(output.File).IsUsable);
+                IsDanmakuOutputUsable(output));
             if (!canReuseOutputs && danmakuOutputs.Any(output => context.HasPublished(output.Key)))
             {
                 return StageFailure(OperationError.Unexpected(
@@ -242,6 +242,13 @@ internal sealed class DownloadArtifactsStage : IDownloadPipelineStage
         }
 
         return outputs;
+    }
+
+    private static bool IsDanmakuOutputUsable(DanmakuOutput output)
+    {
+        return output.Key == DownloadArtifactWriter.DanmakuXmlTransferKey
+            ? DownloadFileIntegrity.CheckXml(output.File, "i").IsUsable
+            : DownloadFileIntegrity.Check(output.File).IsUsable;
     }
 
     internal static string GetImageExtension(string? coverUrl)
