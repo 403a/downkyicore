@@ -129,12 +129,10 @@ internal class ViewSeasonsSeriesDetailViewModel : ViewModelBase
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         ArrowBack = NavigationIcon.CreateArrowBack();
-        ArrowBack.Fill = DictionaryResource.GetColor("ColorTextDark");
 
         DownloadManage = ButtonIcon.Instance().DownloadManage;
         DownloadManage.Height = 24;
         DownloadManage.Width = 24;
-        DownloadManage.Fill = DictionaryResource.GetColor("ColorPrimary");
     }
 
     private RelayCommand? _backSpaceCommand;
@@ -143,7 +141,6 @@ internal class ViewSeasonsSeriesDetailViewModel : ViewModelBase
 
     protected internal override void ExecuteBackSpace()
     {
-        ArrowBack.Fill = DictionaryResource.GetColor("ColorText");
         CancelOperations();
         if (TryNavigateBack())
         {
@@ -377,11 +374,9 @@ internal class ViewSeasonsSeriesDetailViewModel : ViewModelBase
         ArgumentNullException.ThrowIfNull(navigationContext);
         base.OnNavigatedTo(navigationContext);
 
-        ArrowBack.Fill = DictionaryResource.GetColor("ColorTextDark");
         DownloadManage = ButtonIcon.Instance().DownloadManage;
         DownloadManage.Height = 24;
         DownloadManage.Width = 24;
-        DownloadManage.Fill = DictionaryResource.GetColor("ColorPrimary");
 
         if (navigationContext.Parameter is SeriesNavigationPayload series)
         {

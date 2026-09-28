@@ -63,7 +63,7 @@
                 Width="{Binding TextLogo.Width}"
                 Height="{Binding TextLogo.Height}"
                 Data="{Binding TextLogo.Data}"
-                Fill="{Binding TextLogo.Fill}"
+                Fill="{DynamicResource BrushPrimary}"
                 Stretch="UniformToFill" />
         </ContentControl>
         <Grid Grid.Row="2" ColumnDefinitions="150*,600*,150*">
@@ -99,7 +99,7 @@
                     Width="{Binding GeneralSearch.Width}"
                     Height="{Binding GeneralSearch.Height}"
                     Data="{Binding GeneralSearch.Data}"
-                    Fill="{Binding GeneralSearch.Fill}"
+                    Fill="{DynamicResource BrushPrimary}"
                     Stretch="UniformToFill" />
             </Button>
 
@@ -134,7 +134,7 @@
                                 Width="{Binding Settings.Width}"
                                 Height="{Binding Settings.Height}"
                                 Data="{Binding Settings.Data}"
-                                Fill="{Binding Settings.Fill}"
+                                Fill="{DynamicResource BrushPrimary}"
                                 Stretch="UniformToFill" />
                         </ContentControl>
                     </Border>
@@ -169,7 +169,7 @@
                                 Width="{Binding DownloadManager.Width}"
                                 Height="{Binding DownloadManager.Height}"
                                 Data="{Binding DownloadManager.Data}"
-                                Fill="{Binding DownloadManager.Fill}"
+                                Fill="{DynamicResource BrushPrimary}"
                                 Stretch="UniformToFill" />
                         </ContentControl>
                     </Border>
@@ -204,7 +204,7 @@
                                 Width="{Binding Toolbox.Width}"
                                 Height="{Binding Toolbox.Height}"
                                 Data="{Binding Toolbox.Data}"
-                                Fill="{Binding Toolbox.Fill}"
+                                Fill="{DynamicResource BrushPrimary}"
                                 Stretch="UniformToFill" />
                         </ContentControl>
                     </Border>

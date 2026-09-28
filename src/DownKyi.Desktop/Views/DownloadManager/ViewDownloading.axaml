@@ -156,7 +156,7 @@
                                                 Width="{Binding StartOrPause.Width}"
                                                 Height="{Binding StartOrPause.Height}"
                                                 Data="{Binding StartOrPause.Data}"
-                                                Fill="{Binding StartOrPause.Fill}"
+                                                Fill="{DynamicResource BrushPrimary}"
                                                 Stretch="Uniform" />
                                         </ContentControl>
                                     </Button>
@@ -174,7 +174,7 @@
                                                 Width="{Binding Delete.Width}"
                                                 Height="{Binding Delete.Height}"
                                                 Data="{Binding Delete.Data}"
-                                                Fill="{Binding Delete.Fill}"
+                                                Fill="{DynamicResource BrushPrimary}"
                                                 Stretch="Uniform" />
                                         </ContentControl>
                                     </Button>

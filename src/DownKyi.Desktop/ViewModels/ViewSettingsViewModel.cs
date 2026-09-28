@@ -48,7 +48,6 @@ internal class ViewSettingsViewModel : ViewModelBase
         #region 属性初始化
 
         ArrowBack = NavigationIcon.CreateArrowBack();
-        ArrowBack.Fill = DictionaryResource.GetColor("ColorTextDark");
 
         TabHeaders = new List<TabHeader>
         {
@@ -146,6 +145,5 @@ internal class ViewSettingsViewModel : ViewModelBase
         PropertyChangeAsync(() =>
             Navigation.NavigateRegion(AppNavigationRegion.Settings, AppRoute.SettingsBasic));
 
-        ArrowBack.Fill = DictionaryResource.GetColor("ColorTextDark");
     }
 }

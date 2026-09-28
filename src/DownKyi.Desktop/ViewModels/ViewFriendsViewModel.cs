@@ -50,7 +50,6 @@ namespace DownKyi.ViewModels
             #region 属性初始化
 
             ArrowBack = NavigationIcon.CreateArrowBack();
-            ArrowBack.Fill = DictionaryResource.GetColor("ColorTextDark");
 
             TabHeaders = new ObservableCollection<TabHeader>
             {
@@ -75,7 +74,6 @@ namespace DownKyi.ViewModels
         {
             //InitView();
 
-            ArrowBack.Fill = DictionaryResource.GetColor("ColorText");
 
             if (TryNavigateBack())
             {
@@ -158,7 +156,6 @@ namespace DownKyi.ViewModels
             ArgumentNullException.ThrowIfNull(navigationContext);
             base.OnNavigatedTo(navigationContext);
 
-            ArrowBack.Fill = DictionaryResource.GetColor("ColorTextDark");
 
             // 根据传入参数不同执行不同任务
             var parameter = navigationContext.Parameters.GetValue<Dictionary<string, object>>("Parameter");

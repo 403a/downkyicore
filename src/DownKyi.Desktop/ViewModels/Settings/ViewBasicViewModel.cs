@@ -4,6 +4,7 @@ using System.Linq;
 using CommunityToolkit.Mvvm.Input;
 using DownKyi.Application.Desktop;
 using DownKyi.Core.Settings;
+using DownKyi.Desktop.Appearance;
 using DownKyi.Models;
 using DownKyi.Utils;
 
@@ -14,6 +15,7 @@ internal class ViewBasicViewModel : ViewModelBase
     public const string Tag = "PageSettingsBasic";
 
     private readonly ISettingsStore _settingsStore;
+    private readonly DesktopThemeController _themeController;
     private bool _isOnNavigatedTo;
 
     #region 页面属性申明
@@ -134,9 +136,11 @@ internal class ViewBasicViewModel : ViewModelBase
 
     public ViewBasicViewModel(
         IDesktopInteractionContext desktopInteractions,
-        ISettingsStore settingsStore) : base(desktopInteractions)
+        ISettingsStore settingsStore,
+        DesktopThemeController themeController) : base(desktopInteractions)
     {
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
+        _themeController = themeController ?? throw new ArgumentNullException(nameof(themeController));
         #region 属性初始化
 
         // 解析范围
@@ -179,6 +183,7 @@ internal class ViewBasicViewModel : ViewModelBase
             case ThemeMode.Dark:
                 ThemeDark = true;
                 break;
+            case ThemeMode.None:
             case ThemeMode.Default:
                 ThemeAuto = true;
                 break;
@@ -218,26 +223,18 @@ internal class ViewBasicViewModel : ViewModelBase
     #region 命令申明
 
     // 主题事件
-    private RelayCommand<string>? _themeCommand;
+    private RelayCommand<ThemeMode>? _themeCommand;
 
-    public RelayCommand<string> ThemeCommand => _themeCommand ??= RequiredParameterCommand.Create<string>(ExecuteThemeCommand);
+    public RelayCommand<ThemeMode> ThemeCommand =>
+        _themeCommand ??= new RelayCommand<ThemeMode>(ExecuteThemeCommand);
 
     /// <summary>
     /// 主题事件
     /// </summary>
-    private void ExecuteThemeCommand(string parameter)
+    private void ExecuteThemeCommand(ThemeMode themeMode)
     {
-        var themeMode = parameter switch
-        {
-            "Light" => ThemeMode.Light,
-            "Dark" => ThemeMode.Dark,
-            "Default" => ThemeMode.Default,
-            _ => ThemeMode.Default
-        };
-
-        var isSucceed = UpdateBasic(settings => settings with { ThemeMode = themeMode }).ThemeMode == themeMode;
+        var isSucceed = _themeController.SetMode(themeMode);
         PublishTip(isSucceed);
-        ThemeHelper.SetTheme(themeMode);
     }
 
     // 下载完成后的操作事件

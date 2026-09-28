@@ -6,7 +6,6 @@ using CommunityToolkit.Mvvm.Input;
 using DownKyi.Application.Desktop;
 using DownKyi.Images;
 using DownKyi.Models;
-using DownKyi.Utils;
 
 namespace DownKyi.ViewModels.Dialogs;
 
@@ -41,40 +40,13 @@ internal class BaseDialogViewModel : ObservableObject
         {
             Height = SystemIcon.Instance().Close.Height,
             Width = SystemIcon.Instance().Close.Width,
-            Data = SystemIcon.Instance().Close.Data,
-            Fill = SystemIcon.Instance().Close.Fill
+            Data = SystemIcon.Instance().Close.Data
         };
 
         #endregion
     }
 
     #region 命令申明
-
-    // 鼠标进入关闭按钮事件
-    private RelayCommand? _closeEnterCommand;
-
-    public RelayCommand CloseEnterCommand => _closeEnterCommand ??= new RelayCommand(ExecuteCloseEnterCommand);
-
-    /// <summary>
-    /// 鼠标进入关闭按钮事件
-    /// </summary>
-    private void ExecuteCloseEnterCommand()
-    {
-        SetEnterStyle(CloseIcon);
-    }
-
-    // 鼠标离开关闭按钮事件
-    private RelayCommand? _closeLeaveCommand;
-
-    public RelayCommand CloseLeaveCommand => _closeLeaveCommand ??= new RelayCommand(ExecuteCloseLeaveCommand);
-
-    /// <summary>
-    /// 鼠标离开关闭按钮事件
-    /// </summary>
-    private void ExecuteCloseLeaveCommand()
-    {
-        SetLeaveStyle(CloseIcon);
-    }
 
     // 关闭窗口事件
     private RelayCommand? _closeCommand;
@@ -89,24 +61,6 @@ internal class BaseDialogViewModel : ObservableObject
     }
 
     #endregion
-
-    /// <summary>
-    /// 鼠标进入系统按钮时的图标样式
-    /// </summary>
-    /// <param name="icon">图标</param>
-    private static void SetEnterStyle(VectorImage icon)
-    {
-        icon.Fill = DictionaryResource.GetColor("ColorSystemBtnTint");
-    }
-
-    /// <summary>
-    /// 鼠标离开系统按钮时的图标样式
-    /// </summary>
-    /// <param name="icon">图标</param>
-    private static void SetLeaveStyle(VectorImage icon)
-    {
-        icon.Fill = DictionaryResource.GetColor("ColorSystemBtnTintDark");
-    }
 
     #region 接口实现
 

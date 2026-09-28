@@ -46,12 +46,9 @@ internal partial class ViewUserSpaceViewModel : ViewModelBase
 
         // 返回按钮
         ArrowBack = NavigationIcon.CreateArrowBack();
-        ArrowBack.Fill = DictionaryResource.GetColor("ColorTextDark");
 
         // 初始化loading
         Loading = true;
-
-        TopNavigationBg = "#00FFFFFF"; // 透明
 
         TabLeftBanners = new ObservableCollection<TabLeftBanner>();
         TabRightBanners = new ObservableCollection<TabRightBanner>();
@@ -167,8 +164,6 @@ internal partial class ViewUserSpaceViewModel : ViewModelBase
     /// </summary>
     private void InitView()
     {
-        TopNavigationBg = "#00FFFFFF"; // 透明
-        ArrowBack.Fill = DictionaryResource.GetColor("ColorTextDark");
         Background = null;
 
         Header = null;
@@ -216,8 +211,6 @@ internal partial class ViewUserSpaceViewModel : ViewModelBase
         // 是否获取到数据
         if (userInfo == null)
         {
-            TopNavigationBg = "#00FFFFFF"; // 透明
-            ArrowBack.Fill = DictionaryResource.GetColor("ColorTextDark");
             Background = null;
 
             ViewVisibility = false;
@@ -248,8 +241,6 @@ internal partial class ViewUserSpaceViewModel : ViewModelBase
                 ? DictionaryResource.GetString("Followed")
                 : DictionaryResource.GetString("NotFollowed");
 
-            ArrowBack.Fill = DictionaryResource.GetColor("ColorText");
-            TopNavigationBg = DictionaryResource.GetColor("ColorMask100");
             Background = snapshot.Settings != null
                 ? $"https://i0.hdslb.com/{snapshot.Settings.Toutu.Limg}"
                 : "avares://DownKyi.Desktop/Resources/backgound/9-绿荫秘境.png";
@@ -302,8 +293,6 @@ internal partial class ViewUserSpaceViewModel : ViewModelBase
             {
                 Id = 0,
                 IsEnabled = true,
-                LabelColor = DictionaryResource.GetColor("ColorPrimary"),
-                CountColor = DictionaryResource.GetColor("ColorPrimary"),
                 Label = DictionaryResource.GetString("FollowingCount"),
                 Count = Format.FormatNumber(relationStat.Following)
             });
@@ -311,8 +300,6 @@ internal partial class ViewUserSpaceViewModel : ViewModelBase
             {
                 Id = 1,
                 IsEnabled = true,
-                LabelColor = DictionaryResource.GetColor("ColorPrimary"),
-                CountColor = DictionaryResource.GetColor("ColorPrimary"),
                 Label = DictionaryResource.GetString("FollowerCount"),
                 Count = Format.FormatNumber(relationStat.Follower)
             });
@@ -326,8 +313,6 @@ internal partial class ViewUserSpaceViewModel : ViewModelBase
             {
                 Id = 2,
                 IsEnabled = false,
-                LabelColor = DictionaryResource.GetColor("ColorTextGrey"),
-                CountColor = DictionaryResource.GetColor("ColorTextDark"),
                 Label = DictionaryResource.GetString("LikesCount"),
                 Count = Format.FormatNumber(upStat.Likes)
             });
@@ -336,8 +321,6 @@ internal partial class ViewUserSpaceViewModel : ViewModelBase
             {
                 Id = 3,
                 IsEnabled = false,
-                LabelColor = DictionaryResource.GetColor("ColorTextGrey"),
-                CountColor = DictionaryResource.GetColor("ColorTextDark"),
                 Label = DictionaryResource.GetString("ArchiveViewCount"),
                 Count = Format.FormatNumber(upStat.Archive.View)
             });
@@ -346,8 +329,6 @@ internal partial class ViewUserSpaceViewModel : ViewModelBase
             {
                 Id = 4,
                 IsEnabled = false,
-                LabelColor = DictionaryResource.GetColor("ColorTextGrey"),
-                CountColor = DictionaryResource.GetColor("ColorTextDark"),
                 Label = DictionaryResource.GetString("ArticleViewCount"),
                 Count = Format.FormatNumber(upStat.Article.View)
             });

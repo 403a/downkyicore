@@ -12,6 +12,26 @@
              xmlns:asyncImageLoader="clr-namespace:DownKyi.CustomControl.AsyncImageLoader"
             
              x:DataType="vm:ViewUserSpaceViewModel">
+    <UserControl.Styles>
+        <Style Selector="Grid.theme-header">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Grid.theme-header Path">
+            <Setter Property="Fill" Value="{DynamicResource BrushTextDark}" />
+        </Style>
+        <Style Selector="Grid.theme-header TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource BrushTextDark}" />
+        </Style>
+        <Style Selector="Grid.theme-header.overlay">
+            <Setter Property="Background" Value="{DynamicResource BrushMask100}" />
+        </Style>
+        <Style Selector="Grid.theme-header.overlay Path">
+            <Setter Property="Fill" Value="{DynamicResource BrushText}" />
+        </Style>
+        <Style Selector="Grid.theme-header.overlay TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource BrushText}" />
+        </Style>
+    </UserControl.Styles>
     <UserControl.Resources>
         <ControlTheme x:Key="TabLeftBannerStyle" TargetType="ListBoxItem" x:DataType="vmu:TabLeftBanner">
             <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
@@ -69,6 +89,7 @@
         </ControlTheme>
 
         <ControlTheme x:Key="TabRightBannerStyle" TargetType="ListBoxItem" x:DataType="vmu:TabRightBanner">
+            <Setter Property="IsEnabled" Value="{Binding IsEnabled}" />
             <Setter Property="Template">
                 <ControlTemplate>
                     <StackPanel
@@ -76,8 +97,7 @@
                         Margin="15,0"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        Cursor="Hand"
-                        IsEnabled="{Binding IsEnabled}">
+                        Cursor="Hand">
                         <TextBlock
                             Name="nameLabel"
                             Padding="0,0,0,5"
@@ -94,10 +114,10 @@
                 </ControlTemplate>
             </Setter>
             <Style Selector="^:pointerover /template/ TextBlock#nameLabel">
-                <Setter Property="Foreground" Value="{Binding LabelColor}" />
+                <Setter Property="Foreground" Value="{DynamicResource BrushPrimary}" />
             </Style>
             <Style Selector="^:pointerover /template/ TextBlock#nameCount">
-                <Setter Property="Foreground" Value="{Binding CountColor}" />
+                <Setter Property="Foreground" Value="{DynamicResource BrushPrimary}" />
             </Style>
         </ControlTheme>
 
@@ -300,7 +320,11 @@
             IsVisible="{Binding NoDataVisibility}" />
 
         <!--  顶部导航  -->
-        <Grid VerticalAlignment="Top" Background="{Binding TopNavigationBg}" ColumnDefinitions="150,*,150">
+        <Grid
+            VerticalAlignment="Top"
+            Classes="theme-header"
+            Classes.overlay="{Binding ViewVisibility}"
+            ColumnDefinitions="150,*,150">
 
             <Button
                 Grid.Column="0"
@@ -315,13 +339,11 @@
                             Width="{Binding ArrowBack.Width}"
                             Height="{Binding ArrowBack.Height}"
                             Data="{Binding ArrowBack.Data}"
-                            Fill="{Binding ArrowBack.Fill}"
                             Stretch="None" />
                     </ContentControl>
                     <TextBlock
                         VerticalAlignment="Center"
                         FontSize="16"
-                        Foreground="{Binding ArrowBack.Fill}"
                         Text="{DynamicResource UserSpace}" />
                 </StackPanel>
             </Button>

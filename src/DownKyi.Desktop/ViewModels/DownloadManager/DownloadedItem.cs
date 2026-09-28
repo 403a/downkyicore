@@ -1,7 +1,6 @@
 using DownKyi.Application.Downloads;
 using DownKyi.Images;
 using DownKyi.Models;
-using DownKyi.Utils;
 
 namespace DownKyi.ViewModels.DownloadManager;
 
@@ -11,15 +10,12 @@ internal class DownloadedItem : DownloadBaseItem
     {
         // 打开文件夹按钮
         OpenFolder = ButtonIcon.Instance().Folder;
-        OpenFolder.Fill = DictionaryResource.GetColor("ColorPrimary");
 
         // 打开视频按钮
         OpenVideo = ButtonIcon.Instance().Start;
-        OpenVideo.Fill = DictionaryResource.GetColor("ColorPrimary");
 
         // 删除按钮
         RemoveVideo = ButtonIcon.Instance().Trash;
-        RemoveVideo.Fill = DictionaryResource.GetColor("ColorWarning");
     }
 
     // model数据

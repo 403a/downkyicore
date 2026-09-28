@@ -1,36 +1,10 @@
 using System.Collections.Generic;
-using Avalonia.Media;
 using Avalonia.Threading;
 
 namespace DownKyi.Utils;
 
 internal static class DictionaryResource
 {
-    /// <summary>
-    /// 从资源获取颜色的16进制字符串
-    /// </summary>
-    /// <param name="resourceKey"></param>
-    /// <returns></returns>
-    public static string GetColor(string resourceKey)
-    {
-        var application = Avalonia.Application.Current;
-        if (application == null)
-        {
-            return "#00000000";
-        }
-
-        var obj = Dispatcher.UIThread.Invoke(() =>
-        {
-            object? obj = null;
-            application.TryGetResource(
-                resourceKey,
-                application.ActualThemeVariant,
-                out obj);
-            return obj;
-        });
-        return obj == null ? "#00000000" : ((Color)obj).ToString();
-    }
-
     /// <summary>
     /// 从资源获取字符串
     /// </summary>
@@ -72,5 +46,16 @@ internal static class DictionaryResource
         return obj is T value
             ? value
             : throw new KeyNotFoundException($"Resource '{resourceKey}' was not found or is not a {typeof(T).Name}.");
+    }
+
+    public static T? GetIfApplicationInitialized<T>(string resourceKey)
+        where T : class
+    {
+        if (Avalonia.Application.Current == null)
+        {
+            return null;
+        }
+
+        return Get<T>(resourceKey);
     }
 }

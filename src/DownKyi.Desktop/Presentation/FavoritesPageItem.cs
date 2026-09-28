@@ -1,7 +1,6 @@
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DownKyi.Images;
-using DownKyi.Utils;
 
 namespace DownKyi.Presentation;
 
@@ -135,16 +134,12 @@ internal class FavoritesPageItem : ObservableObject
         #region 属性初始化
 
         Play = NormalIcon.Instance().Play;
-        Play.Fill = DictionaryResource.GetColor("ColorTextGrey2");
 
         Like = NormalIcon.Instance().Like;
-        Like.Fill = DictionaryResource.GetColor("ColorTextGrey2");
 
         Favorite = NormalIcon.Instance().Favorite;
-        Favorite.Fill = DictionaryResource.GetColor("ColorTextGrey2");
 
         Share = NormalIcon.Instance().Share;
-        Share.Fill = DictionaryResource.GetColor("ColorTextGrey2");
 
         #endregion
     }
