@@ -602,23 +602,23 @@ public sealed class DownloadPipelineStageTests
     }
 
     [Fact]
-    public async Task MediaStageRejectsMissingAudioEvenWhenACompletedAudioTransferExists()
+    public async Task MediaStageReusesCompletedSelectedAudioWhenRefreshedPlaybackOmitsAudio()
     {
         using var fixture = await MediaStageFixture.CreateAsync(
             CreateVideoOnlyPlayUrl(),
             downloadAudio: true,
             downloadVideo: true).ConfigureAwait(true);
-        await fixture.AddCompletedAudioTransferAsync().ConfigureAwait(true);
+        var completedAudio = await fixture.AddCompletedAudioTransferAsync().ConfigureAwait(true);
 
         var result = await fixture.Stage.ExecuteAsync(
             fixture.Context,
             TestContext.Current.CancellationToken);
 
-        Assert.False(result.IsSuccess);
-        Assert.Equal("download.media.contract", result.Error?.Code);
-        Assert.Null(fixture.Context.AudioFile);
-        Assert.Null(fixture.Context.VideoFile);
-        Assert.Empty(fixture.Backend.Requests);
+        Assert.True(result.IsSuccess, result.Error?.Message);
+        Assert.Equal(completedAudio.FilePath, fixture.Context.AudioFile);
+        Assert.Equal(completedAudio.Key, fixture.Context.AudioTransferKey);
+        Assert.NotNull(fixture.Context.VideoFile);
+        Assert.Single(fixture.Backend.Requests);
     }
 
     [Fact]

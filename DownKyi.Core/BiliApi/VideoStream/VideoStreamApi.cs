@@ -91,7 +91,8 @@ public static partial class VideoStreamApi
         var url = BuildVideoPlayPageUrl(avid, bvid, p);
         var playUrl = await GetPlayUrlWebPageAsync(client, url, cancellationToken)
             .ConfigureAwait(false);
-        if (playUrl == null)
+        if (playUrl == null ||
+            (playUrl.Durl.Count > 0 && playUrl.Quality != quality))
         {
             playUrl = await client.GetVideoPlayUrlAsync(
                 keys,

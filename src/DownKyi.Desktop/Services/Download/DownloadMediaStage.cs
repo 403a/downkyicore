@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -49,6 +50,11 @@ internal sealed class DownloadMediaStage : IDownloadPipelineStage
         ArgumentNullException.ThrowIfNull(context);
         context.EnsureActive(cancellationToken);
         var playUrl = context.PlayUrl;
+        if (context.Input.RequestedContent.MediaKind == DownloadMediaKind.Dash)
+        {
+            TryReuseCompletedDashAudio(context);
+        }
+
         var contractFailure = DownloadMediaContract.Validate(context, playUrl);
         if (contractFailure != null)
         {
@@ -109,7 +115,7 @@ internal sealed class DownloadMediaStage : IDownloadPipelineStage
         DownloadExecutionContext context,
         CancellationToken cancellationToken)
     {
-        if (context.NeedsAudio)
+        if (context.NeedsAudio && context.AudioFile == null)
         {
             var audio = SelectAudio(context);
             _presenter.ShowDownloadingAudio(context);
@@ -151,6 +157,40 @@ internal sealed class DownloadMediaStage : IDownloadPipelineStage
 
         context.EnsureActive(cancellationToken);
         return DownloadStageResult.Success(Name);
+    }
+
+    private void TryReuseCompletedDashAudio(DownloadExecutionContext context)
+    {
+        if (!context.NeedsAudio ||
+            context.AudioFile != null ||
+            string.IsNullOrWhiteSpace(context.DownloadDirectory))
+        {
+            return;
+        }
+
+        var snapshot = _projectionStore.GetRequiredSnapshot(context.TaskId);
+        var keyPrefix = string.Create(
+            CultureInfo.InvariantCulture,
+            $"{context.Input.Metadata.AudioCodec.Id}_");
+        foreach (var key in snapshot.Transfer.CompletedFileKeys.Where(candidate =>
+                     candidate.StartsWith(keyPrefix, StringComparison.Ordinal)))
+        {
+            if (!snapshot.Plan.TransferFiles.TryGetValue(key, out var fileName) ||
+                fileName != Path.GetFileName(fileName))
+            {
+                continue;
+            }
+
+            var filePath = Path.Combine(context.DownloadDirectory, fileName);
+            if (!DownloadFileIntegrity.Check(filePath).IsUsable)
+            {
+                continue;
+            }
+
+            context.AudioFile = filePath;
+            context.AudioTransferKey = key;
+            return;
+        }
     }
 
     private async Task<OperationResult<DownloadStageResult>> DownloadDurlsAsync(

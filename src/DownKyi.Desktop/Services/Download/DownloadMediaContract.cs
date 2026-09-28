@@ -78,7 +78,9 @@ internal static class DownloadMediaContract
         DownloadExecutionContext context,
         PlayUrl? playUrl)
     {
-        if (context.NeedsAudio && SelectAudio(context, playUrl) == null)
+        if (context.NeedsAudio &&
+            context.AudioFile == null &&
+            SelectAudio(context, playUrl) == null)
         {
             return Failure("The finalized audio stream is unavailable.");
         }
