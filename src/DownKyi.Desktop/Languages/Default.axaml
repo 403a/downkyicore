@@ -391,6 +391,12 @@
     <system:String x:Key="Yes">是</system:String>
     <system:String x:Key="No">否</system:String>
     <system:String x:Key="ApplyToAll">全部应用</system:String>
+    <system:String x:Key="DownloadContentConflictTitle">下载内容不可用</system:String>
+    <system:String x:Key="DownloadContentConflictMessage">“{0}”无法提供所选的音视频内容。请选择有效输出，或跳过这一页。</system:String>
+    <system:String x:Key="UseAvailableDownloadContent">改为下载{0}</system:String>
+    <system:String x:Key="DownloadAudioAndVideo">音频和视频</system:String>
+    <system:String x:Key="SkipDownloadPage">跳过此页</system:String>
+    <system:String x:Key="ApplyToAllSameContentConflict">应用到具有相同冲突的所有页面</system:String>
     
     
     <!-- CustomControl -->

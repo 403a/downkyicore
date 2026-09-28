@@ -16,7 +16,7 @@ public sealed class ContentDownloadCoordinatorTests
     public async Task PreCanceledRequestDoesNotCreateDownloadSession()
     {
         var factory = new RecordingFactory(new RecordingSession(@"D:\Downloads"));
-        var coordinator = new ContentDownloadCoordinator(factory, new RecordingInfoServiceFactory());
+        var coordinator = CreateCoordinator(factory, new RecordingInfoServiceFactory());
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync();
 
@@ -33,7 +33,7 @@ public sealed class ContentDownloadCoordinatorTests
     {
         var session = new RecordingSession(@"D:\Downloads");
         var factory = new RecordingFactory(session);
-        var coordinator = new ContentDownloadCoordinator(factory, new RecordingInfoServiceFactory());
+        var coordinator = CreateCoordinator(factory, new RecordingInfoServiceFactory());
 
         var result = await coordinator.AddAsync(
             [new ContentDownloadItem("BV17x411w7KC", DownloadInfoKind.Video, false)],
@@ -50,7 +50,7 @@ public sealed class ContentDownloadCoordinatorTests
     {
         var session = new RecordingSession(null);
         var factory = new RecordingFactory(session);
-        var coordinator = new ContentDownloadCoordinator(factory, new RecordingInfoServiceFactory());
+        var coordinator = CreateCoordinator(factory, new RecordingInfoServiceFactory());
 
         var result = await coordinator.AddAsync(
             [new ContentDownloadItem("BV17x411w7KC", DownloadInfoKind.Video, true)],
@@ -70,7 +70,7 @@ public sealed class ContentDownloadCoordinatorTests
         var session = new RecordingSession(@"D:\Downloads", admissionAllowed: false);
         var factory = new RecordingFactory(session);
         var infoServiceFactory = new RecordingInfoServiceFactory();
-        var coordinator = new ContentDownloadCoordinator(factory, infoServiceFactory);
+        var coordinator = CreateCoordinator(factory, infoServiceFactory);
 
         var result = await coordinator.AddAsync(
             [
@@ -94,7 +94,7 @@ public sealed class ContentDownloadCoordinatorTests
         var session = new RecordingSession(@"D:\Downloads");
         var factory = new RecordingFactory(session);
         var infoServiceFactory = new RecordingInfoServiceFactory();
-        var coordinator = new ContentDownloadCoordinator(factory, infoServiceFactory);
+        var coordinator = CreateCoordinator(factory, infoServiceFactory);
 
         var result = await coordinator.AddAsync(
             [
@@ -120,7 +120,7 @@ public sealed class ContentDownloadCoordinatorTests
     {
         using var cancellation = new CancellationTokenSource();
         var session = new RecordingSession(@"D:\Downloads");
-        var coordinator = new ContentDownloadCoordinator(
+        var coordinator = CreateCoordinator(
             new RecordingFactory(session),
             new CancelingInfoServiceFactory(cancellation));
 
@@ -147,7 +147,7 @@ public sealed class ContentDownloadCoordinatorTests
                     cancellation.Cancel();
                 }
             });
-        var coordinator = new ContentDownloadCoordinator(
+        var coordinator = CreateCoordinator(
             new RecordingFactory(session),
             new RecordingInfoServiceFactory());
 
@@ -233,20 +233,32 @@ public sealed class ContentDownloadCoordinatorTests
         }
 
         public Task<int> AddToDownload(
-            DownloadAddSelection selection,
-            PreparedDownload preparedDownload,
-            bool isAll = false,
+            string selectedDirectory,
+            FinalizedDownload finalizedDownload,
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            Assert.Equal(directory, selection.Directory);
-            Assert.Equal(Selection.RequestedContent, selection.RequestedContent);
-            Assert.NotNull(preparedDownload);
-            Assert.False(isAll);
+            Assert.Equal(directory, selectedDirectory);
+            Assert.NotNull(finalizedDownload);
             AddCount++;
             afterAdd?.Invoke(AddCount);
             return Task.FromResult(1);
         }
+    }
+
+    private static ContentDownloadCoordinator CreateCoordinator(
+        IAddToDownloadServiceFactory factory,
+        IContentInfoServiceFactory infoServiceFactory) => new(
+            factory,
+            infoServiceFactory,
+            new DownloadContentConflictResolver(new UnexpectedDialogService()));
+
+    private sealed class UnexpectedDialogService : DownKyi.Application.Desktop.IAppDialogService
+    {
+        public Task<DownKyi.Application.Desktop.AppDialogResult> ShowAsync(
+            DownKyi.Application.Desktop.AppDialogRequest request,
+            CancellationToken cancellationToken = default) => throw new InvalidOperationException(
+                $"Unexpected dialog: {request.Dialog}.");
     }
 
     private sealed class RecordingInfoServiceFactory : IContentInfoServiceFactory
