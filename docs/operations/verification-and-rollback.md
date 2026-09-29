@@ -87,7 +87,8 @@ sidecar，並檢查 manifest、版本、必要 binary、Fluent theme 與使用�
 正式 tag 前及 workflow 中均執行：
 
 ```powershell
-pwsh ./script/validate-release-version.ps1 -GitRef refs/tags/v1.1.1
+$version = (Get-Content ./version.txt -Raw).Trim()
+pwsh ./script/validate-release-version.ps1 -GitRef "refs/tags/v$version"
 ```
 
 這個檢查要求 tag 與 `version.txt` 完全一致；不得移動或重用既有 tag。
@@ -97,7 +98,7 @@ pwsh ./script/validate-release-version.ps1 -GitRef refs/tags/v1.1.1
 ```powershell
 pwsh ./script/audit-bilibili-authenticated-api.ps1 `
   -ConfirmAuthenticatedLive `
-  -OutputPath ./docs/operations/bilibili-authenticated-api-audit.json
+  -OutputPath ./artifacts/bilibili/authenticated-live.json
 ```
 
 腳本只從 `~/.codex/.env` 讀取 `BILIBILI_TEST_COOKIE`，不得把值放入命令列、檔案、log、fixture、commit 或 PR。`/x/web-interface/nav` 未同時滿足 code 0 與 `isLogin=true` 時，後續 probe 必須封鎖。
@@ -109,7 +110,7 @@ pwsh ./script/audit-bilibili-authenticated-api.ps1 `
 - Download/retry：loopback fake HTTP tests，不連正式 Bilibili。
 - Media output：ffprobe seek/decode integration tests。
 - Logs：使用測試指定隔離目錄，檢查 redaction、flush、rotation 與 export。
-- System performance：依 `performance-baseline.md` 記錄 runtime、OS、architecture、dataset、backend 與 SHA。
+- System performance：依 `../performance-baseline.md` 記錄 runtime、OS、architecture、dataset、backend 與 SHA。
 
 ## 回滾
 

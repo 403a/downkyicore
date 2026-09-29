@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [switch]$ConfirmAuthenticatedLive,
+    [switch]$GenerateContractSample,
     [string]$EnvPath = (Join-Path $HOME '.codex/.env'),
     [string]$OutputPath
 )
@@ -9,8 +10,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
-if (-not $ConfirmAuthenticatedLive) {
-    throw 'This script sends an authenticated Cookie to read-only Bilibili APIs. Re-run with -ConfirmAuthenticatedLive.'
+if ($ConfirmAuthenticatedLive -and $GenerateContractSample) {
+    throw 'Choose either contract-sample generation or an authenticated live audit.'
 }
 
 function Get-EnvValue {
@@ -290,6 +291,33 @@ function Write-SanitizedReport {
     }
 
     return $jsonReport
+}
+
+if ($GenerateContractSample) {
+    $sampleResults = [System.Collections.Generic.List[object]]::new()
+    $sampleResults.Add([pscustomobject][ordered]@{
+        Name = 'contract-sample'
+        Path = '/contract/sample'
+        HttpStatus = $null
+        BilibiliCode = $null
+        RequiresLogin = $true
+        ResponseStructureMatchesExpected = $null
+        RequiredFieldsPresent = $null
+        ContractDrift = $null
+        Outcome = 'indeterminate'
+        ErrorType = $null
+    })
+
+    Write-SanitizedReport `
+        -EnvironmentVariableLoaded $false `
+        -NavigationGatePassed $false `
+        -Results $sampleResults `
+        -Destination $OutputPath
+    exit 0
+}
+
+if (-not $ConfirmAuthenticatedLive) {
+    throw 'Use -GenerateContractSample, or explicitly authorize authenticated requests with -ConfirmAuthenticatedLive.'
 }
 
 $environmentVariableName = 'BILIBILI_TEST_COOKIE'
