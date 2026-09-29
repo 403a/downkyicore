@@ -151,6 +151,7 @@ public sealed class VideoDetailCommandStateTests
             .ConfigureAwait(true);
 
         Assert.True(viewModel.UiState.IsBusy);
+        Assert.True(viewModel.UiState.IsContentVisible);
         Assert.False(viewModel.AddToDownloadCommand.CanExecute(null));
         var downloadEnabled = WaitUntilExecutable(viewModel.AddToDownloadCommand);
 
