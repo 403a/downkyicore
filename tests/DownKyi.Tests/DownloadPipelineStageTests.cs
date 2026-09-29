@@ -78,7 +78,7 @@ public sealed class DownloadPipelineStageTests
             Path.GetTempPath(),
             $"missing-downkyi-media-{Guid.NewGuid():N}.mp4");
 
-        var result = await new ValidateStage().ExecuteAsync(
+        var result = await new ValidateStage(new StubFfmpegMediaStreamValidator()).ExecuteAsync(
             context,
             TestContext.Current.CancellationToken);
 
@@ -94,7 +94,7 @@ public sealed class DownloadPipelineStageTests
         context.PublishedArtifacts.Add("media", Path.Combine(
             Path.GetTempPath(), $"missing-published-{Guid.NewGuid():N}.mp4"));
 
-        var result = await new ValidateStage().ExecuteAsync(
+        var result = await new ValidateStage(new StubFfmpegMediaStreamValidator()).ExecuteAsync(
             context, TestContext.Current.CancellationToken);
 
         Assert.False(result.IsSuccess);
@@ -110,7 +110,7 @@ public sealed class DownloadPipelineStageTests
             requestedContent: DownloadContentSelection.None with { Subtitle = true });
         context.SubtitleFiles = null;
 
-        var result = await new ValidateStage().ExecuteAsync(
+        var result = await new ValidateStage(new StubFfmpegMediaStreamValidator()).ExecuteAsync(
             context,
             TestContext.Current.CancellationToken);
 
@@ -131,11 +131,69 @@ public sealed class DownloadPipelineStageTests
             Path.GetTempPath(), $"missing-published-{Guid.NewGuid():N}.srt");
         context.SubtitleFiles = null;
 
-        var result = await new ValidateStage().ExecuteAsync(
+        var result = await new ValidateStage(new StubFfmpegMediaStreamValidator()).ExecuteAsync(
             context, TestContext.Current.CancellationToken);
 
         Assert.False(result.IsSuccess);
         Assert.Equal("download.validate.published-missing", result.Error?.Code);
+    }
+
+    [Theory]
+    [InlineData(true, true, ".mp4", false, false)]
+    [InlineData(true, true, ".mp4", true, true)]
+    [InlineData(false, true, ".mp4", true, true)]
+    [InlineData(true, false, ".mp3", true, true)]
+    [InlineData(true, false, ".aac", true, true)]
+    [InlineData(true, false, ".flac", true, true)]
+    public async Task ValidateStageAppliesRequestedStreamShapeToReusedStagedMedia(
+        bool requestAudio,
+        bool requestVideo,
+        string extension,
+        bool hasRequiredStreams,
+        bool expectedSuccess)
+    {
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            $"downkyi-stream-shape-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            using var settings = new TestSettingsStore();
+            var context = CreateContext(
+                settings.Store.Current,
+                DownloadContentSelection.None with
+                {
+                    Audio = requestAudio,
+                    Video = requestVideo
+                });
+            context.StagingDirectory = directory;
+            var stagedMedia = context.WorkingBasePath + extension;
+            await File.WriteAllBytesAsync(
+                stagedMedia,
+                [1, 2, 3],
+                TestContext.Current.CancellationToken);
+            Assert.True(context.TryReuseStagedMedia());
+            var validator = new StubFfmpegMediaStreamValidator(hasRequiredStreams);
+
+            var result = await new ValidateStage(validator).ExecuteAsync(
+                context,
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(expectedSuccess, result.IsSuccess);
+            if (!expectedSuccess)
+            {
+                Assert.Equal("download.validate.media", result.Error?.Code);
+            }
+
+            var call = Assert.Single(validator.Calls);
+            Assert.Equal(stagedMedia, call.MediaFile);
+            Assert.Equal(requestAudio, call.RequireAudio);
+            Assert.Equal(requestVideo, call.RequireVideo);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
     }
 
     [Fact]

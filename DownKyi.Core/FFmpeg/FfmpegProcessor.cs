@@ -32,11 +32,21 @@ public interface IFfmpegMediaMuxer
         CancellationToken cancellationToken = default);
 }
 
-public sealed class FfmpegProcessor : IFfmpegMediaMuxer
+public interface IFfmpegMediaStreamValidator
+{
+    Task<bool> HasRequiredStreamsAsync(
+        string mediaFile,
+        bool requireAudio,
+        bool requireVideo,
+        CancellationToken cancellationToken = default);
+}
+
+public sealed class FfmpegProcessor : IFfmpegMediaMuxer, IFfmpegMediaStreamValidator
 {
     private static readonly TimeSpan OperationTimeout = TimeSpan.FromHours(2);
     private readonly AsyncConcurrencyGate _operationGate;
     private readonly FfmpegConcatRuntime _concatRuntime;
+    private readonly FfmpegMediaValidator _mediaValidator;
     private readonly IFfmpegProcessRunner _processRunner;
     private readonly ISettingsStore _settingsStore;
     private readonly ILogger<FfmpegProcessor> _logger;
@@ -61,11 +71,27 @@ public sealed class FfmpegProcessor : IFfmpegMediaMuxer
             loggerFactory.CreateLogger<FfmpegHardwareEncoderDetector>());
         _operationGate = new AsyncConcurrencyGate(
             () => _settingsStore.Current.Video.FfmpegMaxParallelJobs);
+        _mediaValidator = new FfmpegMediaValidator(_processRunner);
         _concatRuntime = new FfmpegConcatRuntime(
             _processRunner,
-            new FfmpegMediaValidator(_processRunner),
+            _mediaValidator,
             _operationGate,
             loggerFactory.CreateLogger<FfmpegConcatRuntime>());
+    }
+
+    public async Task<bool> HasRequiredStreamsAsync(
+        string mediaFile,
+        bool requireAudio,
+        bool requireVideo,
+        CancellationToken cancellationToken = default)
+    {
+        using var slot = await _operationGate.EnterAsync(cancellationToken).ConfigureAwait(false);
+        return await _mediaValidator.HasRequiredStreamsAsync(
+                mediaFile,
+                requireAudio,
+                requireVideo,
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public async Task<FfmpegOperationResult> ConcatDurlVideosAsync(
