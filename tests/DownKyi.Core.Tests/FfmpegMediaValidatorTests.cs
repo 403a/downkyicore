@@ -84,6 +84,46 @@ public sealed class FfmpegMediaValidatorTests : IDisposable
         Assert.Single(runner.SeekPositions);
     }
 
+    [Theory]
+    [InlineData(true, true, false, true, false)]
+    [InlineData(true, true, true, true, true)]
+    [InlineData(false, true, false, true, true)]
+    [InlineData(true, false, true, false, true)]
+    public async Task RequiredStreamValidationMatchesRequestedShape(
+        bool requireAudio,
+        bool requireVideo,
+        bool hasAudio,
+        bool hasVideo,
+        bool expected)
+    {
+        var probeJson = (hasAudio, hasVideo) switch
+        {
+            (true, true) => """
+                {"streams":[{"codec_type":"audio"},{"codec_type":"video"}],"format":{"duration":"20.0"}}
+                """,
+            (true, false) => """
+                {"streams":[{"codec_type":"audio"}],"format":{"duration":"20.0"}}
+                """,
+            (false, true) => """
+                {"streams":[{"codec_type":"video"}],"format":{"duration":"20.0"}}
+                """,
+            _ => """
+                {"streams":[],"format":{"duration":"20.0"}}
+                """
+        };
+        var runner = new ProbeProcessRunner(probeJson);
+        var validator = new FfmpegMediaValidator(runner);
+
+        var result = await validator.HasRequiredStreamsAsync(
+            _mediaFile,
+            requireAudio,
+            requireVideo,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(expected, result);
+        Assert.Empty(runner.SeekPositions);
+    }
+
     public void Dispose()
     {
         File.Delete(_mediaFile);

@@ -3,29 +3,55 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using DownKyi.Core.FFmpeg;
 using DownKyi.Domain.Results;
 
 namespace DownKyi.Services.Download;
 
 internal sealed class ValidateStage : IDownloadPipelineStage
 {
+    private readonly IFfmpegMediaStreamValidator _mediaStreamValidator;
+
+    public ValidateStage(IFfmpegMediaStreamValidator mediaStreamValidator)
+    {
+        _mediaStreamValidator = mediaStreamValidator
+            ?? throw new ArgumentNullException(nameof(mediaStreamValidator));
+    }
+
     public string Name => nameof(ValidateStage);
 
-    public Task<OperationResult<DownloadStageResult>> ExecuteAsync(
+    public async Task<OperationResult<DownloadStageResult>> ExecuteAsync(
         DownloadExecutionContext context,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
         context.EnsureActive(cancellationToken);
-        if (context.NeedsMedia &&
-            (!context.MediaSucceeded ||
-             (context.HasPublished("media")
-                 ? !context.HasUsablePublishedMedia()
-                 : !File.Exists(context.OutputMedia))))
+        if (context.NeedsMedia)
         {
-            return Task.FromResult(DownloadStageResult.Failure(
-                "download.validate.media",
-                "The finalized media file is missing or invalid."));
+            var hasPublishedMedia = context.PublishedArtifacts.TryGetValue(
+                "media",
+                out var publishedMedia);
+            var mediaFile = hasPublishedMedia ? publishedMedia : context.OutputMedia;
+            if (!context.MediaSucceeded ||
+                (hasPublishedMedia
+                    ? !context.HasUsablePublishedMedia()
+                    : !File.Exists(mediaFile)))
+            {
+                return DownloadStageResult.Failure(
+                    "download.validate.media",
+                    "The finalized media file is missing or invalid.");
+            }
+
+            if (!await _mediaStreamValidator.HasRequiredStreamsAsync(
+                    mediaFile!,
+                    context.NeedsAudio,
+                    context.NeedsVideo,
+                    cancellationToken).ConfigureAwait(true))
+            {
+                return DownloadStageResult.Failure(
+                    "download.validate.media",
+                    "The finalized media file is missing a required audio or video stream.");
+            }
         }
 
         if (context.NeedsDanmaku &&
@@ -34,9 +60,9 @@ internal sealed class ValidateStage : IDownloadPipelineStage
                     context.Input.DanmakuSettings.OutputFormat)
                 .Any(output => !context.HasPublished(output.Key) && !File.Exists(output.File)))
         {
-            return Task.FromResult(DownloadStageResult.Failure(
+            return DownloadStageResult.Failure(
                 "download.validate.danmaku",
-                "The requested danmaku file was not created."));
+                "The requested danmaku file was not created.");
         }
 
         if (context.NeedsSubtitle &&
@@ -44,27 +70,27 @@ internal sealed class ValidateStage : IDownloadPipelineStage
             context.SubtitleFiles.Any(subtitle =>
                 !context.HasPublished("subtitle:" + Path.GetFileName(subtitle)) && !File.Exists(subtitle)))
         {
-            return Task.FromResult(DownloadStageResult.Failure(
+            return DownloadStageResult.Failure(
                 "download.validate.subtitle",
-                "One or more requested subtitle files were not created."));
+                "One or more requested subtitle files were not created.");
         }
 
         if (context.NeedsCover &&
             !context.HasPublished("cover") && !context.HasPublished("page-cover") &&
             !File.Exists(context.CoverFile) && !File.Exists(context.PageCoverFile))
         {
-            return Task.FromResult(DownloadStageResult.Failure(
+            return DownloadStageResult.Failure(
                 "download.validate.cover",
-                "The requested cover files were not created."));
+                "The requested cover files were not created.");
         }
 
         if (context.PublishedArtifacts.Values.Any(path => !File.Exists(path)))
         {
-            return Task.FromResult(DownloadStageResult.Failure(
+            return DownloadStageResult.Failure(
                 "download.validate.published-missing",
-                "A recorded published artifact is missing."));
+                "A recorded published artifact is missing.");
         }
 
-        return Task.FromResult(DownloadStageResult.Success(Name));
+        return DownloadStageResult.Success(Name);
     }
 }

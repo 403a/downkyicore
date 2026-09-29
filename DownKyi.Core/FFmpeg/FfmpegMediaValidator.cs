@@ -50,34 +50,20 @@ internal sealed class FfmpegMediaValidator : IFfmpegMediaValidator
             return FfmpegMediaValidationResult.Failure("Expected source duration is missing or invalid.");
         }
 
-        var probe = await _processRunner
-            .RunAsync(FfmpegCommandFactory.BuildProbe(mediaFile), ProcessTimeout, cancellationToken)
+        var (document, probeFailure) = await ProbeAsync(mediaFile, cancellationToken)
             .ConfigureAwait(false);
-        if (!probe.Succeeded)
+        if (probeFailure != null)
         {
-            return FfmpegMediaValidationResult.Failure("ffprobe could not read the output.");
+            return FfmpegMediaValidationResult.Failure(probeFailure);
         }
 
-        FfprobeDocument? document;
-        try
-        {
-            document = JsonSerializer.Deserialize(probe.StandardOutput, FfprobeJsonContext.Default.FfprobeDocument);
-        }
-        catch (JsonException)
-        {
-            return FfmpegMediaValidationResult.Failure("ffprobe returned malformed JSON.");
-        }
-
-        if (document?.Streams?.Any(stream => string.Equals(
-                stream.CodecType,
-                "video",
-                StringComparison.OrdinalIgnoreCase)) != true)
+        if (!HasStream(document, "video"))
         {
             return FfmpegMediaValidationResult.Failure("Output has no video stream.");
         }
 
         if (!double.TryParse(
-                document.Format?.Duration,
+                document!.Format?.Duration,
                 NumberStyles.Float,
                 CultureInfo.InvariantCulture,
                 out var durationSeconds) ||
@@ -100,6 +86,25 @@ internal sealed class FfmpegMediaValidator : IFfmpegMediaValidator
         }
 
         return new FfmpegMediaValidationResult(true, duration, null);
+    }
+
+    public async Task<bool> HasRequiredStreamsAsync(
+        string mediaFile,
+        bool requireAudio,
+        bool requireVideo,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(mediaFile);
+        if (!File.Exists(mediaFile) || new FileInfo(mediaFile).Length == 0)
+        {
+            return false;
+        }
+
+        var (document, probeFailure) = await ProbeAsync(mediaFile, cancellationToken)
+            .ConfigureAwait(false);
+        return probeFailure == null &&
+               (!requireAudio || HasStream(document, "audio")) &&
+               (!requireVideo || HasStream(document, "video"));
     }
 
     internal static IReadOnlyList<TimeSpan> GetSeekPositions(TimeSpan expectedDuration)
@@ -125,6 +130,38 @@ internal sealed class FfmpegMediaValidator : IFfmpegMediaValidator
 
         return false;
     }
+
+    private async Task<(FfprobeDocument? Document, string? FailureReason)> ProbeAsync(
+        string mediaFile,
+        CancellationToken cancellationToken)
+    {
+        var probe = await _processRunner
+            .RunAsync(FfmpegCommandFactory.BuildProbe(mediaFile), ProcessTimeout, cancellationToken)
+            .ConfigureAwait(false);
+        if (!probe.Succeeded)
+        {
+            return (null, "ffprobe could not read the output.");
+        }
+
+        try
+        {
+            return (
+                JsonSerializer.Deserialize(
+                    probe.StandardOutput,
+                    FfprobeJsonContext.Default.FfprobeDocument),
+                null);
+        }
+        catch (JsonException)
+        {
+            return (null, "ffprobe returned malformed JSON.");
+        }
+    }
+
+    private static bool HasStream(FfprobeDocument? document, string codecType) =>
+        document?.Streams?.Any(stream => string.Equals(
+            stream.CodecType,
+            codecType,
+            StringComparison.OrdinalIgnoreCase)) == true;
 }
 
 internal sealed class FfprobeDocument
