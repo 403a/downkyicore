@@ -31,16 +31,16 @@ change.
 - Desktop wiring starts at `src/DownKyi.Desktop/Composition/DesktopComposition.cs`;
   follow its local composition call into the affected module, then inspect that
   module's contracts, constructors and focused tests.
-- Release and formal local verification policy: `docs/refactoring-live-plan.md`
-  and `docs/operations/verification-and-rollback.md`.
+- Release and completion policy: `docs/refactoring-live-plan.md`; formal local
+  commands and rollback procedure: `docs/operations/verification-and-rollback.md`.
 - Bilibili endpoints, WBI and JSON contracts:
   `docs/operations/bilibili-api-audit.md`.
 - Test projects, the formal runner and failure diagnostics:
   `docs/testing/README.md`.
 - External binaries, dependencies and release maintenance:
   `docs/maintenance.md`.
-- Accepted target designs: `docs/design-docs/`; task-specific execution plans:
-  `docs/exec-plans/`; product behavior: `docs/product-specs/`.
+- Accepted non-derived decisions: `docs/design-docs/`; active work: GitHub Issue
+  #137; user-facing behavior: `README.md`; release history: `CHANGELOG.md`.
 
 Open the relevant entry only when the task touches that domain. Stable current
 truth belongs in architecture documents; target designs and baseline snapshots
@@ -103,10 +103,11 @@ must not be reported as already implemented.
 ## Verification
 
 Use the smallest focused test while iterating. Before push, run the formal
-commands in `docs/refactoring-live-plan.md` sequentially in one worktree. At
-minimum, behavioral changes require strict Release build, the applicable test
-projects through `DownKyi.CentralTestRunner`, format and `git diff --check`.
-Process failures retain the runner's lightweight flight-recorder evidence.
+commands in `docs/operations/verification-and-rollback.md` sequentially in one
+worktree. At minimum, behavioral changes require strict Release build, the
+applicable test projects through `DownKyi.CentralTestRunner`, format and
+`git diff --check`. Process failures retain the runner's lightweight
+flight-recorder evidence.
 
 Do not weaken analyzers, relevant architecture tests, secret scanning or
 platform checks to make a change green. A passing build alone does not prove

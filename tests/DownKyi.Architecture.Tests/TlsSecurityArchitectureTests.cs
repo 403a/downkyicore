@@ -274,14 +274,14 @@ public sealed class TlsSecurityArchitectureTests
             "Services",
             "Download",
             "Aria2TransferBackend.cs");
-        var baseline = ReadProductionSource(
-            "docs",
-            "operations",
-            "aria2-security-baseline.json");
         var tlsRuntime = ReadProductionSource(
             "tests",
             "DownKyi.Tests",
             "Aria2TlsTestRuntime.cs");
+        var tlsIntegration = ReadProductionSource(
+            "tests",
+            "DownKyi.Tests",
+            "Aria2TlsIntegrationTests.cs");
 
         Assert.Contains("uri.UserInfo", applicationSettings, StringComparison.Ordinal);
         Assert.Contains(
@@ -293,11 +293,13 @@ public sealed class TlsSecurityArchitectureTests
             backend.IndexOf("ChangeOptionAsync(gid, options)", StringComparison.Ordinal)
             < backend.IndexOf("UnpauseAsync(gid)", StringComparison.Ordinal),
             "Existing aria2 task headers must be replaced before the task is resumed.");
-        Assert.Contains("windows-system-root-store", baseline, StringComparison.Ordinal);
         Assert.Contains("windows-local-machine-root-store", tlsRuntime, StringComparison.Ordinal);
         Assert.Contains("windows-current-user-root-store", tlsRuntime, StringComparison.Ordinal);
-        Assert.Contains("linux-system-ca-store", baseline, StringComparison.Ordinal);
-        Assert.Contains("macos-system-keychain", baseline, StringComparison.Ordinal);
+        Assert.Contains("linux-system-ca-store", tlsRuntime, StringComparison.Ordinal);
+        Assert.Contains("macos-system-keychain", tlsRuntime, StringComparison.Ordinal);
+        Assert.Contains("return \"WinTLS\"", tlsIntegration, StringComparison.Ordinal);
+        Assert.Contains("return \"OpenSSL\"", tlsIntegration, StringComparison.Ordinal);
+        Assert.Contains("return \"AppleTLS\"", tlsIntegration, StringComparison.Ordinal);
     }
 
     [Fact]

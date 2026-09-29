@@ -221,7 +221,6 @@ public sealed class AgentEnvironmentArchitectureTests
             "ARCHITECTURE.md",
             "docs/design-docs",
             "docs/exec-plans",
-            "docs/product-specs",
             "docs/testing",
             "docs/operations");
 
@@ -273,7 +272,7 @@ public sealed class AgentEnvironmentArchitectureTests
             "tests/DownKyi.Architecture.Tests/ProjectDependencyTests.cs",
             "tests/DownKyi.Architecture.Tests/ModuleBoundaryBaselineTests.cs",
             "docs/testing/module-boundary-ratchets.md",
-            "docs/design-docs/module-boundary-naming-audit.md");
+            "script/audit-module-boundaries.ps1");
 
         var ratchets = Read("tests/DownKyi.Architecture.Tests/ModuleBoundaryBaselineTests.cs");
         Assert.Contains("CoreHasNoUiOrQrRenderingDependencies", ratchets, StringComparison.Ordinal);

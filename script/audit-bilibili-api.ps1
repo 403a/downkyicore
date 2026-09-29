@@ -1,14 +1,79 @@
 [CmdletBinding()]
 param(
     [switch]$ConfirmLive,
+    [switch]$GenerateSourceInventory,
     [string]$OutputPath
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+if ($ConfirmLive -and $GenerateSourceInventory) {
+    throw 'Choose either source inventory generation or an anonymous live audit.'
+}
+
+if ($GenerateSourceInventory) {
+    $repositoryRoot = Split-Path -Parent $PSScriptRoot
+    $sourceRoot = Join-Path $repositoryRoot 'DownKyi.Core/BiliApi'
+    $endpointPattern = [regex]'https://(?<host>(?:api|passport|space)\.bilibili\.com)(?<path>/(?:x|pgc|pugv|ajax)/[^"?]*)'
+    $endpointLocations = @{}
+
+    foreach ($file in Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Filter '*.cs') {
+        if ($file.FullName -match '[\\/]Models[\\/]') {
+            continue
+        }
+
+        $lines = Get-Content -LiteralPath $file.FullName
+        for ($index = 0; $index -lt $lines.Count; $index++) {
+            if ($lines[$index].TrimStart().StartsWith('//', [StringComparison]::Ordinal)) {
+                continue
+            }
+
+            foreach ($match in $endpointPattern.Matches($lines[$index])) {
+                $endpoint = "$($match.Groups['host'].Value)$($match.Groups['path'].Value)"
+                if (-not $endpointLocations.ContainsKey($endpoint)) {
+                    $endpointLocations[$endpoint] = [System.Collections.Generic.List[object]]::new()
+                }
+
+                $relativePath = [IO.Path]::GetRelativePath($repositoryRoot, $file.FullName).Replace('\', '/')
+                $endpointLocations[$endpoint].Add([pscustomobject][ordered]@{
+                    Path = $relativePath
+                    Line = $index + 1
+                })
+            }
+        }
+    }
+
+    $inventory = [ordered]@{
+        SchemaVersion = 1
+        SourceRoot = 'DownKyi.Core/BiliApi'
+        Endpoints = @(
+            foreach ($endpoint in ($endpointLocations.Keys | Sort-Object)) {
+                [pscustomobject][ordered]@{
+                    Endpoint = $endpoint
+                    Locations = @($endpointLocations[$endpoint])
+                }
+            }
+        )
+    }
+
+    $inventoryJson = $inventory | ConvertTo-Json -Depth 6
+    if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
+        $resolvedOutput = [IO.Path]::GetFullPath($OutputPath)
+        $parent = [IO.Path]::GetDirectoryName($resolvedOutput)
+        if (-not [string]::IsNullOrWhiteSpace($parent)) {
+            [IO.Directory]::CreateDirectory($parent) | Out-Null
+        }
+
+        Set-Content -LiteralPath $resolvedOutput -Value $inventoryJson -Encoding utf8NoBOM
+    }
+
+    $inventoryJson
+    exit 0
+}
+
 if (-not $ConfirmLive) {
-    throw 'This script sends anonymous requests to public Bilibili endpoints. Re-run with -ConfirmLive.'
+    throw 'Use -GenerateSourceInventory, or explicitly authorize anonymous requests with -ConfirmLive.'
 }
 
 $headers = @{
