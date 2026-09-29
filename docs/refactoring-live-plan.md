@@ -30,27 +30,9 @@ PRs do not update this file merely because their work state changed.
 
 ## Verification
 
-Run sequentially in one worktree:
-
-```powershell
-dotnet restore ./DownKyi.sln
-pwsh ./script/validate-release-version.ps1
-dotnet build ./DownKyi.sln -c Release --no-restore --no-incremental `
-  -p:EnableNETAnalyzers=true -p:AnalysisMode=All `
-  -p:EnforceCodeStyleInBuild=true -p:TreatWarningsAsErrors=true `
-  -p:CodeAnalysisTreatWarningsAsErrors=true -p:UseSharedCompilation=false
-pwsh ./script/test-solution.ps1 -Configuration Release -NoRestore -NoBuild
-dotnet format ./DownKyi.sln --verify-no-changes --no-restore
-pwsh ./script/audit-module-boundaries.ps1 `
-  -OutputPath ./artifacts/architecture/module-boundary-audit.json
-$workflowFiles = Get-ChildItem ./.github/workflows -Filter *.yml | `
-  Select-Object -ExpandProperty FullName
-go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -- $workflowFiles
-dotnet package list --project ./DownKyi.sln --vulnerable --include-transitive
-dotnet package list --project ./DownKyi.sln --deprecated --include-transitive
-pwsh ./script/scan-secrets.ps1
-git diff --check
-```
+The canonical commands, order and rollback procedure live in
+`docs/operations/verification-and-rollback.md`. Run them sequentially in one
+worktree; this policy intentionally does not duplicate the command list.
 
 A result is valid only when its runtime, OS, architecture, exact commit and
 dirty-worktree state are recorded. Cross-machine timings are not compared

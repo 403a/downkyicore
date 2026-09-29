@@ -1,125 +1,34 @@
 # aria2 Transport And Control Security
 
-Status: required runtime contract
-Last updated: 2026-08-03
+Status: required runtime contract. DownKyi owns the packaged aria2 child and its loopback JSON-RPC channel；custom aria2 是外部服務，DownKyi 只發 RPC，不負責 start、kill 或 configure。
 
-## Security Boundary
+## Trust and control invariant
 
-DownKyi owns the packaged aria2 child process and its loopback JSON-RPC control
-channel. A custom aria2 server is external: DownKyi sends RPC requests but does
-not start, kill or configure that process.
+- Certificate 與 hostname validation 永遠啟用。Production source、workflow 與 script 禁止 `--check-certificate=false`、insecure TLS callback、`curl -k` 或同類 bypass。
+- Packaged RPC 只 bind loopback，禁止 wildcard origin；每次 runtime 產生新 port 與 256-bit secret。只有 supervised child 仍存活時 readiness 才成立，shutdown 也只能處理該 child。
+- RPC secret 寫入唯一 temporary config；Unix mode 必須是 `0600`。Startup failure／shutdown 先 bounded wait、必要時 kill-and-wait，child 結束後才刪 config。Secret 與 Cookie 不得出現在 process arguments。
+- `AriaClient` 只允許 loopback HTTP；non-loopback 必須 HTTPS，拒絕 user info 與 RPC redirect。
+- Transfer header 是 task-local。Cookie 只可送往 exact HTTPS `bilibili.com` host／subdomain。Fork 在實際 follow `Location` 前拒絕 HTTPS downgrade，並在送出 sensitive header 後拒絕 cross-origin redirect；header 中的 CR、LF、NUL 或 control character 也必須拒絕。
+- Packaged binary 在 process start 前驗 sidecar SHA-256。Packaged／custom endpoint 都必須從 `aria2.getVersion().enabledFeatures` 回報 `downkyi-secure-redirect-v2`；缺少 integrity 或 capability 時 fail closed。Generic aria2／Motrix 不受支援。
+- RPC error 33 固定表示 HTTPS downgrade rejection，34 表示 sensitive-header cross-origin rejection。TLS failure 保持 typed terminal failure，不得轉 empty data、HTTP downgrade 或 automatic retry。
 
-```mermaid
-flowchart LR
-    Settings["Validated network settings"]
-    Endpoint["Fresh loopback port + 256-bit secret"]
-    SecretFile["Restricted temporary aria2 config"]
-    Child["Tracked packaged aria2 child"]
-    Rpc["AriaClient JSON-RPC"]
-    Policy["Per-task host header policy"]
-    Media["HTTPS media endpoint"]
-    Trust["Operating-system or packaged CA trust"]
+## Legacy `UseSsl` migration
 
-    Settings --> Endpoint
-    Endpoint --> SecretFile
-    SecretFile --> Child
-    Endpoint --> Rpc
-    Rpc --> Child
-    Policy --> Rpc
-    Child --> Media
-    Trust --> Child
-```
+`UseSsl` 不是 current setting。`NetworkSettings` 只保留 private setter-only migration member：舊 JSON 可讀、runtime 仍強制 HTTPS，下一次 atomic settings write 移除該欄位。此 migration 不得改動 SQLite tasks、GID、session、partial map 或 resume state。
 
-## Required Behavior
+## Six-RID executable evidence
 
-- aria2 certificate and hostname validation stays enabled. Production source,
-  workflows and scripts must not contain `--check-certificate=false`, insecure
-  TLS callbacks, `curl -k` or equivalent bypasses.
-- Packaged RPC binds loopback only and disallows wildcard origins. Its port and
-  secret are regenerated for every runtime. Startup succeeds only while the
-  supervised child is alive; shutdown addresses only that tracked child.
-- The RPC secret is written to a unique temporary config with mode `0600` on
-  Unix. Startup failure and shutdown first wait for the supervised child to
-  exit, including a bounded kill-and-wait fallback, and only then remove the
-  config. Neither the secret nor Cookie is present in
-  `ProcessStartInfo.ArgumentList`.
-- `AriaClient` permits `http` only for loopback. Non-loopback endpoints require
-  `https`; URI user information and redirects are rejected.
-- Every transfer receives an isolated header option. Cookie is eligible only
-  for exact HTTPS `bilibili.com` or its subdomains. The resolver performs a
-  defense-in-depth HTTPS preflight, but it is not the final redirect boundary.
-  The DownKyi aria2 fork rejects HTTPS-to-non-HTTPS redirects while processing
-  the actual `Location`, before another request is emitted. It also rejects an
-  actual cross-origin HTTPS redirect after Cookie, Authorization,
-  Proxy-Authorization, token or API-key material was emitted. A credentialed
-  same-origin HTTPS redirect remains valid. Header values containing CR, LF,
-  NUL or other control characters are rejected.
-- Packaged aria2 starts only after its SHA-256 sidecar matches the executable.
-  Both packaged and custom endpoints must report
-  `downkyi-secure-redirect-v2` through `aria2.getVersion().enabledFeatures`;
-  missing integrity or capability evidence fails closed. Consequently, the
-  Custom Aria setting supports only a DownKyi-compatible aria2 fork that
-  advertises this capability. Generic upstream aria2 and Motrix are not
-  supported endpoints; the setting UI and bootstrap diagnostic must state this
-  requirement rather than presenting them as generic-compatible alternatives.
-- RPC error code `33` identifies HTTPS downgrade rejection and `34` identifies
-  sensitive-header cross-origin rejection. These machine codes remain stable
-  when aria2 exhausts a URI and replaces the human-readable status message.
-- TLS failures receive a distinct typed classification and visible localized
-  status. They are not converted to generic empty data and never trigger HTTP
-  downgrade.
+`aria2-tls-security` quality job 必須以 manifest-pinned real binary 覆蓋六個 RID。Case owner 是 `Aria2TlsIntegrationTests`，至少保護：trusted download／resume、RPC control、unknown／expired／not-yet-valid CA、hostname／SAN／chain failure、downgrade、credentialed cross-origin redirect、以及 TLS failure 後 partial preservation。它也必須證明失敗不會觸發 downgrade 或第二套 retry。
 
-## Legacy `UseSsl` Migration
+| Platform | TLS backend | Trust policy |
+| --- | --- | --- |
+| Windows | WinTLS | elevated runner 用 LocalMachine Root；否則 CurrentUser Root；fixture cert 必須移除 |
+| Linux | OpenSSL | temporary system CA；production default discovery，不傳 `--ca-certificate` |
+| macOS | AppleTLS | System keychain；bounded install／remove commands |
 
-`UseSsl` is not a current setting and has no production getter, UI control or
-runtime branch. `NetworkSettings` retains a private, setter-only JSON migration
-member so old files still deserialize. Loading the marker schedules a normal
-settings rewrite; the new serializer cannot emit the field.
+每個 case 的 report 只保存 environment metadata、backend、aria2 version、case 與 sanitized diagnostic。禁止 header value、request URL、personal path、Cookie、RPC token 或 account identifier。
 
-```text
-old settings contain UseSsl=No
-  -> compatibility setter records presence only
-  -> runtime still requires HTTPS and certificate validation
-  -> next atomic settings write omits UseSsl
-```
-
-SQLite tasks, GIDs, aria2 session files, partial-file maps and download resume
-state are outside this migration and remain byte/contract compatible.
-
-## Real TLS Matrix
-
-The `aria2-tls-security` quality job runs the actual manifest-pinned binary for
-all six RIDs against a local deterministic certificate authority. It verifies:
-
-- trusted download, split/hash, task headers, redirects and resume;
-- RPC add, status and force-remove;
-- unknown and self-signed CA;
-- expired and not-yet-valid certificates;
-- hostname mismatch and missing SAN/wrong CN;
-- incomplete chain;
-- trusted redirect to an untrusted endpoint;
-- an explicit later application attempt retaining the partial file after TLS
-  failure, without an automatic TLS retry or downgrade.
-- preflight-safe/actual-GET downgrade, HEAD-safe/GET-downgrade, Range-only
-  downgrade and second-attempt downgrade, each with zero HTTP target requests;
-- same-origin and cross-origin HTTPS redirects, plus zero cross-origin
-  connections for Cookie, Authorization, Proxy-Authorization, token and API-key
-  cases.
-
-Linux installs the fixture root temporarily into the system CA store and starts
-aria2 without `--ca-certificate`, so the trusted case exercises the same default
-trust discovery path used by production. An elevated Windows runner uses
-LocalMachine Root; a non-elevated runner selects CurrentUser Root before any
-store write. Both are Windows system trust stores used by WinTLS. macOS uses
-the System keychain. Each registration is removed during test teardown.
-
-Each independently discoverable case writes one report fragment containing only
-environment metadata, backend, aria2 version, its case name and pass/fail
-diagnostics. Header names may identify the tested policy;
-header values, request URLs, filesystem paths, Cookie values, RPC tokens and
-account identifiers are forbidden.
-
-For a local packaged binary:
+本機 real-binary gate：
 
 ```powershell
 $env:DOWNKYI_ARIA2_BINARY = '<absolute aria2c path>'
@@ -132,35 +41,25 @@ pwsh ./script/test-project.ps1 `
   -ResultsDirectory ./artifacts/test-results/aria2-local
 ```
 
-## External Binary Evidence
+## Provenance ownership
 
-The independent source repository is
-`https://github.com/crazysmile-PhD/downkyi-aria2`. The security branch is based
-on official aria2 `release-1.37.0` commit
-`02f2d0d8472b3c38c29b4dba8c75ebd5fdd2899a`; its reviewed source commit is
-`9938788f7e62af0530a1b28ece752e1de1fd0d46`. The normal-context canonical
-patch SHA-256 is
-`1234523d1dadedf2342142b656e64b4c67cbca6545afebc584d50f39a229d094`.
-`source-lock.json` in the build repository pins those commits, the patch, zlib
-1.3.2 and OpenSSL 3.5.7 with SHA-256 digests. Builds never follow the source
-branch head.
+| Fact | Authoritative owner |
+| --- | --- |
+| Version、build repository／tag／commit、RID URL、archive／binary SHA-256 | `script/assets/external-assets.json` |
+| Official base、reviewed source、canonical patch、zlib／OpenSSL source locks | build repository 的 `source-lock.json` |
+| Required feature、trust policy、provenance limitations | 本文件 |
+| TLS backend mapping | `tests/DownKyi.Tests/Aria2TlsIntegrationTests.cs` |
+| System trust install／teardown | `tests/DownKyi.Tests/Aria2TlsTestRuntime.cs` |
+| 單次執行的 pass/fail、environment、CI URL | sanitized CI artifact |
 
-The six immutable assets were published from build commit
-`94299bd9bde28a83bcb31346ec1d5f8131d2ec0d` under tag
-`1.37.0-downkyi.2`. Their archive and executable SHA-256 values are pinned in
-`script/assets/external-assets.json` and independently match the release
-sidecars and build evidence. This is source and artifact identity evidence,
-not reproducible-build or signed-provenance proof; no SBOM or signed provenance
-is currently available. The original aria2 fork and local mirror bundle remain
-preserved until the full integration gate is green.
+Source repository 是 `crazysmile-PhD/downkyi-aria2`；fork line／feature 名稱為 `downkyi-secure-redirect-v2`。Official `release-1.37.0` base commit 是 `02f2d0d8472b3c38c29b4dba8c75ebd5fdd2899a`，reviewed source commit 是 `9938788f7e62af0530a1b28ece752e1de1fd0d46`，canonical patch SHA-256 是 `1234523d1dadedf2342142b656e64b4c67cbca6545afebc584d50f39a229d094`。
 
-## Incident Checks
+Current build identity 由 manifest 固定；source／artifact identity 不等於 reproducible build 或 signed provenance。目前沒有完整 cross-platform reproducible-build 證據、upstream SBOM 或 signed build provenance。
 
-1. Preserve the sanitized TLS report and CI run URL.
-2. Confirm no `aria2c` child remains after the test or application exits.
-3. Run `pwsh ./script/scan-secrets.ps1` and inspect process arguments without
-   recording their contents.
-4. Classify certificate errors separately from DNS, timeout, HTTP status,
-   storage and cancellation failures.
-5. Do not ask users to disable TLS. Fix trust-store packaging or the upstream
-   endpoint and rerun the affected RID.
+## Incident checks
+
+1. 保存 sanitized TLS report 與 CI URL。
+2. 確認 test／app 結束後沒有殘留 `aria2c` child。
+3. 執行 `pwsh ./script/scan-secrets.ps1`；可檢查 process argument 結構，不記錄內容。
+4. 將 certificate failure 與 DNS、timeout、HTTP status、storage、cancellation 分類。
+5. 不要求使用者關閉 TLS；修 trust-store packaging 或 endpoint，再重跑受影響 RID。

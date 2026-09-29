@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -8,14 +9,40 @@ public sealed partial class BilibiliApiInventoryArchitectureTests
     private static readonly string RepositoryRoot = FindRepositoryRoot();
 
     [Fact]
-    public void EveryHardCodedBilibiliApiEndpointIsRecordedInTheAudit()
+    public void GeneratedSourceInventoryMatchesEveryHardCodedBilibiliApiEndpoint()
     {
-        var report = File.ReadAllText(Path.Combine(
-            RepositoryRoot,
-            "docs",
-            "operations",
-            "bilibili-api-audit.md"));
-        var endpoints = Directory
+        var inventory = RunAuditScript(
+            "audit-bilibili-api.ps1",
+            "-GenerateSourceInventory");
+        using var document = JsonDocument.Parse(inventory);
+        var root = document.RootElement;
+        Assert.Equal(1, root.GetProperty("SchemaVersion").GetInt32());
+        Assert.Equal("DownKyi.Core/BiliApi", root.GetProperty("SourceRoot").GetString());
+
+        var generatedEndpoints = root.GetProperty("Endpoints")
+            .EnumerateArray()
+            .Select(item => item.GetProperty("Endpoint").GetString())
+            .ToArray();
+        foreach (var item in root.GetProperty("Endpoints").EnumerateArray())
+        {
+            var endpoint = item.GetProperty("Endpoint").GetString();
+            var locations = item.GetProperty("Locations").EnumerateArray().ToArray();
+            Assert.NotEmpty(locations);
+            foreach (var location in locations)
+            {
+                var relativePath = location.GetProperty("Path").GetString();
+                var lineNumber = location.GetProperty("Line").GetInt32();
+                var sourcePath = Path.Combine(RepositoryRoot, relativePath!);
+                var sourceLines = File.ReadAllLines(sourcePath);
+                Assert.InRange(lineNumber, 1, sourceLines.Length);
+                Assert.Contains(
+                    $"https://{endpoint}",
+                    sourceLines[lineNumber - 1],
+                    StringComparison.Ordinal);
+            }
+        }
+
+        var sourceEndpoints = Directory
             .EnumerateFiles(
                 Path.Combine(RepositoryRoot, "DownKyi.Core", "BiliApi"),
                 "*.cs",
@@ -27,13 +54,8 @@ public sealed partial class BilibiliApiInventoryArchitectureTests
             .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal)
             .ToArray();
-        var missing = endpoints
-            .Where(endpoint => !report.Contains($"`{endpoint}`", StringComparison.Ordinal))
-            .ToArray();
 
-        Assert.True(
-            missing.Length == 0,
-            $"Bilibili API audit is missing source endpoints: {string.Join(", ", missing)}");
+        Assert.Equal(sourceEndpoints, generatedEndpoints);
     }
 
     [Fact]
@@ -119,23 +141,29 @@ public sealed partial class BilibiliApiInventoryArchitectureTests
     }
 
     [Fact]
-    public void AuthenticatedLiveProbeArtifactIsExplicitAndSanitized()
+    public void AuthenticatedLiveProbeContractIsExplicitSanitizedAndGeneratedOnDemand()
     {
         var script = File.ReadAllText(Path.Combine(
             RepositoryRoot,
             "script",
             "audit-bilibili-authenticated-api.ps1"));
-        var artifact = File.ReadAllText(Path.Combine(
+        var committedSnapshot = Path.Combine(
             RepositoryRoot,
             "docs",
             "operations",
-            "bilibili-authenticated-api-audit.json"));
+            "bilibili-authenticated-api-audit.json");
+        var artifact = RunAuditScript(
+            "audit-bilibili-authenticated-api.ps1",
+            "-GenerateContractSample");
 
         Assert.Contains("[switch]$ConfirmAuthenticatedLive", script, StringComparison.Ordinal);
+        Assert.Contains("[switch]$GenerateContractSample", script, StringComparison.Ordinal);
         Assert.Contains("$environmentVariableName = 'BILIBILI_TEST_COOKIE'", script, StringComparison.Ordinal);
         Assert.Contains("-EnvironmentVariableLoaded $true", script, StringComparison.Ordinal);
+        Assert.Contains("$navJson.data.isLogin -eq $true", script, StringComparison.Ordinal);
         Assert.DoesNotContain("GetLoginInfoCookies", script, StringComparison.Ordinal);
         Assert.Equal(1, SetContentPattern().Count(script));
+        Assert.False(File.Exists(committedSnapshot));
 
         foreach (var sensitiveName in new[]
                  {
@@ -152,8 +180,8 @@ public sealed partial class BilibiliApiInventoryArchitectureTests
 
         using var document = JsonDocument.Parse(artifact);
         var root = document.RootElement;
-        Assert.True(root.GetProperty("EnvironmentVariableLoaded").GetBoolean());
-        Assert.True(root.GetProperty("NavigationGatePassed").GetBoolean());
+        Assert.False(root.GetProperty("EnvironmentVariableLoaded").GetBoolean());
+        Assert.False(root.GetProperty("NavigationGatePassed").GetBoolean());
         Assert.Equal(
             [
                 "Architecture",
@@ -194,21 +222,54 @@ public sealed partial class BilibiliApiInventoryArchitectureTests
                     .ToArray());
             Assert.StartsWith("/", result.GetProperty("Path").GetString(), StringComparison.Ordinal);
             Assert.DoesNotContain("?", result.GetProperty("Path").GetString(), StringComparison.Ordinal);
-            Assert.Equal(200, result.GetProperty("HttpStatus").GetInt32());
-            Assert.Equal(0, result.GetProperty("BilibiliCode").GetInt32());
-            Assert.True(result.GetProperty("ResponseStructureMatchesExpected").GetBoolean());
-            Assert.True(result.GetProperty("RequiredFieldsPresent").GetBoolean());
-            Assert.False(result.GetProperty("ContractDrift").GetBoolean());
-            Assert.Equal("passed", result.GetProperty("Outcome").GetString());
+            Assert.Equal(JsonValueKind.Null, result.GetProperty("HttpStatus").ValueKind);
+            Assert.Equal(JsonValueKind.Null, result.GetProperty("BilibiliCode").ValueKind);
+            Assert.Equal(JsonValueKind.Null, result.GetProperty("ResponseStructureMatchesExpected").ValueKind);
+            Assert.Equal(JsonValueKind.Null, result.GetProperty("RequiredFieldsPresent").ValueKind);
+            Assert.Equal(JsonValueKind.Null, result.GetProperty("ContractDrift").ValueKind);
+            Assert.Equal("indeterminate", result.GetProperty("Outcome").GetString());
             Assert.Equal(JsonValueKind.Null, result.GetProperty("ErrorType").ValueKind);
         }
+    }
 
-        var navigation = Assert.Single(results, result =>
-            string.Equals(
-                result.GetProperty("Path").GetString(),
-                "/x/web-interface/nav",
-                StringComparison.Ordinal));
-        Assert.False(navigation.GetProperty("RequiresLogin").GetBoolean());
+    private static string RunAuditScript(string scriptName, string mode)
+    {
+        var outputPath = Path.Combine(
+            Path.GetTempPath(),
+            $"downkyi-{Guid.NewGuid():N}.json");
+        try
+        {
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = "pwsh",
+                WorkingDirectory = RepositoryRoot,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+            startInfo.ArgumentList.Add("-NoProfile");
+            startInfo.ArgumentList.Add("-File");
+            startInfo.ArgumentList.Add(Path.Combine(RepositoryRoot, "script", scriptName));
+            startInfo.ArgumentList.Add(mode);
+            startInfo.ArgumentList.Add("-OutputPath");
+            startInfo.ArgumentList.Add(outputPath);
+
+            using var process = Process.Start(startInfo);
+            Assert.NotNull(process);
+            var standardOutput = process.StandardOutput.ReadToEnd();
+            var standardError = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            Assert.True(
+                process.ExitCode == 0,
+                $"{scriptName} {mode} failed: {standardError}{standardOutput}");
+
+            return File.ReadAllText(outputPath);
+        }
+        finally
+        {
+            File.Delete(outputPath);
+        }
     }
 
     private static bool IsOptionalEnvelopeAttribute(string line)

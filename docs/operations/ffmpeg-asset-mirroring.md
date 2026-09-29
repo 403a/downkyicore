@@ -1,136 +1,55 @@
 # FFmpeg Asset Mirroring
 
-## Ownership boundary
+## Ownership
 
-`script/assets/external-assets.json` is the sole production owner of every
-FFmpeg/ffprobe URL and SHA-256. Package scripts only consume that manifest;
-they do not query an upstream release API, resolve `latest`, select a version,
-or fall back to an unverified executable.
+`script/assets/external-assets.json` 是 production FFmpeg／ffprobe version、URL、SHA-256、RID 與 provenance 的唯一 owner。Package scripts 只能消費 manifest；不得 query upstream、resolve `latest`、自行選版或 fallback 到未驗證 executable。
 
-The updater is the only component allowed to query upstream releases. Its
-normal source policy is deliberately platform-specific:
+Updater workflow 是唯一可查詢 upstream release 的 owner：
 
 | RID | Discovery source | Required flavor |
 | --- | --- | --- |
-| `win-x64`, `linux-x64`, `linux-arm64` | `BtbN/FFmpeg-Builds` GitHub Releases API | fixed `autobuild-*`, static GPL archive, `ffmpeg` and `ffprobe` |
-| `win-x86` | `yt-dlp/FFmpeg-Builds` GitHub Releases API during the first mirror import | fixed `autobuild-*`, GPL archive with `ffprobe` |
-| `osx-x64`, `osx-arm64` | existing reviewed martin-riedl pinned source during the first mirror import | separate FFmpeg/ffprobe archives, preserved without HTML scraping |
+| `win-x64`、`linux-x64`、`linux-arm64` | `BtbN/FFmpeg-Builds` Releases API | fixed `autobuild-*`、static GPL、FFmpeg + ffprobe |
+| `win-x86` | reviewed `yt-dlp/FFmpeg-Builds` source | fixed GPL archive with ffprobe |
+| `osx-x64`、`osx-arm64` | reviewed martin-riedl pinned source | separate FFmpeg／ffprobe archives；禁止 HTML scraping |
 
-The scheduled updater changes only the BtbN RIDs. martin-riedl is not scraped:
-it does not publish a suitable release API, so a macOS refresh is a deliberate
-operator-reviewed bootstrap instead of a fragile HTML parser.
+Scheduled updater 只自動更新 BtbN RIDs；win-x86／macOS source 變更需要 operator-reviewed bootstrap。
 
-## Immutable mirror policy
+## Immutable mirror invariant
 
-The mirror repository is `crazysmile-PhD/downkyi-runtime-assets`. It must be a
-dedicated, project-owned repository with GitHub Immutable Releases enabled
-before the first bootstrap. Immutability applies only to releases published
-after the setting is enabled. Each update
-creates one new GitHub Release named `ffmpeg-<fixed-upstream-version>` and
-uploads filenames that contain the RID, fixed upstream tag, and SHA-256 prefix.
-The workflow creates a draft, uploads every archive, and only then publishes
-the release. It never modifies or overwrites an existing release or asset,
-never uses `latest`, and the repository retention policy is `never-delete`.
-If a downstream manifest-PR step fails after publication, a retry may resume
-only after the existing release reads back as immutable and every expected
-asset name, size, and digest exactly matches the verified candidate.
-The manifest update is fail closed unless the release API reads the published
-release back with `immutable=true`.
+- Mirror repository 固定為 `crazysmile-PhD/downkyi-runtime-assets`，retention 是 `never-delete`，且必須啟用 GitHub Immutable Releases。
+- 每次 candidate 使用新的 `ffmpeg-<fixed-upstream-version>` tag。Filename 必須含 RID、fixed upstream tag 與 digest prefix；禁止 `latest`、覆寫或刪除歷史 asset。
+- Workflow 先驗 publisher API 的 immutable tag／asset name／size／digest，再 download、rehash、extract 並確認 FFmpeg／ffprobe 可執行；native runner 另驗 version 和適用的 required encoder。
+- 只有全部 RID 通過後才 publish mirror。Manifest mutation 前必須由 release API read back `immutable=true`，並再次比對每個 asset 的 name、size、digest。
+- Manifest PR 只能修改 `script/assets/external-assets.json`，base 必須和提供 manifest 的 checkout branch 相同；workflow 不可直接 push `main`。
+- 每個 manifest entry 保留 upstream repository／release／file／URL、mirror time、target RID 與 build identity。舊 tag／asset 是舊 DownKyi commit 的 release input，不得 prune。
 
-Every production asset entry must use a fixed URL below that repository's
-`releases/download/<tag>/` path, include an archive SHA-256, and retain
-provenance: upstream repository/release/file/URL, mirror timestamp, target RID,
-and FFmpeg build identifier. Historical tags and assets are release inputs for
-old DownKyi commits and must not be pruned.
+Validation、download、checksum、extraction、capability、upload 或 preflight failure 都必須在 manifest mutation 前 fail closed。Publish 後 PR 失敗可以留下 unreferenced immutable release 供檢查，但 retry 只有在完整 read-back 相同時才能重用。
 
-## Updater flow
+## Permissions
 
-`.github/workflows/update-ffmpeg-assets.yml` runs weekly from the repository
-default branch. GitHub schedules always use the latest default-branch commit,
-and a directly dispatched workflow must exist on that branch. Before this
-workflow reaches `main`, bootstrap it through the existing **Build** workflow:
-select `release/v1.1.1-integration`, set `update_ffmpeg_assets=true`, and set
-`bootstrap_ffmpeg_assets=true`. The Build workflow is already registered on
-the default branch and calls the updater from the selected integration ref.
-The updater verifies that its checkout branch and manifest PR base are equal.
+- `RUNTIME_ASSETS_TOKEN`：只對 runtime-assets repository 有 Contents read/write，用於建立 release／upload asset；不得有 DownKyi source permission。
+- `DOWNKYI_AUTOMATION_TOKEN`：只對 downkyicore 有 Contents 與 Pull requests read/write，用於 manifest PR。不能用它寫 runtime-assets。
+- Normal build／package downloader 不需要這兩個 token。
 
-The updater then:
+## Recovery
 
-1. Discover the newest complete, non-`latest` GitHub release using the
-   publisher API and its per-asset SHA-256 digest.
-2. Download the selected archives, verify size and SHA-256, extract them, and
-   require non-empty `ffmpeg` and `ffprobe` files.
-3. On native runners run `ffmpeg -version`, `ffprobe -version`, and where
-   applicable verify the required `h264_nvenc` encoder is compiled in.
-4. Only after every matrix validation job succeeds and repository release
-   immutability is confirmed, create a draft mirror release, upload the exact
-   verified archives, and publish it.
-5. Record the resulting fixed mirror URLs and provenance, validate them with
-   the preflight, require immutable release read-back, then create a manifest
-   PR against the same branch that supplied the manifest. The workflow cannot
-   push `main`.
+1. 保持 current manifest 不變。
+2. 從 workflow artifact 定位失敗 RID、source、digest 或 capability gate；不手改 manifest 指向 daily URL。
+3. 不覆寫 partial／published release。若 release 已 publish，只有所有 expected assets 完整 read-back 相同才可重用；否則建立新 candidate。
+4. 修正 source-policy 問題後重新 dispatch，review manifest-only PR，並要求 normal release／package gates。
 
-A validation, download, checksum, extraction, capability, upload, or preflight
-failure stops before manifest mutation. A failed upload may leave an
-unreferenced incomplete release for an operator to inspect, but it cannot
-update the production manifest or replace a historical asset. Manifest PR
-creation is path-scoped to `script/assets/external-assets.json`; downloaded
-archives and updater evidence remain ignored workspace data.
-
-## Bootstrap and recovery
-
-Before enabling normal scheduled updates, create the dedicated repository,
-enable GitHub Immutable Releases, and dispatch **Build** from
-`release/v1.1.1-integration` with `update_ffmpeg_assets=true` and
-`bootstrap_ffmpeg_assets=true`. This imports all six current pinned sources,
-including the distinct win-x86/macOS sources, into one immutable mirror release
-and opens a PR against that integration branch. After the updater reaches
-`main`, direct dispatches and the weekly schedule use `main` as both checkout
-and manifest base. Do not manually edit the manifest to another BtbN daily URL.
-
-If the bootstrap fails:
-
-1. Keep the current manifest unchanged.
-2. Inspect the failed RID and source URL in the workflow output.
-3. Correct an upstream policy issue or create a fresh bootstrap candidate; do
-   not overwrite the partial mirror release/tag. If the release was fully
-   published before a later step failed, a re-run may reuse it only as immutable
-   read-back evidence after every expected asset matches exactly.
-4. Re-run the dispatch. Review the generated PR and require the release/package
-   workflow before merging.
-
-To force a normal BtbN refresh, run the same workflow with `bootstrap=false`.
-If the selected fixed release is already represented in the manifest, it exits
-successfully without creating a PR.
-
-## Required permissions and secrets
-
-The workflow uses two narrowly scoped credentials:
-
-- `RUNTIME_ASSETS_TOKEN`: fine-grained token or GitHub App installation token
-  with **Contents: read/write** only on
-  `crazysmile-PhD/downkyi-runtime-assets`. It creates releases and uploads
-  assets, but has no DownKyi source-repository permission.
-- `DOWNKYI_AUTOMATION_TOKEN`: fine-grained token or GitHub App installation
-  token with **Contents: read/write** and **Pull requests: read/write** only on
-  `crazysmile-PhD/downkyicore`. It creates the manifest PR. A separate token is
-  required because a PR opened by `GITHUB_TOKEN` does not reliably trigger the
-  repository's package CI.
-
-No token is needed by normal builds or package downloaders.
+相同 fixed release 已存在於 manifest 時，normal updater 應 idempotently 成功且不建立 PR。
 
 ## Local checks
 
-Run these from the repository root with Python 3.12 or later. Python is also a
-package-script prerequisite: the Windows and Unix FFmpeg downloaders invoke the
-same fail-closed checksum verifier.
+Repository root 需 Python 3.12+：
 
 ```powershell
 python -m unittest script/tests/test_ffmpeg_assets.py -v
-python script/ffmpeg-assets.py validate-manifest --manifest script/assets/external-assets.json
-python script/ffmpeg-assets.py preflight --manifest script/assets/external-assets.json --timeout 30
+python script/ffmpeg-assets.py validate-manifest `
+  --manifest script/assets/external-assets.json
+python script/ffmpeg-assets.py preflight `
+  --manifest script/assets/external-assets.json --timeout 30
 ```
 
-`preflight` is intentionally only an availability and schema gate. The package
-downloaders still rehash the downloaded archive before extraction, so a later
-content replacement fails closed.
+`preflight` 只驗 availability 與 schema；package downloader 仍須在 extraction 前重新計算 archive SHA-256。
