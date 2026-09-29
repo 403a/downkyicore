@@ -19,7 +19,7 @@ PR 修正文件。
 | NuGet、package、version、restore | `Directory.Packages.props` | restore、strict build、tests、package audit | [依賴卡](#dependency) |
 | CI、timeout、TRX、zero tests、cleanup | `DownKyi.CentralTestRunner` + OS test project | TRX + failure recorder | [Test／CI 卡](#test-ci) |
 | SQLite、migration、history、persistence | Domain task + Application service + SQLite store | transition／migration tests | [下載資料卡](#download-persistence) |
-| queue、retry、aria2、FFmpeg、media | coordinator + selected backend + media validator | focused runtime regression | [傳輸與媒體卡](#transfer-media) |
+| queue、retry、resume、media selection、aria2、FFmpeg | selection／media contract + coordinator + backend | focused runtime regression | [傳輸與媒體卡](#transfer-media) |
 | 已知 runtime gap、恢復中斷工作 | owner workboard candidate／linked Issue | current-main repro + owner confirmation | [GitHub Issue #137](https://github.com/crazysmile-PhD/downkyicore/issues/137) |
 | settings、schema、invalid file、flush | `ISettingsStore`／`SettingsSchemaMigrator` | settings + architecture + Host tests | [Settings 卡](#settings) |
 | logging、redaction、export、retention | `ApplicationLogProvider` + Infrastructure logging owners | provider stress + Host tests | [Logging 卡](#logging) |
@@ -49,6 +49,14 @@ PR 修正文件。
 
 `CompileUsingReferenceAssemblies=false` 是跨平台 hosted-build 穩定性政策。沒有 exact-SDK
 cross-platform stress proof，不得移除。
+
+## 未來維護模式
+
+- 改動 stable owner、invariant 或 minimum proof 的 PR，必須在同一 PR 更新既有卡片與必要的路由觸發詞；沒有 drift 就不改文件。
+- 卡片固定使用 `Use when / Owner / Invariant / Do / Proof / Stop / Details`；同一 owner 優先改既有卡，不在文件尾端追加平行說明。
+- 只有出現新的 authoritative owner 與可獨立驗證邊界才新增卡片；否則視為原卡片的細化。
+- 卡片只保存穩定決策。版本、數量、SHA、endpoint／test 清單與完整命令應 `LINK`、`QUERY` 或 `GENERATE`，不得手抄副本。
+- `Details` 直達 authoritative owner；`Proof` 只列證據類型或 focused test，不複製正式命令。同步 `main` 後，依 merged production／test paths 重查受影響卡片。
 
 <a id="dependency"></a>
 
@@ -90,11 +98,11 @@ cross-platform stress proof，不得移除。
 
 ## 傳輸與媒體卡
 
-- **Use when**：queue、retry、resume、aria2、DURL、mux、FFmpeg、HTTP cancellation。
-- **Owner**：admission=`DownloadTaskAdmissionService`；retry=coordinator；attempt=backend；integrity=validator；FFmpeg lifecycle=`FfmpegProcessRunner`。
-- **Invariant**：worker 只收 `DownloadTaskId`；backends 共用 key／resume／integrity／persistence；success 仍過 shared integrity；pause／shutdown 保留 GID、partial map、completed keys、progress、version。
-- **Do**：delete：persist `Canceled` → stop → 刪 artifacts → 刪 row；failure 不算成功。DURL 只拒絕 duplicate `Order`／無可用地址，不新增 positive／gap／contiguity／start-at-1。Mux 用 same-directory temp、不覆蓋 foreign destination；只有 real decode failure 才撤銷 completed evidence。401／403／schema／cancel 不 retry；429 bounded `Retry-After`。
-- **Proof**：runtime／resume／delete／integrity tests；loopback 先同步 server 收到 request，不用固定 sleep。
+- **Use when**：queue、content conflict、retry、resume、resource identity、aria2、DURL、mux、FFmpeg、media refresh、HTTP cancellation。
+- **Owner**：selection conflict=`DownloadContentConflictResolver`；admission=`DownloadTaskAdmissionService`；finalized media=`DownloadMediaContract`；retry=coordinator；attempt=backend；integrity=validator；FFmpeg lifecycle=`FfmpegProcessRunner`。
+- **Invariant**：conflict 在 task 建立前解決並保存 finalized selection；refresh 可換 URL，不可改 transport／quality／codec／audio-video intent。worker 只收 `DownloadTaskId`；backends 共用 key／resume／integrity／persistence；success 仍過 shared integrity；pause／shutdown 保留 GID、partial map、completed keys、progress、version。
+- **Do**：built-in resume 先比 resource identity；無 validator 才驗 overlap；mismatch 回 `ResumeRejected`，清該 transfer artifacts 後同地址只重試一次。Delete：persist `Canceled` → stop → 刪 artifacts → 刪 row；failure 不算成功。DURL 只拒絕 duplicate `Order`／無可用地址，不新增 positive／gap／contiguity／start-at-1。Mux 用 same-directory temp、不覆蓋 foreign destination；只有 real decode failure 才撤銷 completed evidence。401／403／schema／cancel 不 retry；429 bounded `Retry-After`。
+- **Proof**：content-conflict、`BuiltinRangeDownloaderTests`、`DownloadPipelineStageTests`、delete／integrity tests；loopback 先同步 server 收到 request，不用固定 sleep。
 - **Stop**：第二 retry budget／process owner、自訂 DURL 規則、刪除仍有效 source。
 - **Details**：[Architecture：Execution 與 retry](../ARCHITECTURE.md#execution-與-retry)。
 
@@ -127,10 +135,10 @@ cross-platform stress proof，不得移除。
 ## Desktop／Host 卡
 
 - **Use when**：Desktop、DI、Host lifecycle、navigation/dialog、theme、XAML。
-- **Owner**：產品組裝=Desktop composition；DI=唯一 Microsoft container；tokens=`DesignTokens.axaml`。
-- **Invariant**：Domain ← Application ← Infrastructure／Desktop；Infrastructure 不 reference Desktop。`DownKyi` 只組 concrete registrations；禁止 Prism、DryIoc、service locator、global services、第二 root。`DisableDefaults=true`；新 config provider 不改既有 paths。
-- **Do**：long-running work 用 linked scope：caller cancel local，Host stop cancel all。Theme 只用 Fluent + DataGrid；保留 focus、DPI、localization、virtualization。
-- **Proof**：architecture tests、Host XAML smoke、Windows packaged startup、CI platform matrix。
+- **Owner**：產品組裝=Desktop composition；DI=唯一 Microsoft container；theme switch=`DesktopThemeController`；tokens=`DesignTokens.axaml`。
+- **Invariant**：Domain ← Application ← Infrastructure／Desktop；Infrastructure 不 reference Desktop。`DownKyi` 只組 concrete registrations；禁止 Prism、DryIoc、service locator、global services、第二 root。只有 theme controller 可寫 `RequestedThemeVariant`；presentation 不讀 `Application.Current`／`ResourceDictionary`。`DisableDefaults=true`；新 config provider 不改既有 paths。
+- **Do**：long-running work 用 linked scope：caller cancel local，Host stop cancel all。Theme 只用 Fluent + DataGrid；startup 與 settings 都委派 controller；保留 focus、DPI、localization、virtualization。
+- **Proof**：architecture tests、`DesktopThemeControllerTests`、Host XAML smoke、Windows packaged startup、CI platform matrix。
 - **Stop**：第二 container／router／lifecycle、反向 reference、global service 繞 composition。
 - **Details**：[Architecture：Current owner map](../ARCHITECTURE.md#current-owner-map)。
 
