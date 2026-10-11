@@ -25,7 +25,7 @@ validate_app_boundary() {
 
   echo "[INFO] Validating $boundary app boundary: $app_path"
   /bin/bash "$SCRIPT_DIR/verify-runtime-architecture.sh" "$app_path" "$EXPECTED_RUNTIME_IDENTIFIER"
-  "$SCRIPT_DIR/verify-app-signature.sh" "$app_path"
+  /bin/bash "$SCRIPT_DIR/verify-app-signature.sh" "$app_path"
   /bin/bash "$SCRIPT_DIR/aria2-runtime-integrity.sh" verify "$app_path"
   /bin/bash "$SCRIPT_DIR/verify-app-loader.sh" "$app_path"
   /usr/bin/xcrun swift "$SCRIPT_DIR/verify-app-bundle-launch.swift" "$app_path"

@@ -847,6 +847,10 @@ public sealed class ReleaseWorkflowArchitectureTests
             "/bin/bash \"$SCRIPT_DIR/verify-runtime-architecture.sh\"",
             validateDmgPackageScript,
             StringComparison.Ordinal);
+        Assert.Contains(
+            "/bin/bash \"$SCRIPT_DIR/verify-app-signature.sh\"",
+            validateDmgPackageScript,
+            StringComparison.Ordinal);
         Assert.Contains("/usr/bin/ditto \"$APP_PATH\" \"$COPIED_APP_PATH\"", validateDmgPackageScript, StringComparison.Ordinal);
         Assert.Equal(1, CountOccurrences(validateDmgPackageScript, "verify-app-signature.sh"));
         Assert.Equal(1, CountOccurrences(validateDmgPackageScript, "aria2-runtime-integrity.sh\" verify"));
