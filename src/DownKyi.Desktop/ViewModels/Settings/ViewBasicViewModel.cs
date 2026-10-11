@@ -100,14 +100,6 @@ internal class ViewBasicViewModel : ViewModelBase
         set => SetProperty(ref _selectedParseScope, value);
     }
 
-    private bool _autoDownloadAll;
-
-    public bool AutoDownloadAll
-    {
-        get => _autoDownloadAll;
-        set => SetProperty(ref _autoDownloadAll, value);
-    }
-
     private bool _repeatFileAutoAddNumberSuffix;
 
     public bool RepeatFileAutoAddNumberSuffix
@@ -204,10 +196,6 @@ internal class ViewBasicViewModel : ViewModelBase
         // 解析范围
         var parseScope = basic.ParseScope;
         SelectedParseScope = ParseScopes.FirstOrDefault(t => t.ParseScope == parseScope) ?? ParseScopes[0];
-
-        // 解析后是否自动下载解析视频
-        var isAutoDownloadAll = basic.IsAutoDownloadAll;
-        AutoDownloadAll = isAutoDownloadAll == AllowStatus.Yes;
 
         // 重复下载策略
         var repeatDownloadStrategy = basic.RepeatDownloadStrategy;
@@ -316,22 +304,6 @@ internal class ViewBasicViewModel : ViewModelBase
         }
 
         var isSucceed = UpdateBasic(settings => settings with { ParseScope = parseScope.ParseScope }).ParseScope == parseScope.ParseScope;
-        PublishTip(isSucceed);
-    }
-
-    // 解析后是否自动下载解析视频
-    private RelayCommand? _autoDownloadAllCommand;
-
-    public RelayCommand AutoDownloadAllCommand => _autoDownloadAllCommand ??= new RelayCommand(ExecuteAutoDownloadAllCommand);
-
-    /// <summary>
-    /// 解析后是否自动下载解析视频
-    /// </summary>
-    private void ExecuteAutoDownloadAllCommand()
-    {
-        var isAutoDownloadAll = AutoDownloadAll ? AllowStatus.Yes : AllowStatus.No;
-
-        var isSucceed = UpdateBasic(settings => settings with { IsAutoDownloadAll = isAutoDownloadAll }).IsAutoDownloadAll == isAutoDownloadAll;
         PublishTip(isSucceed);
     }
 

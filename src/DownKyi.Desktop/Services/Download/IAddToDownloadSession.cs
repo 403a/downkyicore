@@ -10,9 +10,9 @@ namespace DownKyi.Services.Download;
 
 internal interface IAddToDownloadSession
 {
-    Task<bool> EnsureAdmissionAsync(CancellationToken cancellationToken = default);
+    Task<DownloadAdmissionOutcome> EnsureAdmissionAsync(CancellationToken cancellationToken = default);
 
-    Task<DownloadAddSelection?> SelectDownloadAsync(
+    Task<DownloadSelectionResult> SelectDownloadAsync(
         VideoPage? subtitlePage = null,
         CancellationToken cancellationToken = default);
 

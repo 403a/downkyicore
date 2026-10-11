@@ -13,6 +13,16 @@ internal enum VideoDetailDisplayState
     Empty
 }
 
+internal enum VideoDetailOperationStatus
+{
+    None,
+    Running,
+    Success,
+    Warning,
+    Canceled,
+    Error
+}
+
 internal sealed partial class VideoDetailUiState : ObservableObject
 {
     public event Action? IsBusyChanged;
@@ -25,6 +35,19 @@ internal sealed partial class VideoDetailUiState : ObservableObject
 
     [ObservableProperty]
     private VectorImage _downloadManage = ButtonIcon.DownloadManage;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsOperationStatusVisible))]
+    private string _operationStatusText = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsOperationStatusVisible))]
+    [NotifyPropertyChangedFor(nameof(IsOperationRunning))]
+    [NotifyPropertyChangedFor(nameof(IsOperationSettled))]
+    private VideoDetailOperationStatus _operationStatus;
+
+    [ObservableProperty]
+    private VectorImage _operationStatusIcon = SystemIcon.Current.Info;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsContentVisible))]
@@ -46,6 +69,14 @@ internal sealed partial class VideoDetailUiState : ObservableObject
     private VideoDetailDisplayState _displayState;
 
     public bool IsBusy => DisplayState == VideoDetailDisplayState.Busy;
+
+    public bool IsOperationStatusVisible => OperationStatus != VideoDetailOperationStatus.None
+                                            && !string.IsNullOrWhiteSpace(OperationStatusText);
+
+    public bool IsOperationRunning => OperationStatus == VideoDetailOperationStatus.Running;
+
+    public bool IsOperationSettled => OperationStatus is not VideoDetailOperationStatus.None
+        and not VideoDetailOperationStatus.Running;
 
     public bool IsContentVisible => DisplayState == VideoDetailDisplayState.Content
                                     || (DisplayState == VideoDetailDisplayState.Busy && VideoInfoView != null);

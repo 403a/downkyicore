@@ -20,13 +20,13 @@ internal sealed class LegacyDownloadAdmissionPresenter
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
     }
 
-    public async Task<bool> EnsureAdmissionAsync(CancellationToken cancellationToken)
+    public async Task<DownloadAdmissionOutcome> EnsureAdmissionAsync(CancellationToken cancellationToken)
     {
         var admission = await _tasks.CheckNewDownloadAdmissionAsync(cancellationToken)
             .ConfigureAwait(true);
         if (admission.IsSuccess)
         {
-            return true;
+            return DownloadAdmissionOutcome.Allowed;
         }
 
         if (!DownloadAdmissionErrors.IsLegacyUpgradeBlocked(admission.Error))
@@ -42,7 +42,7 @@ internal sealed class LegacyDownloadAdmissionPresenter
             cancellationToken).ConfigureAwait(true);
         if (outcome != AppDialogOutcome.Accepted)
         {
-            return false;
+            return DownloadAdmissionOutcome.Canceled;
         }
 
         var confirmation = await _tasks
@@ -50,13 +50,13 @@ internal sealed class LegacyDownloadAdmissionPresenter
             .ConfigureAwait(true);
         if (confirmation.IsSuccess)
         {
-            return true;
+            return DownloadAdmissionOutcome.Allowed;
         }
 
         await alert.ShowError(
             confirmation.Error?.Message
                 ?? DictionaryResource.GetString("LegacyDownloadAdmissionConfirmationFailed"),
             cancellationToken).ConfigureAwait(true);
-        return false;
+        return DownloadAdmissionOutcome.Failed;
     }
 }

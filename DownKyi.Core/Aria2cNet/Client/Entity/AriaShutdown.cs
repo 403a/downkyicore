@@ -17,6 +17,9 @@ namespace DownKyi.Core.Aria2cNet.Client.Entity
         [JsonProperty("error")]
         public AriaError? Error { get; set; }
 
+        [JsonIgnore]
+        public bool IsSuccess => string.Equals(Result, "OK", StringComparison.Ordinal);
+
         public override string ToString()
         {
             return JsonConvert.SerializeObject(this);

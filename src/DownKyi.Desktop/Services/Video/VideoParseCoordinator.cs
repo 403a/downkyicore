@@ -97,7 +97,7 @@ internal sealed class VideoParseCoordinator
         cancellationToken.ThrowIfCancellationRequested();
         if (videoSections != null)
         {
-            var result = new VideoDetailParseResult(videoInfoView, videoSections.ToArray());
+            var result = VideoDetailParseResult.From(videoInfoView, videoSections);
             CommitInfoService(input, service, cancellationToken);
             return result;
         }
@@ -114,12 +114,12 @@ internal sealed class VideoParseCoordinator
                 VideoPages = pages
             }
         ];
-        var defaultResult = new VideoDetailParseResult(videoInfoView, defaultSections);
+        var defaultResult = VideoDetailParseResult.From(videoInfoView, defaultSections);
         CommitInfoService(input, service, cancellationToken);
         return defaultResult;
     }
 
-    public async Task<VideoStreamParseResult?> LoadPageStreamAsync(
+    public async Task<VideoStreamParseResult> LoadPageStreamAsync(
         string input,
         VideoPage page,
         bool refresh,
@@ -129,25 +129,35 @@ internal sealed class VideoParseCoordinator
         var service = await AcquireInfoServiceAsync(input, refresh, cancellationToken).ConfigureAwait(false);
         if (service == null)
         {
-            return null;
+            return VideoStreamParseResult.Unavailable(
+                page,
+                VideoStreamUnavailableReason.ParserUnavailable);
         }
 
         var playUrl = await service.GetVideoStreamAsync(page, cancellationToken).ConfigureAwait(false);
-        var result = new VideoStreamParseResult(page, playUrl);
+        var result = VideoStreamParseResult.From(page, playUrl);
         CommitInfoService(input, service, cancellationToken);
         return result;
     }
 
-    public async Task<IReadOnlyList<VideoStreamParseResult>> LoadPageStreamsAsync(
+    public async Task<VideoStreamParseBatchResult> LoadPageStreamsAsync(
         string input,
         IReadOnlyList<VideoPage> pages,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(pages);
+        if (pages.Count == 0)
+        {
+            return VideoStreamParseBatchResult.NoPagesSelected;
+        }
+
         var service = await AcquireInfoServiceAsync(input, refresh: false, cancellationToken).ConfigureAwait(false);
         if (service == null)
         {
-            return Array.Empty<VideoStreamParseResult>();
+            return VideoStreamParseBatchResult.From(pages.Select(page =>
+                VideoStreamParseResult.Unavailable(
+                    page,
+                    VideoStreamUnavailableReason.ParserUnavailable)));
         }
 
         var results = new List<VideoStreamParseResult>(pages.Count);
@@ -155,11 +165,11 @@ internal sealed class VideoParseCoordinator
         {
             cancellationToken.ThrowIfCancellationRequested();
             var playUrl = await service.GetVideoStreamAsync(page, cancellationToken).ConfigureAwait(false);
-            results.Add(new VideoStreamParseResult(page, playUrl));
+            results.Add(VideoStreamParseResult.From(page, playUrl));
         }
 
         CommitInfoService(input, service, cancellationToken);
-        return results;
+        return VideoStreamParseBatchResult.From(results);
     }
 
     private void CommitInfoService(
@@ -217,11 +227,98 @@ internal sealed class VideoParseCoordinator
     }
 }
 
-internal sealed record VideoDetailParseResult(
-    VideoInfoView? VideoInfoView,
-    IReadOnlyList<VideoSection> VideoSections)
+internal enum VideoDetailParseOutcome
 {
-    public static VideoDetailParseResult Empty { get; } = new(null, Array.Empty<VideoSection>());
+    NoContent,
+    Ready
 }
 
-internal sealed record VideoStreamParseResult(VideoPage Page, PlayUrl? PlayUrl);
+internal sealed record VideoDetailParseResult
+{
+    private VideoDetailParseResult(
+        VideoDetailParseOutcome outcome,
+        VideoInfoView? videoInfoView,
+        IReadOnlyList<VideoSection> videoSections)
+    {
+        Outcome = outcome;
+        VideoInfoView = videoInfoView;
+        VideoSections = videoSections;
+    }
+
+    public VideoDetailParseOutcome Outcome { get; }
+
+    public VideoInfoView? VideoInfoView { get; }
+
+    public IReadOnlyList<VideoSection> VideoSections { get; }
+
+    public static VideoDetailParseResult Empty { get; } = new(
+        VideoDetailParseOutcome.NoContent,
+        null,
+        Array.Empty<VideoSection>());
+
+    public static VideoDetailParseResult From(
+        VideoInfoView videoInfoView,
+        IEnumerable<VideoSection> videoSections)
+    {
+        ArgumentNullException.ThrowIfNull(videoInfoView);
+        ArgumentNullException.ThrowIfNull(videoSections);
+        var sections = videoSections.ToArray();
+        return sections.Any(section => section.VideoPages.Count > 0)
+            ? new VideoDetailParseResult(VideoDetailParseOutcome.Ready, videoInfoView, sections)
+            : Empty;
+    }
+}
+
+internal enum VideoStreamUnavailableReason
+{
+    ParserUnavailable,
+    NoPlayableMedia
+}
+
+internal sealed record VideoStreamParseResult(
+    VideoPage Page,
+    PlayUrl? PlayUrl,
+    VideoStreamUnavailableReason? UnavailableReason)
+{
+    public bool HasUsableContent => PlayUrl != null && UnavailableReason == null;
+
+    public static VideoStreamParseResult From(VideoPage page, PlayUrl? playUrl)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+        if (playUrl == null)
+        {
+            return Unavailable(page, VideoStreamUnavailableReason.NoPlayableMedia);
+        }
+
+        var availability = playUrl.Availability ?? PlayUrlAvailability.From(playUrl);
+        return availability.HasPlayableMedia
+            ? new VideoStreamParseResult(page, playUrl, null)
+            : Unavailable(page, VideoStreamUnavailableReason.NoPlayableMedia);
+    }
+
+    public static VideoStreamParseResult Unavailable(
+        VideoPage page,
+        VideoStreamUnavailableReason reason) =>
+        new(page ?? throw new ArgumentNullException(nameof(page)), null, reason);
+}
+
+internal sealed record VideoStreamParseBatchResult(
+    IReadOnlyList<VideoStreamParseResult> Items,
+    bool HadSelection)
+{
+    public static VideoStreamParseBatchResult NoPagesSelected { get; } =
+        new(Array.Empty<VideoStreamParseResult>(), HadSelection: false);
+
+    public int SuccessfulCount => Items.Count(item => item.HasUsableContent);
+
+    public int UnavailableCount => Items.Count - SuccessfulCount;
+
+    public static VideoStreamParseBatchResult From(IEnumerable<VideoStreamParseResult> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        return new VideoStreamParseBatchResult(items.ToArray(), HadSelection: true);
+    }
+
+    public static VideoStreamParseBatchResult From(VideoStreamParseResult item) =>
+        new([item ?? throw new ArgumentNullException(nameof(item))], HadSelection: true);
+}

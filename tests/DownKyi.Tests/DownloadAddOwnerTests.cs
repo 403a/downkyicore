@@ -785,6 +785,45 @@ public sealed class DownloadAddOwnerTests : IDisposable
             video => video.StreamKind == PlayUrlStreamKind.Durl);
     }
 
+    [Fact]
+    public void DraftFactoryUsesTheSelectedCandidateWhenQualityIdsMatchAcrossStreamKinds()
+    {
+        Directory.CreateDirectory(_directory);
+        using var settingsStore = new DownKyi.Core.Settings.SettingsStore(
+            Path.Combine(_directory, "settings.json"));
+        var page = CreatePage();
+        page.PlaybackAvailability = new PlayUrlAvailability(
+        [
+            new PlayUrlVideoAvailability(80, 12, PlayUrlStreamKind.Dash, "1080P DASH"),
+            new PlayUrlVideoAvailability(80, 7, PlayUrlStreamKind.Durl, "1080P DURL")
+        ],
+        []);
+        var dash = CreateVideoQuality(isDurl: false);
+        dash.Quality = 80;
+        dash.SelectedVideoCodec = "H.265/HEVC";
+        var durl = CreateVideoQuality(isDurl: true);
+        durl.Quality = 80;
+        durl.SelectedVideoCodec = "H.264/AVC";
+        page.VideoQualityList = [dash, durl];
+        page.VideoQuality = durl;
+        var video = new VideoInfoView { Title = "main", VideoZone = "Technology" };
+        var section = new VideoSection { VideoPages = [page] };
+
+        var item = DownloadTaskDraftFactory.Create(
+            _directory,
+            video,
+            section,
+            sectionCount: 1,
+            page,
+            page.VideoQuality,
+            settingsStore.Current,
+            DownloadContentSelection.None with { Video = true });
+
+        Assert.Equal(DownloadMediaKind.Durl, item.DownloadBase.NeedDownloadContent.MediaKind);
+        Assert.Equal("H.264/AVC", item.VideoCodecName);
+        Assert.Equal(80, item.Resolution.Id);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_directory))

@@ -128,7 +128,7 @@ internal sealed class ContentDownloadCoordinator : IContentDownloadCoordinator
         }
 
         var addToDownloadSession = _serviceFactory.Create(ToPlayStreamType(selectedItems[0].Kind));
-        return await DownloadAddCoordinator.AddToDownloadIfSelectionAcceptedAsync(
+        var flow = await DownloadAddCoordinator.AddToDownloadIfSelectionAcceptedAsync(
             () => addToDownloadSession.EnsureAdmissionAsync(cancellationToken),
             () => addToDownloadSession.SelectDownloadAsync(cancellationToken: cancellationToken),
             selection => AddItemsAsync(
@@ -137,6 +137,9 @@ internal sealed class ContentDownloadCoordinator : IContentDownloadCoordinator
                 selection,
                 cancellationToken),
             cancellationToken).ConfigureAwait(true);
+        return flow.Outcome == DownloadAddFlowOutcome.Completed
+            ? flow.Value
+            : null;
     }
 
     private Task<ContentDownloadBatchResult> AddItemsAsync(

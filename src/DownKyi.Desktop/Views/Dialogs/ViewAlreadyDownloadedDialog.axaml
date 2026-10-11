@@ -63,6 +63,7 @@
 
                 <Grid Row="1" ColumnDefinitions="*,*">
                     <Button
+                        x:Name="ConfirmRedownloadButton"
                         Grid.Column="0"
                         Width="75"
                         HorizontalAlignment="Center"
@@ -70,9 +71,9 @@
                         Command="{Binding YesCommand}"
                         Content="{DynamicResource Yes}"
                         FontSize="12"
-                        Foreground="{DynamicResource BrushText}"
-                        Theme="{StaticResource BtnStyle}" />
+                        Theme="{StaticResource BtnPrimaryStyle}" />
                     <Button
+                        x:Name="CancelRedownloadButton"
                         Grid.Column="1"
                         Width="75"
                         HorizontalAlignment="Center"
@@ -80,8 +81,7 @@
                         Command="{Binding CloseCommand}"
                         Content="{DynamicResource No}"
                         FontSize="12"
-                        Foreground="{DynamicResource BrushText}"
-                        Theme="{StaticResource BtnStyle}" />
+                        Theme="{StaticResource BtnBorderStyle}" />
                 </Grid>
             </Grid>
         </Grid>

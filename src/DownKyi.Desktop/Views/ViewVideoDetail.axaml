@@ -9,7 +9,7 @@
              mc:Ignorable="d"
              d:DesignWidth="840"
              d:DesignHeight="620">
-    <Grid RowDefinitions="50,10,*">
+    <Grid RowDefinitions="50,10,*,Auto">
         <views:VideoDetailToolbarView Grid.Row="0" />
 
         <TextBlock Grid.Row="1" Opacity="0.3">
@@ -42,5 +42,7 @@
             Height="256"
             Source="/Resources/no-data.png"
             IsVisible="{Binding UiState.IsEmptyVisible}" />
+
+        <views:VideoDetailOperationStatusView Grid.Row="3" />
     </Grid>
 </UserControl>

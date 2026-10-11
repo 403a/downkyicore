@@ -125,7 +125,11 @@ public sealed class DesktopInteractionArchitectureTests
         Assert.DoesNotContain("IUserNotificationService", downloadSource, StringComparison.Ordinal);
         Assert.Contains("PublishAddResult", videoDetailSource, StringComparison.Ordinal);
         Assert.Contains(
-            "Notifications.Show(DownloadAddNotificationFormatter.Format(result))",
+            "var notification = DownloadAddNotificationFormatter.Create(result);",
+            videoDetailSource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "Notifications.Show(notification.Message)",
             videoDetailSource,
             StringComparison.Ordinal);
         Assert.DoesNotContain("IEventAggregator", downloadSource, StringComparison.Ordinal);

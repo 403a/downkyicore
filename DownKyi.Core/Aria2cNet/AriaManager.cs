@@ -69,26 +69,30 @@ public class AriaManager
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var status = await _ariaClient
-                .TellStatus(gid, cancellationToken)
-                .ConfigureAwait(false);
+            AriaTellStatus status;
+            try
+            {
+                status = await _ariaClient
+                    .TellStatus(gid, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (AriaRpcException exception)
+            {
+                var errorCode = exception.RpcMessage.Contains(
+                    "is not found",
+                    StringComparison.OrdinalIgnoreCase)
+                    ? "not-found"
+                    : $"rpc-{exception.Code}";
+                return new AriaDownloadStatus(
+                    errorCode == "not-found"
+                        ? DownloadResult.ABORT
+                        : DownloadResult.FAILED,
+                    errorCode,
+                    exception.RpcMessage);
+            }
+
             if (status?.Result == null)
             {
-                if (status?.Error is { } rpcError)
-                {
-                    var errorCode = rpcError.Message.Contains(
-                        "is not found",
-                        StringComparison.OrdinalIgnoreCase)
-                        ? "not-found"
-                        : $"rpc-{rpcError.Code}";
-                    return new AriaDownloadStatus(
-                        errorCode == "not-found"
-                            ? DownloadResult.ABORT
-                            : DownloadResult.FAILED,
-                        errorCode,
-                        rpcError.Message);
-                }
-
                 return new AriaDownloadStatus(
                     DownloadResult.FAILED,
                     "rpc-empty",
@@ -151,12 +155,20 @@ public class AriaManager
                 _logger.LogErrorMessage(
                     $"aria2 reported a download failure; errorCode={errorCode}.");
 
-                var ariaRemove = await _ariaClient
-                    .RemoveDownloadResultAsync(gid, cancellationToken)
-                    .ConfigureAwait(false);
-                if (ariaRemove?.Result != null)
+                try
                 {
-                    _logger.LogDebugMessage("aria2 removed the failed download result.");
+                    var ariaRemove = await _ariaClient
+                        .RemoveDownloadResultAsync(gid, cancellationToken)
+                        .ConfigureAwait(false);
+                    if (ariaRemove?.Result != null)
+                    {
+                        _logger.LogDebugMessage("aria2 removed the failed download result.");
+                    }
+                }
+                catch (AriaRpcException exception)
+                {
+                    _logger.LogWarningMessage(
+                        $"aria2 rejected failed-result cleanup; rpcCode={exception.Code}.");
                 }
 
                 return new AriaDownloadStatus(

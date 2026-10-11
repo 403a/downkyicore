@@ -16,7 +16,8 @@ public sealed class VideoDetailViewArchitectureTests
         "VideoDetailToolbarView.axaml",
         "VideoDetailSummaryView.axaml",
         "VideoDetailSelectionView.axaml",
-        "VideoDetailActionsView.axaml"
+        "VideoDetailActionsView.axaml",
+        "VideoDetailOperationStatusView.axaml"
     ];
 
     [Fact]
@@ -30,7 +31,8 @@ public sealed class VideoDetailViewArchitectureTests
             "VideoDetailToolbarView",
             "VideoDetailSummaryView",
             "VideoDetailSelectionView",
-            "VideoDetailActionsView");
+            "VideoDetailActionsView",
+            "VideoDetailOperationStatusView");
         Assert.Contains("<RowDefinition Height=\"100*\" MaxHeight=\"180\" />", source, StringComparison.Ordinal);
     }
 
@@ -55,9 +57,9 @@ public sealed class VideoDetailViewArchitectureTests
     {
         var source = string.Join(Environment.NewLine, ViewNames.Select(Read));
 
-        Assert.Equal(55, Count(source, @"\{(?:Reflection)?Binding\s+([^},]+)"));
-        Assert.Equal(12, Count(source, @"(?:x:Name|Name)=""([^""]+)"""));
-        Assert.Equal(62, Count(source, @"\{DynamicResource\s+([^}]+)\}"));
+        Assert.Equal(62, Count(source, @"\{(?:Reflection)?Binding\s+([^},]+)"));
+        Assert.Equal(13, Count(source, @"(?:x:Name|Name)=""([^""]+)"""));
+        Assert.Equal(67, Count(source, @"\{DynamicResource\s+([^}]+)\}"));
         Assert.Equal(8, Count(source, @"\{StaticResource\s+([^}]+)\}"));
         Assert.Equal(
             13,

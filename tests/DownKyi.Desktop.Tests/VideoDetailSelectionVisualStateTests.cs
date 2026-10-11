@@ -16,6 +16,165 @@ namespace DownKyi.Desktop.Tests;
 public sealed class VideoDetailSelectionVisualStateTests
 {
     [AvaloniaFact]
+    public Task SameQualityDashAndDurlCandidatesRemainIndependentlySelectable()
+    {
+        return AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            var application = DesktopTestResources.EnsureProductThemeResources();
+            var fluentTheme = new FluentTheme();
+            var dataGridStyles = new StyleInclude(new Uri("avares://DownKyi.Desktop.Tests/"))
+            {
+                Source = new Uri("avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml")
+            };
+            application.Styles.Insert(0, fluentTheme);
+            application.Styles.Insert(1, dataGridStyles);
+            var dash = new VideoQuality
+            {
+                Quality = 80,
+                QualityFormat = "1080P DASH",
+                IsDurl = false,
+                VideoCodecList = ["H.265 / HEVC"],
+                SelectedVideoCodec = "H.265 / HEVC"
+            };
+            var durl = new VideoQuality
+            {
+                Quality = 80,
+                QualityFormat = "1080P DURL",
+                IsDurl = true,
+                VideoCodecList = ["H.264 / AVC"],
+                SelectedVideoCodec = "H.264 / AVC"
+            };
+            var page = CreatePage("Same quality stream candidates");
+            page.VideoQualityList = [dash, durl];
+            page.VideoQuality = dash;
+            var view = new VideoDetailSelectionView();
+            var dataGrid = Assert.IsType<DataGrid>(view.FindControl<DataGrid>("NameVideoPages"));
+            dataGrid.AutoGenerateColumns = false;
+            dataGrid.ItemsSource = new[] { page };
+            var window = new Window { Content = view, Width = 1400, Height = 620 };
+
+            try
+            {
+                window.Show();
+                window.UpdateLayout();
+                var comboBoxes = dataGrid.GetVisualDescendants().OfType<ComboBox>().ToArray();
+                var qualityCombo = Assert.Single(
+                    comboBoxes,
+                    combo => ReferenceEquals(combo.ItemsSource, page.VideoQualityList));
+                var codecCombo = Assert.Single(
+                    comboBoxes,
+                    combo => ReferenceEquals(combo.ItemsSource, dash.VideoCodecList));
+
+                qualityCombo.SelectedItem = durl;
+                window.UpdateLayout();
+
+                Assert.Same(durl, page.VideoQuality);
+                Assert.True(page.VideoQuality.IsDurl);
+                Assert.Same(durl.VideoCodecList, codecCombo.ItemsSource);
+                Assert.Equal("H.264 / AVC", codecCombo.SelectedItem);
+            }
+            finally
+            {
+                window.Close();
+                application.Styles.Remove(dataGridStyles);
+                application.Styles.Remove(fluentTheme);
+            }
+        });
+    }
+
+    [AvaloniaFact]
+    public Task Selecting1080PRefreshesTheAvailableCodecChoices()
+    {
+        return AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            var application = DesktopTestResources.EnsureProductThemeResources();
+            var fluentTheme = new FluentTheme();
+            var dataGridStyles = new StyleInclude(
+                new Uri("avares://DownKyi.Desktop.Tests/"))
+            {
+                Source = new Uri("avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml")
+            };
+            application.Styles.Insert(0, fluentTheme);
+            application.Styles.Insert(1, dataGridStyles);
+
+            var avc1080 = "H.264 / AVC";
+            var hevc1080 = "H.265 / HEVC";
+            var av1_1080 = "AV1";
+            var quality1080 = new VideoQuality
+            {
+                Quality = 80,
+                QualityFormat = "1080P",
+                VideoCodecList = [avc1080, hevc1080, av1_1080],
+                SelectedVideoCodec = avc1080
+            };
+            var quality720 = new VideoQuality
+            {
+                Quality = 64,
+                QualityFormat = "720P",
+                VideoCodecList = [avc1080],
+                SelectedVideoCodec = avc1080
+            };
+            var page = CreatePage("Codec refresh fixture");
+            page.VideoQualityList = [];
+            page.VideoQuality = null;
+
+            var view = new VideoDetailSelectionView();
+            var dataGrid = Assert.IsType<DataGrid>(
+                view.FindControl<DataGrid>("NameVideoPages"));
+            dataGrid.AutoGenerateColumns = false;
+            dataGrid.ItemsSource = new[] { page };
+            var window = new Window
+            {
+                Content = view,
+                Width = 1400,
+                Height = 620
+            };
+
+            try
+            {
+                window.Show();
+                window.UpdateLayout();
+
+                page.VideoQualityList = [quality1080, quality720];
+                page.VideoQuality = quality720;
+                window.UpdateLayout();
+
+                var comboBoxes = dataGrid.GetVisualDescendants().OfType<ComboBox>().ToArray();
+                Assert.Equal(3, comboBoxes.Length);
+                var qualityCombo = Assert.Single(
+                    comboBoxes,
+                    combo => ReferenceEquals(combo.ItemsSource, page.VideoQualityList));
+                Assert.Same(quality720, qualityCombo.SelectedItem);
+                var codecCombo = Assert.Single(
+                    comboBoxes,
+                    combo => ReferenceEquals(combo.ItemsSource, quality720.VideoCodecList));
+
+                qualityCombo.SelectedItem = quality1080;
+                window.UpdateLayout();
+
+                Assert.Same(quality1080, page.VideoQuality);
+                Assert.Same(quality1080.VideoCodecList, codecCombo.ItemsSource);
+                Assert.Equal(
+                    new[] { avc1080, hevc1080, av1_1080 },
+                    codecCombo.Items.Cast<string>().ToArray());
+                Assert.Equal(avc1080, codecCombo.SelectedValue);
+
+                codecCombo.SelectedItem = hevc1080;
+                window.UpdateLayout();
+
+                Assert.Equal(hevc1080, quality1080.SelectedVideoCodec);
+                Assert.Equal(hevc1080, codecCombo.SelectedValue);
+            }
+            finally
+            {
+                window.Close();
+                application.Styles.Remove(dataGridStyles);
+                application.Styles.Remove(fluentTheme);
+            }
+        });
+    }
+
+    [AvaloniaFact]
     public Task ToolbarSearchKeepsOneRoundedFocusOutlineAcrossThemes()
     {
         return AvaloniaTestDispatcher.RunAsync(() =>
