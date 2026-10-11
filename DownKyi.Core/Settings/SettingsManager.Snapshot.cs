@@ -82,7 +82,6 @@ public partial class SettingsManager
                 GetVideoCodecs(),
                 GetQuality(),
                 GetAudioQuality(),
-                VideoParseType,
                 GetIsTranscodingFlvToMp4(),
                 GetIsTranscodingAacToMp3(),
                 GetFfmpegHardwareAcceleration(),
@@ -181,7 +180,6 @@ public partial class SettingsManager
                 SetVideoCodecs(validated.Video.VideoCodecs);
                 SetQuality(validated.Video.Quality);
                 SetAudioQuality(validated.Video.AudioQuality);
-                SetVideoParseType(validated.Video.VideoParseType);
                 SetIsTranscodingFlvToMp4(validated.Video.IsTranscodingFlvToMp4);
                 SetIsTranscodingAacToMp3(validated.Video.IsTranscodingAacToMp3);
                 SetFfmpegHardwareAcceleration(validated.Video.FfmpegHardwareAcceleration);

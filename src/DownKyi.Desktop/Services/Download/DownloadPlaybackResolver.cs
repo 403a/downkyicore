@@ -65,13 +65,7 @@ internal sealed class DownloadPlaybackResolver
                         media.Cid,
                         media.Page,
                         selection,
-                        preferWebPage: input.VideoSettings.VideoParseType switch
-                        {
-                            0 => false,
-                            1 => true,
-                            _ => throw new ArgumentException(
-                                "Invalid video parse type. Valid values are: 0 (WebAPI) or 1 (WebPage).")
-                        },
+                        preferWebPage: true,
                         cancellationToken: cancellationToken),
                     _timeProvider,
                     cancellationToken),

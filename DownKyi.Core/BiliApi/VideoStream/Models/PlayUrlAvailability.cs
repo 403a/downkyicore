@@ -67,6 +67,31 @@ public sealed record PlayUrlAvailability(
             audio);
     }
 
+    public static PlayUrlAvailability Combine(PlayUrl primary, PlayUrl? supplement = null)
+    {
+        ArgumentNullException.ThrowIfNull(primary);
+        var primaryAvailability = From(primary);
+        if (supplement == null)
+        {
+            return primaryAvailability;
+        }
+
+        var supplementAvailability = From(supplement);
+        return new PlayUrlAvailability(
+            primaryAvailability.Video
+                .Concat(supplementAvailability.Video)
+                .DistinctBy(video => (video.Quality, video.CodecId, video.StreamKind))
+                .OrderByDescending(video => video.Quality)
+                .ThenBy(video => video.CodecId)
+                .ThenBy(video => video.StreamKind)
+                .ToArray(),
+            primaryAvailability.Audio
+                .Concat(supplementAvailability.Audio)
+                .Distinct()
+                .OrderByDescending(id => id)
+                .ToArray());
+    }
+
     public static bool HasUsableAddress(PlayUrlDashVideo? media)
     {
         return media != null

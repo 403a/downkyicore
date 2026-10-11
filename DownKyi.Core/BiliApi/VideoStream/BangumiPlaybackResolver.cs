@@ -8,33 +8,6 @@ internal static class BangumiPlaybackResolver
 {
     private const string EmbeddedPlaybackMarker = "playurlSSRData";
 
-    public static PlayUrlAvailability DiscoverAvailability(
-        PlayUrl primary,
-        PlayUrl? supplement = null)
-    {
-        ArgumentNullException.ThrowIfNull(primary);
-        var primaryAvailability = PlayUrlAvailability.From(primary);
-        if (supplement == null)
-        {
-            return primaryAvailability;
-        }
-
-        var supplementAvailability = PlayUrlAvailability.From(supplement);
-        var video = primaryAvailability.Video
-            .Concat(supplementAvailability.Video)
-            .GroupBy(video => (video.Quality, video.CodecId, video.StreamKind))
-            .Select(group => group.First())
-            .OrderByDescending(video => video.Quality)
-            .ThenBy(video => video.CodecId)
-            .ToArray();
-        var audio = primaryAvailability.Audio
-            .Concat(supplementAvailability.Audio)
-            .Distinct()
-            .OrderByDescending(id => id)
-            .ToArray();
-        return new PlayUrlAvailability(video, audio);
-    }
-
     public static bool HasActualQuality(PlayUrl playUrl, int quality)
     {
         ArgumentNullException.ThrowIfNull(playUrl);

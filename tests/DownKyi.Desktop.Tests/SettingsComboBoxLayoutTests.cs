@@ -5,7 +5,6 @@ using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Themes.Fluent;
 using Avalonia.VisualTree;
-using DownKyi.Core.BiliApi.BiliUtils;
 using DownKyi.Models;
 using DownKyi.Views.Settings;
 
@@ -16,14 +15,6 @@ public sealed class SettingsComboBoxLayoutTests
     private static readonly string[] AriaLogLevels = ["debug", "info", "warn"];
     private static readonly string[] AriaFileAllocations =
         ["PREALLOC（预分配磁盘空间，避免文件碎片）"];
-    private static readonly VideoParseType[] VideoParseTypes =
-    [
-        new()
-        {
-            Name = "WebPage(解析慢、不易风控)",
-            Id = 1
-        }
-    ];
     private static readonly string[] FileNameTimeFormats = ["yyyy-MM-dd", "yyyy.MM.dd"];
     private static readonly OrderFormatDisplay[] OrderFormats =
     [
@@ -277,8 +268,6 @@ public sealed class SettingsComboBoxLayoutTests
             view.FindControl<ComboBox>("NameVideoQualityList"));
         var audioQuality = Assert.IsType<ComboBox>(
             view.FindControl<ComboBox>("NameAudioQualityList"));
-        var parseType = Assert.IsType<ComboBox>(
-            view.FindControl<ComboBox>("NameVideoParseTypeList"));
         var transcodeVideo = Assert.IsType<CheckBox>(
             view.FindControl<CheckBox>("NameTranscodeFlvToMp4"));
         var transcodeAudio = Assert.IsType<CheckBox>(
@@ -293,8 +282,6 @@ public sealed class SettingsComboBoxLayoutTests
         ffmpegTitle.Text = "FFmpeg";
         transcodeVideo.Content = "下载FLV视频后转码为mp4";
         transcodeAudio.Content = "下载AAC音频后转码为mp3";
-        parseType.ItemsSource = VideoParseTypes;
-        parseType.SelectedIndex = 0;
         var window = new Window
         {
             Content = view,
@@ -317,7 +304,6 @@ public sealed class SettingsComboBoxLayoutTests
             var videoCodecOrigin = Assert.NotNull(videoCodec.TranslatePoint(default, window));
             var videoQualityOrigin = Assert.NotNull(videoQuality.TranslatePoint(default, window));
             var audioQualityOrigin = Assert.NotNull(audioQuality.TranslatePoint(default, window));
-            var parseTypeOrigin = Assert.NotNull(parseType.TranslatePoint(default, window));
             var transcodeVideoOrigin = Assert.NotNull(
                 transcodeVideo.TranslatePoint(default, window));
             var transcodeAudioOrigin = Assert.NotNull(
@@ -326,16 +312,13 @@ public sealed class SettingsComboBoxLayoutTests
                 hardwareAcceleration.TranslatePoint(default, window));
             var parallelOrigin = Assert.NotNull(parallelJobs.TranslatePoint(default, window));
 
-            Assert.Same(VideoParseTypes[0], parseType.SelectedItem);
             Assert.Equal(videoCodecOrigin.X, videoQualityOrigin.X, 0.5);
             Assert.Equal(videoQualityOrigin.X, audioQualityOrigin.X, 0.5);
-            Assert.Equal(audioQualityOrigin.X, parseTypeOrigin.X, 0.5);
             Assert.True(videoCodec.Bounds.Width >= 320);
             Assert.Equal(videoCodec.Bounds.Width, videoQuality.Bounds.Width, 0.5);
             Assert.Equal(videoQuality.Bounds.Width, audioQuality.Bounds.Width, 0.5);
-            Assert.Equal(audioQuality.Bounds.Width, parseType.Bounds.Width, 0.5);
             Assert.True(preferencesTitleOrigin.Y > pageTitleOrigin.Y + pageTitle.Bounds.Height);
-            Assert.True(postProcessingTitleOrigin.Y > parseTypeOrigin.Y + parseType.Bounds.Height);
+            Assert.True(postProcessingTitleOrigin.Y > audioQualityOrigin.Y + audioQuality.Bounds.Height);
             Assert.Equal(transcodeVideoOrigin.X, transcodeAudioOrigin.X, 0.5);
             Assert.True(
                 transcodeAudioOrigin.Y > transcodeVideoOrigin.Y + transcodeVideo.Bounds.Height);

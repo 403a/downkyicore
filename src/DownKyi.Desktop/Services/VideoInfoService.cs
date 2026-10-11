@@ -332,35 +332,38 @@ internal class VideoInfoService : IInfoService
     /// 获取视频流的信息，从VideoPage返回
     /// </summary>
     /// <param name="page"></param>
-    public async Task<PlayUrl?> GetVideoStreamAsync(
+    public Task<PlayUrl?> GetVideoStreamAsync(
         VideoPage page,
         CancellationToken cancellationToken = default)
     {
+        var video = _settingsStore.Current.Video;
+        var content = video.Content;
+        return GetVideoStreamAsync(
+            page,
+            new PlaybackDiscoveryRequest(
+                video.Quality,
+                video.AudioQuality,
+                content.DownloadVideo,
+                content.DownloadAudio),
+            cancellationToken);
+    }
+
+    public async Task<PlayUrl?> GetVideoStreamAsync(
+        VideoPage page,
+        PlaybackDiscoveryRequest request,
+        CancellationToken cancellationToken = default)
+    {
         ArgumentNullException.ThrowIfNull(page);
+        ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
-        var videoParseType = _settingsStore.Current.Video.VideoParseType;
-        return await WbiRequestExecutor.ExecuteAsync(
+        return await _client.GetVideoPlaybackDiscoveryAsync(
             _wbiKeyProvider,
-            (keys, unixTimeSeconds) => videoParseType switch
-            {
-                0 => _client.GetVideoPlayUrlAsync(
-                    keys,
-                    unixTimeSeconds,
-                    page.Avid,
-                    page.Bvid,
-                    page.Cid,
-                    cancellationToken: cancellationToken),
-                1 => _client.GetVideoPlayUrlWebPageAsync(
-                    keys,
-                    unixTimeSeconds,
-                    page.Avid,
-                    page.Bvid,
-                    page.Cid,
-                    page.Page,
-                    cancellationToken: cancellationToken),
-                _ => Task.FromResult<PlayUrl?>(null)
-            },
             TimeProvider.System,
+            page.Avid,
+            page.Bvid,
+            page.Cid,
+            page.Page,
+            request,
             cancellationToken).ConfigureAwait(false);
     }
 

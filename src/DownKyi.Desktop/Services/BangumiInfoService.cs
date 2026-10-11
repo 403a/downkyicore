@@ -301,13 +301,32 @@ internal class BangumiInfoService : IInfoService
     /// <param name="page"></param>
     public Task<PlayUrl?> GetVideoStreamAsync(VideoPage page, CancellationToken cancellationToken = default)
     {
+        var video = _settingsStore.Current.Video;
+        var content = video.Content;
+        return GetVideoStreamAsync(
+            page,
+            new PlaybackDiscoveryRequest(
+                video.Quality,
+                video.AudioQuality,
+                content.DownloadVideo,
+                content.DownloadAudio),
+            cancellationToken);
+    }
+
+    public Task<PlayUrl?> GetVideoStreamAsync(
+        VideoPage page,
+        PlaybackDiscoveryRequest request,
+        CancellationToken cancellationToken = default)
+    {
         ArgumentNullException.ThrowIfNull(page);
+        ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
         return _client.GetBangumiPlaybackDiscoveryAsync(
             page.Avid,
             page.Bvid,
             page.Cid,
             page.EpisodeId,
+            request,
             cancellationToken: cancellationToken);
     }
 

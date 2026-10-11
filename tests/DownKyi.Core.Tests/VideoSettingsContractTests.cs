@@ -23,5 +23,6 @@ public sealed class VideoSettingsContractTests
         Assert.Equal(settings.FileNameParts, restored.FileNameParts);
         Assert.Contains("\"HistoryVideoRootPaths\"", json, StringComparison.Ordinal);
         Assert.Contains("\"FileNameParts\"", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"VideoParseType\"", json, StringComparison.Ordinal);
     }
 }

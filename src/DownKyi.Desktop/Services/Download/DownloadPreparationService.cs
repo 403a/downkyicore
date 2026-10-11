@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using DownKyi.Application.Bilibili;
 using DownKyi.Application.Diagnostics;
+using DownKyi.Core.BiliApi.BiliUtils;
 using DownKyi.Core.BiliApi.Sign;
 using DownKyi.Core.BiliApi.VideoStream;
 using DownKyi.Core.Settings;
@@ -132,17 +134,53 @@ internal sealed class DownloadPreparationService
         DownloadContentSelection requestedContent,
         CancellationToken cancellationToken)
     {
-        if (page.PlaybackAvailability == null)
+        var settings = _settingsStore.Current;
+        var request = CreateDiscoveryRequest(page, requestedContent, settings);
+        var currentAvailability = page.PlaybackAvailability;
+        if (currentAvailability == null
+            || request.NeedsApiSupplement(currentAvailability))
         {
             var playUrl = await videoInfoService
-                .GetVideoStreamAsync(page, cancellationToken)
+                .GetVideoStreamAsync(
+                    page,
+                    request,
+                    cancellationToken)
                 .ConfigureAwait(false);
-            VideoPagePlaybackMapper.ApplyPlayUrl(
+            VideoPagePlaybackMapper.ApplyPlayUrlPreservingSelection(
                 playUrl,
                 page,
-                _settingsStore.Current,
+                settings,
                 _logger);
         }
+    }
 
+    private static PlaybackDiscoveryRequest CreateDiscoveryRequest(
+        VideoPage page,
+        DownloadContentSelection requestedContent,
+        ApplicationSettings settings)
+    {
+        var videoSettings = settings.Video;
+        var hasCachedAvailability = page.PlaybackAvailability != null;
+        var preferredVideoQuality = hasCachedAvailability
+                                    && page.VideoQualityMatch == null
+                                    && page.VideoQuality is { Quality: > 0 } selectedVideo
+            ? selectedVideo.Quality
+            : videoSettings.Quality;
+        var preferredAudioQuality = hasCachedAvailability
+                                    && page.AudioQualityMatch == null
+                                    && !string.IsNullOrEmpty(page.AudioQualityFormat)
+            ? PlaybackQualityCatalog.GetAudioQualities()
+                  .FirstOrDefault(quality => string.Equals(
+                      quality.Name,
+                      page.AudioQualityFormat,
+                      StringComparison.Ordinal))
+                  ?.Id
+              ?? videoSettings.AudioQuality
+            : videoSettings.AudioQuality;
+        return new PlaybackDiscoveryRequest(
+            preferredVideoQuality,
+            preferredAudioQuality,
+            requestedContent.Video,
+            requestedContent.Audio);
     }
 }

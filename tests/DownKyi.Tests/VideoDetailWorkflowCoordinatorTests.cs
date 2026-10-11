@@ -1,3 +1,4 @@
+using DownKyi.Core.BiliApi.VideoStream;
 using DownKyi.Core.BiliApi.VideoStream.Models;
 using DownKyi.Presentation;
 using DownKyi.Services;
@@ -81,6 +82,14 @@ public sealed class VideoDetailWorkflowCoordinatorTests
 
         public Task<PlayUrl?> GetVideoStreamAsync(
             VideoPage page,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromException<PlayUrl?>(new NotSupportedException());
+        }
+
+        public Task<PlayUrl?> GetVideoStreamAsync(
+            VideoPage page,
+            PlaybackDiscoveryRequest request,
             CancellationToken cancellationToken = default)
         {
             return Task.FromException<PlayUrl?>(new NotSupportedException());
