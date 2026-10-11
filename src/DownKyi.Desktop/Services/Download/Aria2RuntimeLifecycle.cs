@@ -500,6 +500,13 @@ internal sealed class Aria2RuntimeLifecycle : IDisposable
             await _ariaClient.PauseAllAsync()
                 .WaitAsync(TimeSpan.FromSeconds(2), cancellationToken)
                 .ConfigureAwait(true);
+            var savedSession = await _ariaClient.SaveSessionAsync(cancellationToken)
+                .WaitAsync(TimeSpan.FromSeconds(2), cancellationToken)
+                .ConfigureAwait(true);
+            if (!savedSession.IsSuccess)
+            {
+                throw new InvalidOperationException("aria2 did not save the shutdown session.");
+            }
         }
         catch (Exception exception) when (exception is TimeoutException
             or HttpRequestException

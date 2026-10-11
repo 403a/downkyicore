@@ -1,4 +1,6 @@
+using System.Net;
 using System.Reflection;
+using System.Text;
 using DownKyi.Core.Aria2cNet.Client;
 using DownKyi.Core.Aria2cNet.Client.Entity;
 using Newtonsoft.Json.Linq;
@@ -141,6 +143,39 @@ public sealed class AriaClientRpcContractTests
         Assert.Equal(1, requestCount);
     }
 
+    [Fact]
+    public async Task NonSuccessHttpStatusPreservesStructuredJsonRpcError()
+    {
+        const string jsonRpcError =
+            "{\"jsonrpc\":\"2.0\",\"id\":\"resume-test\",\"error\":{\"code\":1,\"message\":\"GID#missing is not found\"}}";
+        using var response = new HttpResponseMessage(HttpStatusCode.BadRequest)
+        {
+            Content = new StringContent(jsonRpcError, Encoding.UTF8, "application/json")
+        };
+
+        var content = await AriaClient.ReadRpcResponseAsync(
+            response,
+            TestContext.Current.CancellationToken);
+        var parsed = AriaClient.DeserializeRpcResponse<AriaShutdown>(content);
+
+        Assert.Equal(1, parsed.Error?.Code);
+        Assert.Equal("GID#missing is not found", parsed.Error?.Message);
+    }
+
+    [Fact]
+    public async Task NonSuccessHttpStatusWithoutJsonRpcErrorStillFailsAsTransport()
+    {
+        using var response = new HttpResponseMessage(HttpStatusCode.BadGateway)
+        {
+            Content = new StringContent("upstream unavailable")
+        };
+
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            AriaClient.ReadRpcResponseAsync(
+                response,
+                TestContext.Current.CancellationToken));
+    }
+
     private static IReadOnlyList<RpcContractCase> CreateCases()
     {
         var sendOption = new AriaSendOption();
@@ -156,6 +191,7 @@ public sealed class AriaClientRpcContractTests
             new(nameof(AriaClient.ChangeOptionAsync), "aria2.changeOption", true, client => client.ChangeOptionAsync("gid", new { Split = "4" })),
             new(nameof(AriaClient.RemoveDownloadResultAsync), "aria2.removeDownloadResult", true, client => client.RemoveDownloadResultAsync("gid")),
             new(nameof(AriaClient.GetAriaVersionAsync), "aria2.getVersion", true, client => client.GetAriaVersionAsync()),
+            new(nameof(AriaClient.SaveSessionAsync), "aria2.saveSession", true, client => client.SaveSessionAsync()),
             new(nameof(AriaClient.ShutdownAsync), "aria2.shutdown", true, client => client.ShutdownAsync()),
             new(nameof(AriaClient.ForceShutdownAsync), "aria2.forceShutdown", true, client => client.ForceShutdownAsync())
         ];

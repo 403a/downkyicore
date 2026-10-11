@@ -19,6 +19,37 @@ namespace DownKyi.Tests;
 public sealed class Aria2PauseEventTests
 {
     [Fact]
+    public async Task OwnedShutdownSavesPausedSessionBeforeRequestingAriaExit()
+    {
+        var methods = new List<string>();
+        var client = CreateClient((_, payload, _) =>
+        {
+            var method = JObject.Parse(payload)["method"]?.Value<string>()
+                ?? throw new InvalidOperationException("RPC method is missing.");
+            methods.Add(method);
+            return Task.FromResult<string?>(CreateResponse("OK"));
+        });
+        using var settings = new TestSettingsStore();
+        using var lifecycle = new Aria2RuntimeLifecycle(
+            settings.Store.Current.Network,
+            client,
+            new DownloadDiagnosticLogger(NullLogger<DownloadDiagnosticLogger>.Instance),
+            new AriaServer(NullLoggerFactory.Instance),
+            NullLogger<Aria2RuntimeLifecycle>.Instance,
+            ownsAriaServer: true,
+            localEndpoint: new LocalAriaRpcEndpoint(6800, "test-token"));
+
+        await InvokeNotificationLifecycleAsync(
+            lifecycle,
+            "CloseOwnedServerAsync",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            ["aria2.pauseAll", "aria2.saveSession", "aria2.shutdown"],
+            methods);
+    }
+
+    [Fact]
     public async Task NotificationConnectWebSocketFailureUsesDisconnectedFallback()
     {
         using var settings = new TestSettingsStore();

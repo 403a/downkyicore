@@ -1,6 +1,7 @@
 using System.Text;
 using DownKyi.Core.Aria2cNet.Client.Entity;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace DownKyi.Core.Aria2cNet.Client;
 
@@ -174,10 +175,48 @@ public sealed partial class AriaClient
             request,
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
-        return await response.Content
+        return await ReadRpcResponseAsync(response, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    internal static async Task<string> ReadRpcResponseAsync(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+        var content = await response.Content
             .ReadAsStringAsync(cancellationToken)
             .ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode && !IsJsonRpcErrorResponse(content))
+        {
+            response.EnsureSuccessStatusCode();
+        }
+
+        return content;
+    }
+
+    private static bool IsJsonRpcErrorResponse(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return false;
+        }
+
+        try
+        {
+            var response = JObject.Parse(content);
+            return string.Equals(
+                       response["jsonrpc"]?.Value<string>(),
+                       JSONRPC,
+                       StringComparison.Ordinal)
+                   && response["error"] is JObject error
+                   && error["code"]?.Type == JTokenType.Integer
+                   && error["message"]?.Type == JTokenType.String;
+        }
+        catch (JsonReaderException)
+        {
+            return false;
+        }
     }
 
 }

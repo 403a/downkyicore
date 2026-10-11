@@ -53,6 +53,28 @@ public sealed partial class AriaClient
     }
 
     /// <summary>
+    /// This method saves the current session to the configured session file.
+    /// This method returns OK.
+    /// </summary>
+    public async Task<AriaShutdown> SaveSessionAsync(
+        CancellationToken cancellationToken = default)
+    {
+        List<object> ariaParams = new List<object>
+        {
+            "token:" + _token,
+        };
+        AriaSendData ariaSend = new AriaSendData
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Jsonrpc = JSONRPC,
+            Method = "aria2.saveSession",
+            Params = ariaParams
+        };
+        return await GetRpcResponseAsync<AriaShutdown>(ariaSend, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// This method shuts down aria2.
     /// This method returns OK.
     /// </summary>
