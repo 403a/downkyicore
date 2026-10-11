@@ -16,4 +16,13 @@ internal interface IInfoService
     Task<PlayUrl?> GetVideoStreamAsync(
         VideoPage page,
         System.Threading.CancellationToken cancellationToken = default);
+
+    // Playback discovery can limit API supplementation to media actually requested
+    // by this download. Other implementations retain their existing behavior.
+    Task<PlayUrl?> GetVideoStreamAsync(
+        VideoPage page,
+        bool requireVideo,
+        bool requireAudio,
+        System.Threading.CancellationToken cancellationToken = default) =>
+        GetVideoStreamAsync(page, cancellationToken);
 }
