@@ -93,4 +93,23 @@
             <Setter Property="BorderBrush" Value="{DynamicResource BrushText}" />
         </Style>
     </ControlTheme>
+
+    <ControlTheme x:Key="BtnDangerStyle"
+                  TargetType="Button"
+                  BasedOn="{StaticResource BtnStyle}">
+        <Setter Property="Background" Value="{DynamicResource BrushWarning}" />
+        <Setter Property="Foreground" Value="{DynamicResource BrushWarningForeground}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Style Selector="^:pointerover">
+            <Setter Property="Background" Value="{DynamicResource BrushWarning}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BrushWarningForeground}" />
+        </Style>
+        <Style Selector="^:pressed">
+            <Setter Property="Background" Value="{DynamicResource BrushWarning}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BrushWarningForeground}" />
+        </Style>
+        <Style Selector="^:focus-visible">
+            <Setter Property="BorderBrush" Value="{DynamicResource BrushWarningForeground}" />
+        </Style>
+    </ControlTheme>
 </ResourceDictionary>

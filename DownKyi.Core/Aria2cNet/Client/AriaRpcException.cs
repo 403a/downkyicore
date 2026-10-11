@@ -30,4 +30,8 @@ public sealed class AriaRpcException : InvalidOperationException
     public int Code { get; }
 
     public string RpcMessage { get; }
+
+    public bool IsNotFound => RpcMessage.Contains(
+        "is not found",
+        StringComparison.OrdinalIgnoreCase);
 }

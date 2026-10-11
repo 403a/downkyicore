@@ -78,9 +78,7 @@ public class AriaManager
             }
             catch (AriaRpcException exception)
             {
-                var errorCode = exception.RpcMessage.Contains(
-                    "is not found",
-                    StringComparison.OrdinalIgnoreCase)
+                var errorCode = exception.IsNotFound
                     ? "not-found"
                     : $"rpc-{exception.Code}";
                 return new AriaDownloadStatus(

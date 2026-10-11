@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using DownKyi.Application.Diagnostics;
+using DownKyi.Core.Aria2cNet.Client;
 using DownKyi.Domain.Downloads;
 using DownKyi.Domain.Results;
 using DownKyi.ViewModels.DownloadManager;
@@ -51,8 +52,29 @@ internal sealed class DownloadTaskFileService
 
         try
         {
-            await ariaClient.RemoveAsync(gid).WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
-            await ariaClient.RemoveDownloadResultAsync(gid).WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+            try
+            {
+                await ariaClient.RemoveAsync(gid)
+                    .WaitAsync(TimeSpan.FromSeconds(3))
+                    .ConfigureAwait(false);
+            }
+            catch (AriaRpcException exception) when (exception.IsNotFound)
+            {
+                _logger.LogDebugMessage(
+                    "Cancel aria downloader found no active task for the persisted GID.");
+            }
+
+            try
+            {
+                await ariaClient.RemoveDownloadResultAsync(gid)
+                    .WaitAsync(TimeSpan.FromSeconds(3))
+                    .ConfigureAwait(false);
+            }
+            catch (AriaRpcException exception) when (exception.IsNotFound)
+            {
+                _logger.LogDebugMessage(
+                    "Cancel aria downloader found no retained result for the persisted GID.");
+            }
         }
         catch (TimeoutException e)
         {

@@ -370,11 +370,9 @@
                         <Button
                             Name="NameDeleteAllButton"
                             MinWidth="104"
-                            Background="{DynamicResource BrushControlFill}"
                             Command="{Binding DeleteAllDownloadingCommand}"
                             FontSize="12"
-                            Foreground="{DynamicResource BrushWarning}"
-                            Theme="{StaticResource BtnStyle}">
+                            Theme="{StaticResource BtnDangerStyle}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <Path
                                     Width="16"

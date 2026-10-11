@@ -30,7 +30,7 @@ internal sealed partial class Aria2TransferBackend
                     .ForceRemoveAsync(backendIdentity, timeout.Token)
                     .ConfigureAwait(true);
             }
-            catch (AriaRpcException exception) when (IsNotFound(exception.RpcMessage))
+            catch (AriaRpcException exception) when (exception.IsNotFound)
             {
                 _logger.LogDebugMessage(
                     "aria2 reset found no active task for the persisted backend identity.");
@@ -48,7 +48,7 @@ internal sealed partial class Aria2TransferBackend
                     .RemoveDownloadResultAsync(backendIdentity, timeout.Token)
                     .ConfigureAwait(true);
             }
-            catch (AriaRpcException exception) when (IsNotFound(exception.RpcMessage))
+            catch (AriaRpcException exception) when (exception.IsNotFound)
             {
                 _logger.LogDebugMessage(
                     "aria2 reset found no retained result for the persisted backend identity.");

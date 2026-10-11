@@ -98,6 +98,7 @@ public sealed class DialogWindowChromeTests
         var originalTheme = application.RequestedThemeVariant;
         var cases = new (Control View, string PrimaryName, string SecondaryName)[]
         {
+            (new ViewAlertDialog(), "ConfirmAlertButton", "CancelAlertButton"),
             (new ViewAlreadyDownloadedDialog(), "ConfirmRedownloadButton", "CancelRedownloadButton"),
             (new DownloadContentConflictDialog(), "UseAvailableContentButton", "SkipDownloadPageButton")
         };
