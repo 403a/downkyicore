@@ -54,12 +54,12 @@ public sealed class DownloadPipelineStageTests
     }
 
     [Fact]
-    public async Task OrdinaryResumeUsesFinalizedCodecWhenWebPageHasAnotherCodec()
+    public async Task OrdinaryResumeIgnoresLegacyApiFirstSettingAndUsesWebpageBeforeApi()
     {
         using var settings = new TestSettingsStore();
         settings.Store.Update(current => current with
         {
-            Video = current.Video with { VideoParseType = 1 }
+            Video = current.Video with { VideoParseType = 0 }
         });
         var requests = new List<string>();
         var client = new TestBilibiliApiClient
