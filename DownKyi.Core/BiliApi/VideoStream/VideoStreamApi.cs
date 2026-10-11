@@ -593,7 +593,8 @@ public static partial class VideoStreamApi
         if (discoverAvailability)
         {
             var primaryAvailability = PlayUrlAvailability.From(playUrl);
-            playUrl.Availability = BangumiPlaybackResolver.DiscoverAvailability(playUrl, supplement);
+            var combinedAvailability = BangumiPlaybackResolver.DiscoverAvailability(playUrl, supplement);
+            playUrl.Availability = combinedAvailability;
             var result = AttachBangumiDiagnostics(
                 playUrl,
                 quality,
@@ -601,8 +602,8 @@ public static partial class VideoStreamApi
                 source,
                 outcome);
             if (supplement != null
-                && (playUrl.Availability.Video.Count > primaryAvailability.Video.Count
-                    || playUrl.Availability.Audio.Count > primaryAvailability.Audio.Count)
+                && (combinedAvailability.Video.Count > primaryAvailability.Video.Count
+                    || combinedAvailability.Audio.Count > primaryAvailability.Audio.Count)
                 && result.Diagnostics != null)
             {
                 result.Diagnostics = result.Diagnostics with
