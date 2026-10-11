@@ -141,9 +141,10 @@ internal sealed class DownloadPreparationService
         var requireAudio = requestedContent.Audio
                            && (page.AudioQualityMatch != null
                                || string.IsNullOrEmpty(page.AudioQualityFormat));
-        if (page.PlaybackAvailability == null
+        var currentAvailability = page.PlaybackAvailability;
+        if (currentAvailability == null
             || PlaybackDiscoveryPolicy.NeedsApiSupplement(
-                page.PlaybackAvailability,
+                currentAvailability,
                 preferences.Quality,
                 preferences.AudioQuality,
                 requireVideo,
