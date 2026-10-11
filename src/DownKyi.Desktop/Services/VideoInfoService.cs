@@ -332,34 +332,41 @@ internal class VideoInfoService : IInfoService
     /// 获取视频流的信息，从VideoPage返回
     /// </summary>
     /// <param name="page"></param>
+    public Task<PlayUrl?> GetVideoStreamAsync(
+        VideoPage page,
+        CancellationToken cancellationToken = default)
+    {
+        var content = _settingsStore.Current.Video.Content;
+        return GetVideoStreamAsync(
+            page,
+            content.DownloadVideo,
+            content.DownloadAudio,
+            cancellationToken);
+    }
+
     public async Task<PlayUrl?> GetVideoStreamAsync(
         VideoPage page,
+        bool requireVideo,
+        bool requireAudio,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(page);
         cancellationToken.ThrowIfCancellationRequested();
-        var videoParseType = _settingsStore.Current.Video.VideoParseType;
+        var preferences = _settingsStore.Current.Video;
         return await WbiRequestExecutor.ExecuteAsync(
             _wbiKeyProvider,
-            (keys, unixTimeSeconds) => videoParseType switch
-            {
-                0 => _client.GetVideoPlayUrlAsync(
-                    keys,
-                    unixTimeSeconds,
-                    page.Avid,
-                    page.Bvid,
-                    page.Cid,
-                    cancellationToken: cancellationToken),
-                1 => _client.GetVideoPlayUrlWebPageAsync(
-                    keys,
-                    unixTimeSeconds,
-                    page.Avid,
-                    page.Bvid,
-                    page.Cid,
-                    page.Page,
-                    cancellationToken: cancellationToken),
-                _ => Task.FromResult<PlayUrl?>(null)
-            },
+            (keys, unixTimeSeconds) => _client.GetVideoPlaybackDiscoveryAsync(
+                keys,
+                unixTimeSeconds,
+                page.Avid,
+                page.Bvid,
+                page.Cid,
+                page.Page,
+                preferences.Quality,
+                preferences.AudioQuality,
+                requireVideo,
+                requireAudio,
+                cancellationToken),
             TimeProvider.System,
             cancellationToken).ConfigureAwait(false);
     }
