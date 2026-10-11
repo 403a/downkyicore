@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Layout;
 using Avalonia.Threading;
 using DownKyi.Application.Desktop;
 using DownKyi.ViewModels.Dialogs;
@@ -11,6 +13,9 @@ namespace DownKyi.Platform;
 
 internal sealed class AvaloniaDialogService : IAppDialogService
 {
+    private const double StartupDiagnosticsWidth = 760;
+    private const double StartupDiagnosticsHeight = 680;
+    private const double WorkAreaMargin = 32;
     private readonly DialogContentFactory _contentFactory;
     private readonly AvaloniaDesktopContext _desktopContext;
 
@@ -50,17 +55,25 @@ internal sealed class AvaloniaDialogService : IAppDialogService
             DataContext = viewModel
         };
         content.DataContext = viewModel;
+        if (request.Dialog == AppDialog.StartupDiagnostics)
+        {
+            ConfigureStartupDiagnosticsWindow(window, content);
+        }
 
         var result = new AppDialogResult(
             AppDialogOutcome.Canceled,
             new Dictionary<string, object?>(StringComparer.Ordinal));
         var closeRequested = false;
         var forcedCloseRequested = false;
+        var dialogShown = false;
         void OnCloseRequested(object? sender, AppDialogResult requestedResult)
         {
             result = requestedResult;
             closeRequested = true;
-            window.Close();
+            if (dialogShown)
+            {
+                window.Close();
+            }
         }
 
         void OnClosing(object? sender, WindowClosingEventArgs args)
@@ -77,13 +90,22 @@ internal sealed class AvaloniaDialogService : IAppDialogService
             Dispatcher.UIThread.Post(() =>
             {
                 forcedCloseRequested = true;
-                window.Close();
+                if (dialogShown)
+                {
+                    window.Close();
+                }
             }));
         try
         {
             viewModel.OnDialogOpened(request);
-            await window.ShowDialog(_desktopContext.MainWindow).ConfigureAwait(true);
             cancellationToken.ThrowIfCancellationRequested();
+            if (!closeRequested)
+            {
+                dialogShown = true;
+                await window.ShowDialog(_desktopContext.MainWindow).ConfigureAwait(true);
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
             return result;
         }
         finally
@@ -121,6 +143,35 @@ internal sealed class AvaloniaDialogService : IAppDialogService
     {
         ArgumentNullException.ThrowIfNull(viewModel);
         return !closeRequested && !forcedCloseRequested && !viewModel.CanCloseDialog();
+    }
+
+    private void ConfigureStartupDiagnosticsWindow(Window window, Control content)
+    {
+        var owner = _desktopContext.MainWindow;
+        var screen = owner.Screens.ScreenFromWindow(owner)
+            ?? owner.Screens.ScreenFromPoint(owner.Position)
+            ?? owner.Screens.Primary;
+        var size = screen is null
+            ? new Size(StartupDiagnosticsWidth, StartupDiagnosticsHeight)
+            : ConstrainStartupDiagnosticsSize(screen.WorkingArea, screen.Scaling);
+
+        window.SizeToContent = SizeToContent.Manual;
+        window.Width = size.Width;
+        window.Height = size.Height;
+        content.HorizontalAlignment = HorizontalAlignment.Stretch;
+        content.VerticalAlignment = VerticalAlignment.Stretch;
+    }
+
+    internal static Size ConstrainStartupDiagnosticsSize(
+        PixelRect workingArea,
+        double scaling)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(scaling, 0);
+        var availableWidth = Math.Max(1, workingArea.Width / scaling - WorkAreaMargin);
+        var availableHeight = Math.Max(1, workingArea.Height / scaling - WorkAreaMargin);
+        return new Size(
+            Math.Min(StartupDiagnosticsWidth, availableWidth),
+            Math.Min(StartupDiagnosticsHeight, availableHeight));
     }
 
 }

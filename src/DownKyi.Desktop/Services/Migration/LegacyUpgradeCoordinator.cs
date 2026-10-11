@@ -33,7 +33,8 @@ internal sealed record LegacyUpgradeProgress(string Message, double? Percent = n
 
 internal sealed record LegacyUpgradeResult(
     LegacyUpgradeOutcome Outcome,
-    string? ErrorMessage = null);
+    string? ErrorMessage = null,
+    Exception? Failure = null);
 
 internal interface ILegacyUpgradeCoordinator
 {
@@ -84,16 +85,18 @@ internal sealed class LegacyUpgradeCoordinator : ILegacyUpgradeCoordinator
         progress.Report(new LegacyUpgradeProgress("正在迁移下载信息"));
         try
         {
-            var records = ReadLegacyDatabase(oldDatabasePath, progress, cancellationToken);
-            if (records == null)
+            var readResult = ReadLegacyDatabase(oldDatabasePath, progress, cancellationToken);
+            if (readResult.Records == null)
             {
                 var backupMessage = BackupFailedDatabase(oldDatabasePath);
                 return new LegacyUpgradeResult(
                     LegacyUpgradeOutcome.Failed,
-                    backupMessage);
+                    backupMessage,
+                    readResult.Failure ?? new InvalidOperationException(
+                        "The legacy download database could not be read."));
             }
 
-            await PersistRecordsAsync(records, progress, cancellationToken).ConfigureAwait(false);
+            await PersistRecordsAsync(readResult.Records, progress, cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             File.Delete(oldDatabasePath);
 
@@ -115,7 +118,8 @@ internal sealed class LegacyUpgradeCoordinator : ILegacyUpgradeCoordinator
                 : $"数据迁移失败: {e.Message}; {backupMessage}";
             return new LegacyUpgradeResult(
                 LegacyUpgradeOutcome.Failed,
-                message);
+                message,
+                e);
         }
     }
 
@@ -209,11 +213,12 @@ internal sealed class LegacyUpgradeCoordinator : ILegacyUpgradeCoordinator
         return possiblePaths.FirstOrDefault(File.Exists);
     }
 
-    private Dictionary<string, DownloadedWithData>? ReadLegacyDatabase(
+    private LegacyDatabaseReadResult ReadLegacyDatabase(
         string databasePath,
         IProgress<LegacyUpgradeProgress> progress,
         CancellationToken cancellationToken)
     {
+        Exception? lastFailure = null;
         for (var attempt = 1; attempt <= 2; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -228,18 +233,21 @@ internal sealed class LegacyUpgradeCoordinator : ILegacyUpgradeCoordinator
                 }
 
                 ValidateLegacyDatabase(database);
-                return ReadLegacyRecords(database, progress, cancellationToken);
+                return new LegacyDatabaseReadResult(
+                    ReadLegacyRecords(database, progress, cancellationToken),
+                    Failure: null);
             }
             catch (Exception e) when (e is SqliteException or IOException or UnauthorizedAccessException
                 or InvalidOperationException or ArgumentException)
             {
+                lastFailure = e;
                 _logger.LogErrorMessage($"Legacy database connection attempt {attempt} failed.", e);
                 progress.Report(new LegacyUpgradeProgress($"数据库连接尝试 {attempt} 失败"));
             }
         }
 
         progress.Report(new LegacyUpgradeProgress("数据库连接尝试次数超限，放弃迁移"));
-        return null;
+        return new LegacyDatabaseReadResult(Records: null, Failure: lastFailure);
     }
 
     private static void ValidateLegacyDatabase(SqliteDatabase database)
@@ -471,7 +479,7 @@ internal sealed class LegacyUpgradeCoordinator : ILegacyUpgradeCoordinator
         }
     }
 
-    private static bool IsMigrationException(Exception exception)
+    internal static bool IsMigrationException(Exception exception)
     {
         return exception is SqliteException or IOException or UnauthorizedAccessException
             or InvalidOperationException || IsLegacyRecordException(exception);
@@ -485,4 +493,8 @@ internal sealed class LegacyUpgradeCoordinator : ILegacyUpgradeCoordinator
     }
 
     private sealed record DownloadedWithData(Downloaded Downloaded, byte[] DownloadBaseData);
+
+    private sealed record LegacyDatabaseReadResult(
+        Dictionary<string, DownloadedWithData>? Records,
+        Exception? Failure);
 }

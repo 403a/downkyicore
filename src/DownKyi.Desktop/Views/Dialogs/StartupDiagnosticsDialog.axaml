@@ -1,0 +1,127 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vmd="clr-namespace:DownKyi.ViewModels.Dialogs"
+             x:Class="DownKyi.Views.Dialogs.StartupDiagnosticsDialog"
+             x:DataType="vmd:StartupDiagnosticsDialogViewModel"
+             d:DesignWidth="760"
+             d:DesignHeight="680"
+             mc:Ignorable="d">
+    <Border Background="{DynamicResource BrushSurfaceBase}"
+            CornerRadius="{DynamicResource DownKyiRadiusMedium}"
+            BorderBrush="{DynamicResource BrushControlStroke}"
+            BorderThickness="1">
+        <Grid Margin="20" RowDefinitions="Auto,Auto,*,Auto">
+            <Grid Grid.Row="0"
+                  Margin="0,0,0,12"
+                  ColumnDefinitions="*,Auto"
+                  WindowDecorationProperties.ElementRole="TitleBar">
+                <StackPanel Grid.Column="0"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Spacing="10">
+                    <PathIcon Width="22"
+                              Height="22"
+                              Foreground="{DynamicResource BrushWarning}"
+                              Data="M12,2 C6.48,2 2,6.48 2,12 C2,17.52 6.48,22 12,22 C17.52,22 22,17.52 22,12 C22,6.48 17.52,2 12,2 M13,17 L11,17 L11,15 L13,15 L13,17 M13,13 L11,13 L11,7 L13,7 L13,13" />
+                    <TextBlock Text="{Binding Title}"
+                               FontSize="20"
+                               FontWeight="SemiBold"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+                <Button Grid.Column="1"
+                        HorizontalAlignment="Right"
+                        ToolTip.Tip="{DynamicResource Close}"
+                        Theme="{StaticResource ImageBtnStyle}"
+                        WindowDecorationProperties.ElementRole="User"
+                        Command="{Binding CloseCommand}">
+                    <PathIcon Data="{Binding CloseIcon.Data}"
+                              Width="16"
+                              Height="16" />
+                </Button>
+            </Grid>
+
+            <TextBlock Grid.Row="1"
+                       Margin="0,0,0,14"
+                       Foreground="{DynamicResource BrushTextSecondary}"
+                       Text="{Binding IntroMessage}"
+                       TextWrapping="Wrap" />
+
+            <ScrollViewer x:Name="IssuesScrollViewer"
+                          Grid.Row="2"
+                          HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding Items}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vmd:StartupDiagnosticItemViewModel">
+                            <Border Margin="0,0,0,12"
+                                    Padding="16"
+                                    Background="{DynamicResource BrushSurfaceRaised}"
+                                    BorderBrush="{DynamicResource BrushControlStroke}"
+                                    BorderThickness="1"
+                                    CornerRadius="{DynamicResource DownKyiRadiusMedium}">
+                                <StackPanel Spacing="9">
+                                    <TextBlock Text="{Binding Title}"
+                                               FontSize="16"
+                                               FontWeight="SemiBold"
+                                               TextWrapping="Wrap" />
+                                    <TextBlock Text="{Binding Description}"
+                                               TextWrapping="Wrap" />
+                                    <TextBlock Text="{Binding Impact}"
+                                               Foreground="{DynamicResource BrushTextSecondary}"
+                                               TextWrapping="Wrap" />
+                                    <WrapPanel Orientation="Horizontal"
+                                               HorizontalAlignment="Left">
+                                        <Button Margin="0,0,8,0"
+                                                Content="{DynamicResource ViewFullErrorDetails}"
+                                                Command="{Binding ToggleDetailsCommand}" />
+                                        <Button IsVisible="{Binding CanResetDownloadStore}"
+                                                Content="{DynamicResource ResetDownloadStore}"
+                                                Command="{Binding ResetDownloadStoreCommand}"
+                                                Background="{DynamicResource BrushWarning}"
+                                                BorderBrush="{DynamicResource BrushWarning}"
+                                                Foreground="White" />
+                                    </WrapPanel>
+                                    <TextBox IsVisible="{Binding IsExpanded}"
+                                             MinHeight="120"
+                                             MaxHeight="260"
+                                             Text="{Binding DiagnosticText, Mode=OneWay}"
+                                             IsReadOnly="True"
+                                             AcceptsReturn="True"
+                                             TextWrapping="Wrap"
+                                             FontFamily="Cascadia Mono,Consolas,Menlo,Monaco,monospace"
+                                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                             ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <Border x:Name="FooterActions"
+                    Grid.Row="3"
+                    Margin="0,12,0,0"
+                    Padding="0,12,0,0"
+                    BorderBrush="{DynamicResource BrushControlStroke}"
+                    BorderThickness="0,1,0,0">
+                <WrapPanel Orientation="Horizontal"
+                           HorizontalAlignment="Right">
+                    <Button MinWidth="120"
+                            Margin="0,0,10,8"
+                            Content="{DynamicResource CopyAllDiagnostics}"
+                            Command="{Binding CopyAllDiagnosticsCommand}" />
+                    <Button MinWidth="150"
+                            Margin="0,0,10,8"
+                            Content="{DynamicResource CreateGitHubIssue}"
+                            Command="{Binding CreateGitHubIssueCommand}" />
+                    <Button MinWidth="90"
+                            Margin="0,0,0,8"
+                            Content="{DynamicResource Close}"
+                            Command="{Binding CloseCommand}" />
+                </WrapPanel>
+            </Border>
+        </Grid>
+    </Border>
+</UserControl>

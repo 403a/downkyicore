@@ -63,10 +63,10 @@
       "rationale": "The reported depth comes from a shared Avalonia framework inheritance chain, not a DownKyi-owned hierarchy."
     },
     {
-      "identity": "CA1501|src/DownKyi.Desktop/Views/Dialogs/DownloadRuntimeFailureDialog.axaml.cs|DownloadRuntimeFailureDialog",
+      "identity": "CA1501|src/DownKyi.Desktop/Views/Dialogs/StartupDiagnosticsDialog.axaml.cs|StartupDiagnosticsDialog",
       "rule": "CA1501",
-      "path": "src/DownKyi.Desktop/Views/Dialogs/DownloadRuntimeFailureDialog.axaml.cs",
-      "symbol": "DownloadRuntimeFailureDialog",
+      "path": "src/DownKyi.Desktop/Views/Dialogs/StartupDiagnosticsDialog.axaml.cs",
+      "symbol": "StartupDiagnosticsDialog",
       "observedMetric": 11,
       "groupId": "ca1501-framework-9be27076938f8461",
       "groupTitle": "Avalonia framework inheritance rooted at UserControl",

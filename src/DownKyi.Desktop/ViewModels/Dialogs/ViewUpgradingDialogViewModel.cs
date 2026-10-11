@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.Input;
@@ -14,6 +15,7 @@ namespace DownKyi.ViewModels.Dialogs;
 internal sealed class ViewUpgradingDialogViewModel : BaseDialogViewModel, IAsyncDisposable
 {
     public const string Tag = "DialogLoading";
+    internal const string FailureResultParameter = "failureResult";
     private readonly IApplicationLifecycle _applicationLifecycle;
     private readonly ILogger<ViewUpgradingDialogViewModel> _logger;
     private readonly ILegacyUpgradeCoordinator _upgradeCoordinator;
@@ -67,7 +69,7 @@ internal sealed class ViewUpgradingDialogViewModel : BaseDialogViewModel, IAsync
     private RelayCommand? _requestCancelMigrationCommand;
 
     public RelayCommand RequestCancelMigrationCommand =>
-        _requestCancelMigrationCommand ??= new RelayCommand(ShowCancelConfirmation);
+        _requestCancelMigrationCommand ??= new RelayCommand(RequestCancelOrClose);
 
     private RelayCommand? _continueMigrationCommand;
 
@@ -151,6 +153,13 @@ internal sealed class ViewUpgradingDialogViewModel : BaseDialogViewModel, IAsync
                     FinishMigrationActivity();
                     Message = result.ErrorMessage ?? "数据迁移失败，请查看日志";
                     RestartVisible = false;
+                    var failure = result.Failure ?? new InvalidOperationException(Message);
+                    CloseDialog(
+                        AppDialogOutcome.Rejected,
+                        new Dictionary<string, object?>(StringComparer.Ordinal)
+                        {
+                            [FailureResultParameter] = result with { Failure = failure }
+                        });
                     break;
                 default:
                     throw new InvalidOperationException($"Unsupported legacy upgrade outcome: {result.Outcome}");
@@ -160,12 +169,21 @@ internal sealed class ViewUpgradingDialogViewModel : BaseDialogViewModel, IAsync
         {
             return;
         }
-        catch (InvalidOperationException e)
+        catch (Exception e) when (LegacyUpgradeCoordinator.IsMigrationException(e))
         {
             _logger.LogErrorMessage("Legacy data migration dialog failed.", e);
             FinishMigrationActivity();
             Message = "数据迁移失败，请查看日志";
             RestartVisible = false;
+            CloseDialog(
+                AppDialogOutcome.Rejected,
+                new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    [FailureResultParameter] = new LegacyUpgradeResult(
+                        LegacyUpgradeOutcome.Failed,
+                        Message,
+                        e)
+                });
         }
     }
 
@@ -193,6 +211,17 @@ internal sealed class ViewUpgradingDialogViewModel : BaseDialogViewModel, IAsync
         {
             CancelConfirmationVisible = true;
         }
+    }
+
+    private void RequestCancelOrClose()
+    {
+        if (IsMigrationActive)
+        {
+            ShowCancelConfirmation();
+            return;
+        }
+
+        CloseDialog(AppDialogOutcome.Canceled);
     }
 
     private void HideCancelConfirmation()
