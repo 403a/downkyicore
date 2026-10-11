@@ -690,7 +690,7 @@ internal sealed partial class Aria2TransferBackend : ITransferBackend
 
                 existingStatus = statusResult.Status;
             }
-            catch (AriaRpcException exception) when (IsNotFound(exception.RpcMessage))
+            catch (AriaRpcException exception) when (exception.IsNotFound)
             {
                 gid = null;
                 await request.SetBackendIdentityAsync(
@@ -785,13 +785,6 @@ internal sealed partial class Aria2TransferBackend : ITransferBackend
             throw new InvalidOperationException(
                 "aria2 rejected the unpause request.");
         }
-    }
-
-    private static bool IsNotFound(string? errorMessage)
-    {
-        return errorMessage?.Contains(
-            "is not found",
-            StringComparison.OrdinalIgnoreCase) == true;
     }
 
     private static Uri? ResolveHttpsProxyAddress(NetworkApplicationSettings settings)

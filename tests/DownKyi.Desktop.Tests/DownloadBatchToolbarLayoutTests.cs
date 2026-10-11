@@ -192,7 +192,7 @@ public sealed class DownloadBatchToolbarLayoutTests
             Assert.True(RightInView(resume, view) < LeftInView(divider, view));
             Assert.True(RightInView(divider, view) < LeftInView(delete, view));
 
-            foreach (var button in new[] { pause, resume, delete })
+            foreach (var button in new[] { pause, resume })
             {
                 var chrome = Assert.Single(
                     button.GetVisualDescendants().OfType<Border>());
@@ -207,13 +207,24 @@ public sealed class DownloadBatchToolbarLayoutTests
                     SolidColor(chrome.Background));
             }
 
+            var deleteChrome = Assert.Single(
+                delete.GetVisualDescendants().OfType<Border>());
+            var deletePresenter = Assert.Single(
+                delete.GetVisualDescendants().OfType<ContentPresenter>());
+            var deleteIcon = Assert.Single(
+                delete.GetVisualDescendants().OfType<ShapePath>());
+            var warning = ResourceColor(application, "BrushWarning", theme);
+            var onWarning = ResourceColor(application, "BrushWarningForeground", theme);
+            Assert.True(delete.Bounds.Width >= deletePresenter.Bounds.Width + 24);
+            Assert.NotNull(deleteIcon.Data);
+            Assert.Equal(warning, SolidColor(deleteChrome.Background));
             Assert.Equal(
-                ResourceColor(application, "BrushWarning", theme),
+                onWarning,
                 SolidColor(delete.Foreground));
             Assert.Equal(
-                ResourceColor(application, "BrushWarning", theme),
-                SolidColor(Assert.Single(
-                    delete.GetVisualDescendants().OfType<ShapePath>()).Fill));
+                onWarning,
+                SolidColor(deleteIcon.Fill));
+            Assert.True(ContrastRatio(onWarning, warning) >= 4.5);
             Assert.True(delete.Bounds.Right <= view.Bounds.Right);
             Assert.True(
                 BottomInHost(toolbar, host) <= host.Bounds.Height,
@@ -252,5 +263,29 @@ public sealed class DownloadBatchToolbarLayoutTests
     private static Color SolidColor(object? value)
     {
         return Assert.IsAssignableFrom<ISolidColorBrush>(value).Color;
+    }
+
+    private static double ContrastRatio(Color first, Color second)
+    {
+        var firstLuminance = RelativeLuminance(first);
+        var secondLuminance = RelativeLuminance(second);
+        var lighter = Math.Max(firstLuminance, secondLuminance);
+        var darker = Math.Min(firstLuminance, secondLuminance);
+        return (lighter + 0.05) / (darker + 0.05);
+    }
+
+    private static double RelativeLuminance(Color color)
+    {
+        static double Linearize(byte channel)
+        {
+            var value = channel / 255d;
+            return value <= 0.04045
+                ? value / 12.92
+                : Math.Pow((value + 0.055) / 1.055, 2.4);
+        }
+
+        return (0.2126 * Linearize(color.R)) +
+               (0.7152 * Linearize(color.G)) +
+               (0.0722 * Linearize(color.B));
     }
 }

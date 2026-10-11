@@ -98,7 +98,9 @@ namespace DownKyi.ViewModels.DownloadManager
         private async Task ExecuteDeleteAllDownloadingCommand()
         {
             var alertService = new AlertService(AppDialogs);
-            var result = await alertService.ShowWarning(DictionaryResource.GetString("ConfirmDelete")).ConfigureAwait(true);
+            var result = await alertService
+                .ShowWarning(DictionaryResource.GetString("ConfirmDelete"), 2)
+                .ConfigureAwait(true);
             if (result != AppDialogOutcome.Accepted)
             {
                 return;

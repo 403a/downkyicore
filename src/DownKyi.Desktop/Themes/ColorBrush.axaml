@@ -12,6 +12,7 @@
     <SolidColorBrush x:Key="BrushCloseBtnPressed" Color="{DynamicResource ColorCloseBtnPressed}" />
 
     <SolidColorBrush x:Key="BrushWarning" Color="{DynamicResource ColorWarning}" />
+    <SolidColorBrush x:Key="BrushWarningForeground" Color="{DynamicResource ColorWarningForeground}" />
 
     <SolidColorBrush x:Key="BrushBrand" Color="{DynamicResource ColorBrand}" />
     <SolidColorBrush x:Key="BrushPrimary" Color="{DynamicResource ColorPrimary}" />
