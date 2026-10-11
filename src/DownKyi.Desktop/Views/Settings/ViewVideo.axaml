@@ -116,6 +116,7 @@
                     VerticalContentAlignment="Center"
                     DisplayMemberBinding="{Binding Name}"
                     ItemsSource="{Binding VideoParseTypeList}"
+                    IsEnabled="False"
                     SelectedItem="{Binding SelectedVideoParseType}">
                     <Interaction.Behaviors>
                         <EventTriggerBehavior EventName="SelectionChanged">
