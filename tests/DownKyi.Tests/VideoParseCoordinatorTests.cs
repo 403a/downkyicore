@@ -26,10 +26,31 @@ public sealed class VideoParseCoordinatorTests
             CancellationToken.None);
 
         Assert.Same(info, result.VideoInfoView);
+        Assert.Equal(VideoDetailParseOutcome.Ready, result.Outcome);
         var section = Assert.Single(result.VideoSections);
         Assert.Equal("default", section.Title);
         Assert.True(section.IsSelected);
         Assert.Same(pages, section.VideoPages);
+    }
+
+    [Fact]
+    public async Task LoadDetailAsyncReportsNoContentWhenMetadataHasNoPages()
+    {
+        var service = new StubInfoService
+        {
+            VideoInfo = new VideoInfoView { Title = "metadata only" },
+            VideoPages = []
+        };
+        var coordinator = new VideoParseCoordinator((_, _) => service);
+
+        var result = await coordinator.LoadDetailAsync(
+            "unrecognized",
+            refresh: true,
+            CancellationToken.None);
+
+        Assert.Equal(VideoDetailParseOutcome.NoContent, result.Outcome);
+        Assert.Null(result.VideoInfoView);
+        Assert.Empty(result.VideoSections);
     }
 
     [Fact]

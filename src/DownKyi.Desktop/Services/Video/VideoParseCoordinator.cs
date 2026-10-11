@@ -97,7 +97,7 @@ internal sealed class VideoParseCoordinator
         cancellationToken.ThrowIfCancellationRequested();
         if (videoSections != null)
         {
-            var result = new VideoDetailParseResult(videoInfoView, videoSections.ToArray());
+            var result = VideoDetailParseResult.From(videoInfoView, videoSections);
             CommitInfoService(input, service, cancellationToken);
             return result;
         }
@@ -114,7 +114,7 @@ internal sealed class VideoParseCoordinator
                 VideoPages = pages
             }
         ];
-        var defaultResult = new VideoDetailParseResult(videoInfoView, defaultSections);
+        var defaultResult = VideoDetailParseResult.From(videoInfoView, defaultSections);
         CommitInfoService(input, service, cancellationToken);
         return defaultResult;
     }
@@ -227,11 +227,46 @@ internal sealed class VideoParseCoordinator
     }
 }
 
-internal sealed record VideoDetailParseResult(
-    VideoInfoView? VideoInfoView,
-    IReadOnlyList<VideoSection> VideoSections)
+internal enum VideoDetailParseOutcome
 {
-    public static VideoDetailParseResult Empty { get; } = new(null, Array.Empty<VideoSection>());
+    NoContent,
+    Ready
+}
+
+internal sealed record VideoDetailParseResult
+{
+    private VideoDetailParseResult(
+        VideoDetailParseOutcome outcome,
+        VideoInfoView? videoInfoView,
+        IReadOnlyList<VideoSection> videoSections)
+    {
+        Outcome = outcome;
+        VideoInfoView = videoInfoView;
+        VideoSections = videoSections;
+    }
+
+    public VideoDetailParseOutcome Outcome { get; }
+
+    public VideoInfoView? VideoInfoView { get; }
+
+    public IReadOnlyList<VideoSection> VideoSections { get; }
+
+    public static VideoDetailParseResult Empty { get; } = new(
+        VideoDetailParseOutcome.NoContent,
+        null,
+        Array.Empty<VideoSection>());
+
+    public static VideoDetailParseResult From(
+        VideoInfoView videoInfoView,
+        IEnumerable<VideoSection> videoSections)
+    {
+        ArgumentNullException.ThrowIfNull(videoInfoView);
+        ArgumentNullException.ThrowIfNull(videoSections);
+        var sections = videoSections.ToArray();
+        return sections.Any(section => section.VideoPages.Count > 0)
+            ? new VideoDetailParseResult(VideoDetailParseOutcome.Ready, videoInfoView, sections)
+            : Empty;
+    }
 }
 
 internal enum VideoStreamUnavailableReason

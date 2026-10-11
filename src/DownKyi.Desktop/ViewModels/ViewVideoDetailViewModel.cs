@@ -130,7 +130,9 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
             _logger.LogDebugMessage("Processing captured video input.");
             var result = await _workflow.LoadDetailAsync(operation).ConfigureAwait(true);
             await UiDispatcher.InvokeAsync(() => ApplyVideoDetailResult(result, operation.CancellationToken));
-            if (_workflow.IsCurrent(operation) && settings.Basic.IsAutoParseVideo == AllowStatus.Yes)
+            if (_workflow.IsCurrent(operation)
+                && result.Outcome == VideoDetailParseOutcome.Ready
+                && settings.Basic.IsAutoParseVideo == AllowStatus.Yes)
             {
                 await ExecuteParseAllVideoCommandAsync().ConfigureAwait(true);
             }
@@ -318,9 +320,10 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
     private void ApplyVideoDetailResult(VideoDetailParseResult result, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        UiState.VideoInfoView = result.VideoInfoView;
-        if (UiState.VideoInfoView == null)
+        if (result.Outcome == VideoDetailParseOutcome.NoContent)
         {
+            UiState.VideoInfoView = null;
+            VideoSections.ReplaceRange(Array.Empty<VideoSection>());
             SetDisplayState(VideoDetailDisplayState.Empty);
             SetOperationStatus(
                 VideoDetailOperationStatus.Error,
@@ -330,6 +333,7 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
             return;
         }
 
+        UiState.VideoInfoView = result.VideoInfoView;
         VideoSections.ReplaceRange(result.VideoSections);
         UiState.SelectedVideoPage = VideoSelectionState.SelectInputPage(VideoSections, _workflow.CurrentInput);
         SetDisplayState(VideoDetailDisplayState.Content);

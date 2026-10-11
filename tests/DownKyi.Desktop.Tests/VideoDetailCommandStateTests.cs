@@ -716,7 +716,7 @@ public sealed class VideoDetailCommandStateTests
         };
         using var workflow = new VideoDetailWorkflowCoordinatorStub
         {
-            DetailResult = new VideoDetailParseResult(
+            DetailResult = VideoDetailParseResult.From(
                 new DownKyi.Presentation.VideoInfoView(),
                 new[] { section })
         };
@@ -761,6 +761,50 @@ public sealed class VideoDetailCommandStateTests
 
         Assert.Equal(1, downloadCoordinator.AddRequestCount);
         Assert.False(downloadCoordinator.LastIsAll);
+    }
+
+    [AvaloniaFact]
+    public async Task AutoParseDoesNotReplaceNoContentStatusWithNoSelection()
+    {
+        EnsureProductLanguageResources();
+        foreach (var parseScope in new[] { ParseScope.All, ParseScope.SelectedItem })
+        {
+            var settingsPath = Path.Combine(
+                Path.GetTempPath(),
+                $"downkyi-video-detail-no-content-{Guid.NewGuid():N}.json");
+            using var settings = new SettingsStore(settingsPath);
+            settings.Update(current => current with
+            {
+                Basic = current.Basic with
+                {
+                    IsAutoParseVideo = AllowStatus.Yes,
+                    ParseScope = parseScope
+                }
+            });
+            using var workflow = new VideoDetailWorkflowCoordinatorStub
+            {
+                DetailResult = VideoDetailParseResult.Empty
+            };
+            using var viewModel = new ViewVideoDetailViewModel(
+                new DesktopInteractionContextStub(),
+                new ClipboardServiceStub(),
+                settings,
+                workflow,
+                new VideoDetailDownloadCoordinatorStub(),
+                NullLogger<ViewVideoDetailViewModel>.Instance);
+            var completion = WaitUntilExecutableAfterDisabled(viewModel.InputCommand);
+            viewModel.UiState.InputText = "unrecognized content";
+
+            viewModel.InputCommand.Execute(null);
+            await completion.WaitAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+            Assert.Equal(VideoDetailDisplayState.Empty, viewModel.UiState.DisplayState);
+            Assert.Equal(VideoDetailOperationStatus.Error, viewModel.UiState.OperationStatus);
+            Assert.Equal("没有找到可解析的视频内容。", viewModel.UiState.OperationStatusText);
+            Assert.Equal(1, workflow.OperationStartCount);
+            Assert.Null(workflow.LastParseScope);
+            Assert.False(workflow.PageStreamsStarted.Task.IsCompleted);
+        }
     }
 
     [AvaloniaFact]
