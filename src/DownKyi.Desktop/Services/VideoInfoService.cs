@@ -356,18 +356,14 @@ internal class VideoInfoService : IInfoService
         ArgumentNullException.ThrowIfNull(page);
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
-        return await WbiRequestExecutor.ExecuteAsync(
+        return await _client.GetVideoPlaybackDiscoveryAsync(
             _wbiKeyProvider,
-            (keys, unixTimeSeconds) => _client.GetVideoPlaybackDiscoveryAsync(
-                keys,
-                unixTimeSeconds,
-                page.Avid,
-                page.Bvid,
-                page.Cid,
-                page.Page,
-                request,
-                cancellationToken),
             TimeProvider.System,
+            page.Avid,
+            page.Bvid,
+            page.Cid,
+            page.Page,
+            request,
             cancellationToken).ConfigureAwait(false);
     }
 

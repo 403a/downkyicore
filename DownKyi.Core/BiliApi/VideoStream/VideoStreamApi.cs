@@ -79,8 +79,8 @@ public static partial class VideoStreamApi
     /// </summary>
     public static async Task<PlayUrl?> GetVideoPlaybackDiscoveryAsync(
         this IBilibiliApiClient client,
-        WbiKeys keys,
-        long unixTimeSeconds,
+        IWbiKeyProvider keyProvider,
+        TimeProvider timeProvider,
         long avid,
         string bvid,
         long cid,
@@ -88,6 +88,8 @@ public static partial class VideoStreamApi
         PlaybackDiscoveryRequest request,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(keyProvider);
+        ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(request);
         PlayUrl? webpage;
         try
@@ -114,19 +116,21 @@ public static partial class VideoStreamApi
         PlayUrl? api;
         try
         {
-            api = await client.GetVideoPlayUrlAsync(
-                keys,
-                unixTimeSeconds,
-                avid,
-                bvid,
-                cid,
-                PlaybackQualityCatalog.MaximumProbeQuality,
+            api = await WbiRequestExecutor.ExecuteAsync(
+                keyProvider,
+                (keys, unixTimeSeconds) => client.GetVideoPlayUrlAsync(
+                    keys,
+                    unixTimeSeconds,
+                    avid,
+                    bvid,
+                    cid,
+                    PlaybackQualityCatalog.MaximumProbeQuality,
+                    cancellationToken),
+                timeProvider,
                 cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception) when (webpage != null &&
-            (exception is PlaybackResourceUnavailableException
-             || exception is HttpRequestException
-             || (exception is OperationCanceledException && !cancellationToken.IsCancellationRequested)))
+            IsRecoverableSupplementFailure(exception, cancellationToken))
         {
             return webpage;
         }
@@ -462,9 +466,7 @@ public static partial class VideoStreamApi
                 cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception) when (discoverAvailability && embeddedPlayUrl != null
-            && (exception is PlaybackResourceUnavailableException
-                || exception is HttpRequestException
-                || (exception is OperationCanceledException && !cancellationToken.IsCancellationRequested)))
+            && IsRecoverableSupplementFailure(exception, cancellationToken))
         {
             return CompleteBangumiPlayback(
                 embeddedPlayUrl,
@@ -496,6 +498,14 @@ public static partial class VideoStreamApi
             PlayUrlResolutionSource.Api,
             $"api-fallback-selected:{apiFallbackReason}");
     }
+
+    private static bool IsRecoverableSupplementFailure(
+        Exception exception,
+        CancellationToken cancellationToken) =>
+        exception is BilibiliApiResponseException
+        or PlaybackResourceUnavailableException
+        or HttpRequestException
+        || (exception is OperationCanceledException && !cancellationToken.IsCancellationRequested);
 
     private static bool CanCompleteEmbeddedDiscovery(
         bool discoverAvailability,
