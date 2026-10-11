@@ -49,11 +49,11 @@ internal partial class ViewVideoViewModel : ViewModelBase
         // 优先下载音质
         AudioQualityList = PlaybackQualityCatalog.GetAudioPreferences();
 
-        // 首选视频解析方式
+        // The old parse-mode setting stays readable, but playback is always
+        // webpage-first with API supplementation.
         VideoParseTypeList = new List<VideoParseType>
         {
-            new() { Name = "API(解析快、易风控)", Id = 0 },
-            new() { Name = "WebPage(解析慢、不易风控)", Id = 1 },
+            new() { Name = "网页优先（API 自动补足）", Id = 1 }
         };
 
         // 文件命名格式
