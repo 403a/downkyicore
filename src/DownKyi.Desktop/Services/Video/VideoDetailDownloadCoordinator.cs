@@ -11,7 +11,7 @@ namespace DownKyi.Services.Video;
 
 internal interface IVideoDetailDownloadCoordinator
 {
-    Task<DownloadAddResult?> AddAsync(
+    Task<DownloadAddResult> AddAsync(
         string input,
         VideoInfoView videoInfoView,
         IList<VideoSection> videoSections,
@@ -32,7 +32,7 @@ internal sealed class VideoDetailDownloadCoordinator : IVideoDetailDownloadCoord
         _actionPlanner = actionPlanner ?? throw new ArgumentNullException(nameof(actionPlanner));
     }
 
-    public Task<DownloadAddResult?> AddAsync(
+    public async Task<DownloadAddResult> AddAsync(
         string input,
         VideoInfoView videoInfoView,
         IList<VideoSection> videoSections,
@@ -46,7 +46,9 @@ internal sealed class VideoDetailDownloadCoordinator : IVideoDetailDownloadCoord
         var streamType = PlayStreamTypeResolver.ResolvePlayStreamType(input);
         if (streamType == null)
         {
-            return Task.FromResult<DownloadAddResult?>(null);
+            return DownloadAddResult.Stopped(
+                DownloadAddOutcome.Rejected,
+                DownloadAddStopReason.UnsupportedInput);
         }
 
         var addService = _serviceFactory.Create(streamType.Value);
@@ -54,7 +56,7 @@ internal sealed class VideoDetailDownloadCoordinator : IVideoDetailDownloadCoord
             .Where(page => isAll || page.IsSelected)
             .Take(2)
             .ToArray();
-        return DownloadAddCoordinator.AddToDownloadIfSelectionAcceptedAsync(
+        var flow = await DownloadAddCoordinator.AddToDownloadIfSelectionAcceptedAsync(
             () => addService.EnsureAdmissionAsync(cancellationToken),
             () => addService.SelectDownloadAsync(
                 selectedPages.Length == 1 ? selectedPages[0] : null,
@@ -82,6 +84,25 @@ internal sealed class VideoDetailDownloadCoordinator : IVideoDetailDownloadCoord
                     .AddToDownload(selection.Directory, finalizedDownload, cancellationToken)
                     .ConfigureAwait(false);
             },
-            cancellationToken);
+            cancellationToken).ConfigureAwait(true);
+        return flow.Outcome switch
+        {
+            DownloadAddFlowOutcome.Completed => flow.Value
+                ?? throw new InvalidOperationException("A completed download operation requires a result."),
+            DownloadAddFlowOutcome.AdmissionCanceled => DownloadAddResult.Stopped(
+                DownloadAddOutcome.Canceled,
+                DownloadAddStopReason.AdmissionCanceled),
+            DownloadAddFlowOutcome.AdmissionFailed => DownloadAddResult.Stopped(
+                DownloadAddOutcome.Failed,
+                DownloadAddStopReason.AdmissionFailed),
+            DownloadAddFlowOutcome.SelectionCanceled => DownloadAddResult.Stopped(
+                DownloadAddOutcome.Canceled,
+                DownloadAddStopReason.SelectionCanceled),
+            DownloadAddFlowOutcome.SelectionUnavailable => DownloadAddResult.Stopped(
+                DownloadAddOutcome.Failed,
+                DownloadAddStopReason.SelectionUnavailable),
+            _ => throw new InvalidOperationException(
+                $"Unsupported download flow outcome: {flow.Outcome:G}.")
+        };
     }
 }

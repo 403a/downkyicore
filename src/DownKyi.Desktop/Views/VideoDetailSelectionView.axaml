@@ -220,9 +220,8 @@
                             <Grid>
                                 <ComboBox
                                     DisplayMemberBinding="{Binding QualityFormat}"
-                                    SelectedValueBinding="{Binding Quality}"
                                     ItemsSource="{Binding VideoQualityList,Mode=OneWay}"
-                                    SelectedValue="{Binding SelectedVideoQualityId,Mode=TwoWay}">
+                                    SelectedItem="{Binding VideoQuality,Mode=TwoWay}">
                                     <Interaction.Behaviors>
                                         <EventTriggerBehavior EventName="SelectionChanged">
                                             <InvokeCommandAction
@@ -241,8 +240,8 @@
                         <DataTemplate DataType="vmp:VideoPage">
                             <Grid>
                                 <ComboBox
-                                    ItemsSource="{Binding VideoCodecList,Mode=OneWay}"
-                                    SelectedItem="{Binding SelectedVideoCodec,Mode=TwoWay}" />
+                                    ItemsSource="{Binding VideoQuality.VideoCodecList,Mode=OneWay}"
+                                    SelectedItem="{Binding VideoQuality.SelectedVideoCodec,Mode=TwoWay}" />
                             </Grid>
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>

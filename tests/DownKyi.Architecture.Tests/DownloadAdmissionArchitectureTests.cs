@@ -103,7 +103,7 @@ public sealed class DownloadAdmissionArchitectureTests
         var video = ReadSource(
             "src", "DownKyi.Desktop", "Services", "Video", "VideoDetailDownloadCoordinator.cs");
 
-        Assert.Contains("Task<DownloadAddSelection?> SelectDownloadAsync", contract, StringComparison.Ordinal);
+        Assert.Contains("Task<DownloadSelectionResult> SelectDownloadAsync", contract, StringComparison.Ordinal);
         Assert.Contains("Task<PreparedDownload> PrepareAsync", contract, StringComparison.Ordinal);
         Assert.Contains("FinalizedDownload finalizedDownload", contract, StringComparison.Ordinal);
         Assert.Contains("DownloadContentSelection RequestedContent", selection, StringComparison.Ordinal);

@@ -43,7 +43,8 @@ public sealed class VideoDetailDownloadCoordinatorTests
             isAll: false,
             CancellationToken.None);
 
-        Assert.Null(result);
+        Assert.Equal(DownloadAddOutcome.Rejected, result.Outcome);
+        Assert.Equal(DownloadAddStopReason.UnsupportedInput, result.StopReason);
         Assert.Equal(0, factory.CreateCount);
     }
 
@@ -61,9 +62,30 @@ public sealed class VideoDetailDownloadCoordinatorTests
             isAll: false,
             TestContext.Current.CancellationToken);
 
-        Assert.Null(result);
+        Assert.Equal(DownloadAddOutcome.Canceled, result.Outcome);
+        Assert.Equal(DownloadAddStopReason.AdmissionCanceled, result.StopReason);
         Assert.Equal(1, session.AdmissionCheckCount);
         Assert.Equal(0, session.DirectorySelectionCount);
+        Assert.Equal(0, session.AddCount);
+    }
+
+    [Fact]
+    public async Task CanceledSelectionReturnsCanceledWithoutCallingPreparation()
+    {
+        var session = new RecordingSession(admissionAllowed: true, selectionAccepted: false);
+        var coordinator = CreateCoordinator(new RecordingFactory(session));
+
+        var result = await coordinator.AddAsync(
+            "BV17x411w7KC",
+            new VideoInfoView(),
+            [],
+            isAll: false,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(DownloadAddOutcome.Canceled, result.Outcome);
+        Assert.Equal(DownloadAddStopReason.SelectionCanceled, result.StopReason);
+        Assert.Equal(1, session.DirectorySelectionCount);
+        Assert.Equal(0, session.PrepareCount);
         Assert.Equal(0, session.AddCount);
     }
 
@@ -101,7 +123,7 @@ public sealed class VideoDetailDownloadCoordinatorTests
             isAll: true,
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(1, result?.AddedCount);
+        Assert.Equal(1, result.AddedCount);
         Assert.Equal(1, session.PrepareCount);
         Assert.Equal(1, session.AddCount);
         Assert.Same(video, session.CreatedPreparedDownload!.Video);
@@ -124,7 +146,9 @@ public sealed class VideoDetailDownloadCoordinatorTests
 
     }
 
-    private sealed class RecordingSession(bool admissionAllowed = false) : IAddToDownloadSession
+    private sealed class RecordingSession(
+        bool admissionAllowed = false,
+        bool selectionAccepted = true) : IAddToDownloadSession
     {
         public int AdmissionCheckCount { get; private set; }
 
@@ -146,20 +170,25 @@ public sealed class VideoDetailDownloadCoordinatorTests
 
         public VideoPage? ReceivedSubtitlePage { get; private set; }
 
-        public Task<bool> EnsureAdmissionAsync(CancellationToken cancellationToken = default)
+        public Task<DownloadAdmissionOutcome> EnsureAdmissionAsync(
+            CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             AdmissionCheckCount++;
-            return Task.FromResult(admissionAllowed);
+            return Task.FromResult(admissionAllowed
+                ? DownloadAdmissionOutcome.Allowed
+                : DownloadAdmissionOutcome.Canceled);
         }
 
-        public Task<DownloadAddSelection?> SelectDownloadAsync(
+        public Task<DownloadSelectionResult> SelectDownloadAsync(
             VideoPage? subtitlePage = null,
             CancellationToken cancellationToken = default)
         {
             DirectorySelectionCount++;
             ReceivedSubtitlePage = subtitlePage;
-            return Task.FromResult<DownloadAddSelection?>(Selection);
+            return Task.FromResult(selectionAccepted
+                ? DownloadSelectionResult.Accepted(Selection)
+                : DownloadSelectionResult.Canceled);
         }
 
         public Task<PreparedDownload> PrepareAsync(
@@ -192,11 +221,11 @@ public sealed class VideoDetailDownloadCoordinatorTests
             AddCount++;
             ReceivedDirectory = directory;
             ReceivedFinalizedDownload = finalizedDownload;
-            return Task.FromResult(new DownloadAddResult(
-                AddedCount: 1,
-                DuplicateCount: 0,
-                FailedCount: 0,
-                SkippedCount: 0));
+            return Task.FromResult(DownloadAddResult.FromCounts(
+                addedCount: 1,
+                duplicateCount: 0,
+                failedCount: 0,
+                skippedCount: 0));
         }
     }
 

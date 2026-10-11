@@ -370,6 +370,28 @@ public sealed class VideoPagePlaybackMapperTests : IDisposable
     }
 
     [Fact]
+    public void ReparsePreservesManualStreamKindAndCodecForMatchingQualityIds()
+    {
+        var settings = CreateSettings(videoQuality: 80, isVip: true);
+        var page = new VideoPage();
+
+        VideoPagePlaybackMapper.ApplyPlayUrl(CreateSameQualityDashAndDurlPlayUrl(), page, settings);
+        page.VideoQuality = page.VideoQualityList.Single(candidate => candidate.IsDurl);
+        page.SelectedVideoCodec = "H.264/AVC";
+
+        VideoPagePlaybackMapper.ApplyPlayUrlPreservingSelection(
+            CreateSameQualityDashAndDurlPlayUrl(),
+            page,
+            settings);
+
+        Assert.NotNull(page.VideoQuality);
+        Assert.True(page.VideoQuality.IsDurl);
+        Assert.Equal(80, page.VideoQuality.Quality);
+        Assert.Equal("H.264/AVC", page.SelectedVideoCodec);
+        Assert.Contains(page.VideoQuality, page.VideoQualityList);
+    }
+
+    [Fact]
     public void ServerProvidedVipQualityIsNotHiddenByCachedAccountState()
     {
         var settings = CreateSettings(videoQuality: 127, isVip: false);
@@ -594,6 +616,46 @@ public sealed class VideoPagePlaybackMapperTests : IDisposable
                 IsLogin = isVip,
                 IsVip = isVip
             }
+        };
+    }
+
+    private static PlayUrl CreateSameQualityDashAndDurlPlayUrl()
+    {
+        return new PlayUrl
+        {
+            Availability = new PlayUrlAvailability(
+            [
+                new PlayUrlVideoAvailability(
+                    80,
+                    12,
+                    PlayUrlStreamKind.Dash,
+                    "1080P DASH"),
+                new PlayUrlVideoAvailability(
+                    80,
+                    7,
+                    PlayUrlStreamKind.Durl,
+                    "1080P DURL")
+            ],
+            []),
+            Dash = new PlayUrlDash
+            {
+                Video =
+                [
+                    new PlayUrlDashVideo
+                    {
+                        Id = 80,
+                        CodecId = 12,
+                        BaseAddress = "https://media.invalid/video-80-hevc"
+                    }
+                ]
+            },
+            Durl =
+            [
+                new PlayUrlDurl
+                {
+                    SourceAddress = "https://media.invalid/video-80.mp4"
+                }
+            ]
         };
     }
 

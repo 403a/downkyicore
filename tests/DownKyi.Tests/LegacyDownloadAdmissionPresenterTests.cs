@@ -17,9 +17,9 @@ public sealed class LegacyDownloadAdmissionPresenterTests
         var dialogs = new RecordingDialogService(AppDialogOutcome.Canceled);
         var presenter = new LegacyDownloadAdmissionPresenter(tasks, dialogs);
 
-        var allowed = await presenter.EnsureAdmissionAsync(TestContext.Current.CancellationToken);
+        var outcome = await presenter.EnsureAdmissionAsync(TestContext.Current.CancellationToken);
 
-        Assert.False(allowed);
+        Assert.Equal(DownloadAdmissionOutcome.Canceled, outcome);
         Assert.True(store.Blocked);
         Assert.Equal(0, store.ConfirmationCount);
         var request = Assert.Single(dialogs.Requests);
@@ -35,8 +35,12 @@ public sealed class LegacyDownloadAdmissionPresenterTests
         var dialogs = new RecordingDialogService(AppDialogOutcome.Accepted);
         var presenter = new LegacyDownloadAdmissionPresenter(tasks, dialogs);
 
-        Assert.True(await presenter.EnsureAdmissionAsync(TestContext.Current.CancellationToken));
-        Assert.True(await presenter.EnsureAdmissionAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(
+            DownloadAdmissionOutcome.Allowed,
+            await presenter.EnsureAdmissionAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(
+            DownloadAdmissionOutcome.Allowed,
+            await presenter.EnsureAdmissionAsync(TestContext.Current.CancellationToken));
 
         Assert.False(store.Blocked);
         Assert.Equal(1, store.ConfirmationCount);
@@ -60,9 +64,9 @@ public sealed class LegacyDownloadAdmissionPresenterTests
             AppDialogOutcome.Accepted);
         var presenter = new LegacyDownloadAdmissionPresenter(tasks, dialogs);
 
-        var allowed = await presenter.EnsureAdmissionAsync(TestContext.Current.CancellationToken);
+        var outcome = await presenter.EnsureAdmissionAsync(TestContext.Current.CancellationToken);
 
-        Assert.False(allowed);
+        Assert.Equal(DownloadAdmissionOutcome.Failed, outcome);
         Assert.True(store.Blocked);
         Assert.Equal(1, store.ConfirmationCount);
         Assert.Equal(2, dialogs.Requests.Count);

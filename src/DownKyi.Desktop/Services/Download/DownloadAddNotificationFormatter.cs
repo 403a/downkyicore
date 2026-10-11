@@ -4,10 +4,48 @@ using DownKyi.Utils;
 
 namespace DownKyi.Services.Download;
 
+internal enum DownloadAddNotificationKind
+{
+    Success,
+    Warning,
+    Canceled,
+    Error
+}
+
+internal readonly record struct DownloadAddNotification(
+    DownloadAddNotificationKind Kind,
+    string Message);
+
 internal static class DownloadAddNotificationFormatter
 {
-    public static string Format(DownloadAddResult result)
+    public static DownloadAddNotification Create(DownloadAddResult result)
     {
+        return new DownloadAddNotification(
+            result.Outcome switch
+            {
+                DownloadAddOutcome.Completed => DownloadAddNotificationKind.Success,
+                DownloadAddOutcome.Partial or DownloadAddOutcome.Rejected =>
+                    DownloadAddNotificationKind.Warning,
+                DownloadAddOutcome.Canceled => DownloadAddNotificationKind.Canceled,
+                DownloadAddOutcome.Failed => DownloadAddNotificationKind.Error,
+                _ => throw new ArgumentOutOfRangeException(nameof(result), result.Outcome, null)
+            },
+            FormatMessage(result));
+    }
+
+    private static string FormatMessage(DownloadAddResult result)
+    {
+        if (result.Outcome == DownloadAddOutcome.Canceled && result.HasRecordedWork)
+        {
+            return FormatText(
+                "TipAddDownloadingCanceledAfterProgress",
+                FormatCounts(
+                    result.AddedCount,
+                    result.DuplicateCount,
+                    result.FailedCount,
+                    result.SkippedCount));
+        }
+
         if (HasMixedCounts(
                 result.AddedCount,
                 result.DuplicateCount,
@@ -37,10 +75,21 @@ internal static class DownloadAddNotificationFormatter
 
         return result.StopReason switch
         {
-            DownloadPlanningStopReason.NoAvailableContent =>
+            DownloadAddStopReason.UnsupportedInput =>
+                DictionaryResource.GetString("TipAddDownloadingUnsupportedInput"),
+            DownloadAddStopReason.AdmissionCanceled or DownloadAddStopReason.SelectionCanceled
+                or DownloadAddStopReason.CancellationRequested =>
+                DictionaryResource.GetString("TipAddDownloadingCanceled"),
+            DownloadAddStopReason.AdmissionFailed =>
+                DictionaryResource.GetString("TipAddDownloadingAdmissionFailed"),
+            DownloadAddStopReason.SelectionUnavailable =>
+                DictionaryResource.GetString("TipAddDownloadingSelectionUnavailable"),
+            DownloadAddStopReason.NoAvailableContent =>
                 DictionaryResource.GetString("TipAddDownloadingUnavailable"),
-            DownloadPlanningStopReason.SkippedByUser =>
+            DownloadAddStopReason.SkippedByUser =>
                 DictionaryResource.GetString("TipAddDownloadingSkippedByChoice"),
+            DownloadAddStopReason.RuntimeUnavailable or DownloadAddStopReason.TaskAdmissionFailed =>
+                DictionaryResource.GetString("TipAddDownloadingFailed"),
             _ when result.FailedCount > 0 =>
                 DictionaryResource.GetString("TipAddDownloadingFailed"),
             _ => DictionaryResource.GetString("TipAddDownloadingZero")
@@ -115,5 +164,13 @@ internal static class DownloadAddNotificationFormatter
         }
 
         return message;
+    }
+
+    private static string FormatText(string resourceKey, string summary)
+    {
+        return DictionaryResource.GetString(resourceKey).Replace(
+            "{0}",
+            summary,
+            StringComparison.Ordinal);
     }
 }

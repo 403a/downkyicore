@@ -136,10 +136,14 @@
     <system:String x:Key="VideoDetailStatusChooseParseScope">请选择本次要解析的范围。</system:String>
     <system:String x:Key="VideoDetailStatusParsing">正在解析音质、画质和视频编码……</system:String>
     <system:String x:Key="VideoDetailStatusParsed">解析完成：已更新 {0} 个视频。</system:String>
+    <system:String x:Key="VideoDetailStatusPartiallyParsed">解析部分完成：已更新 {0} 个视频，{1} 个没有可用媒体。</system:String>
+    <system:String x:Key="VideoDetailStatusNoSelection">没有选中要解析的视频。</system:String>
     <system:String x:Key="VideoDetailStatusNoPlayback">解析没有返回可用的媒体信息。</system:String>
     <system:String x:Key="VideoDetailStatusMissingCodecs">解析完成，但 {0} 个视频的当前画质没有可识别的编码选项：{1}。</system:String>
+    <system:String x:Key="VideoDetailStatusPartialMissingCodecs">解析部分完成：已取得 {0} 个视频，{1} 个没有可用媒体；其中 {2} 个当前画质没有可识别的编码选项：{3}。</system:String>
     <system:String x:Key="VideoDetailStatusMissingCodecDetail">{0}（编码 ID：{1}）</system:String>
     <system:String x:Key="VideoDetailStatusCanceled">操作已取消。</system:String>
+    <system:String x:Key="VideoDetailStatusFailed">操作失败，请查看日志。</system:String>
     <system:String x:Key="VideoDetailStatusAddingDownloads">正在建立下载任务……</system:String>
     <system:String x:Key="VideoDetailStatusAddUnavailable">未能建立下载任务；下载服务没有返回结果。</system:String>
     <system:String x:Key="DownloadSelected">下载选中项</system:String>
@@ -150,6 +154,11 @@
     <system:String x:Key="TipAddDownloadingUnavailable">所选内容目前没有可下载的资源。</system:String>
     <system:String x:Key="TipAddDownloadingSkippedByChoice">已按你的选择跳过下载。</system:String>
     <system:String x:Key="TipAddDownloadingFailed">新增下载任务失败。</system:String>
+    <system:String x:Key="TipAddDownloadingUnsupportedInput">当前输入无法建立下载任务。</system:String>
+    <system:String x:Key="TipAddDownloadingCanceled">已取消新增下载任务。</system:String>
+    <system:String x:Key="TipAddDownloadingCanceledAfterProgress">{0} 操作随后取消。</system:String>
+    <system:String x:Key="TipAddDownloadingAdmissionFailed">下载任务准入未完成，未新增任务。</system:String>
+    <system:String x:Key="TipAddDownloadingSelectionUnavailable">下载目录不可用，未新增任务。</system:String>
     <system:String x:Key="TipAddDownloadingSummary">新增 {0} 项；重复 {1} 项，跳过 {2} 项，失败 {3} 项。</system:String>
     <system:String x:Key="TipAddDownloadingNoAddedSummary">未新增任务；重复 {0} 项，跳过 {1} 项，失败 {2} 项。</system:String>
     <system:String x:Key="TipAddDownloadingFinished1">成功添加了</system:String>

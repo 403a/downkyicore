@@ -142,6 +142,58 @@ public sealed class VideoTagLoadingTests : IDisposable
     }
 
     [Fact]
+    public async Task CancellationAfterFirstSubmissionCarriesTheSubmittedCount()
+    {
+        using var context = CreateContext(generateMetadata: false);
+        using var operation = CancellationTokenSource.CreateLinkedTokenSource(
+            TestContext.Current.CancellationToken);
+        context.Store.AfterAddAsync = operation.CancelAsync;
+        var firstPage = CreatePage(_ => Task.FromResult<IReadOnlyList<string>>([]));
+        var secondPage = CreatePage(_ => Task.FromResult<IReadOnlyList<string>>([]));
+        secondPage.Cid++;
+        secondPage.Name = "page-2";
+        secondPage.Order++;
+        var preparedDownload = await context.PrepareAsync(firstPage, secondPage);
+
+        var exception = await Assert.ThrowsAsync<DownloadAddCanceledException>(() =>
+            context.AddToDownloadResultAsync(
+                CreateSelection(_directory),
+                preparedDownload,
+                isAll: true,
+                cancellationToken: operation.Token));
+
+        Assert.Equal(DownloadAddOutcome.Canceled, exception.PartialResult.Outcome);
+        Assert.Equal(1, exception.PartialResult.AddedCount);
+        Assert.Single(context.ListState.Downloading);
+        Assert.Single(context.Queue.Enqueued);
+    }
+
+    [Fact]
+    public async Task FailureAfterFirstSubmissionReturnsPartialCounts()
+    {
+        using var context = CreateContext(generateMetadata: false);
+        context.Store.ExceptionOnAddCall = 2;
+        var firstPage = CreatePage(_ => Task.FromResult<IReadOnlyList<string>>([]));
+        var secondPage = CreatePage(_ => Task.FromResult<IReadOnlyList<string>>([]));
+        secondPage.Cid++;
+        secondPage.Name = "page-2";
+        secondPage.Order++;
+        var preparedDownload = await context.PrepareAsync(firstPage, secondPage);
+
+        var result = await context.AddToDownloadResultAsync(
+            CreateSelection(_directory),
+            preparedDownload,
+            isAll: true,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(DownloadAddOutcome.Partial, result.Outcome);
+        Assert.Equal(1, result.AddedCount);
+        Assert.Equal(1, result.FailedCount);
+        Assert.Single(context.ListState.Downloading);
+        Assert.Single(context.Queue.Enqueued);
+    }
+
+    [Fact]
     public async Task TagNetworkFailureDoesNotBlockDownloadTaskCreation()
     {
         using var context = CreateContext(generateMetadata: true);
@@ -178,7 +230,8 @@ public sealed class VideoTagLoadingTests : IDisposable
             page,
             TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-        Assert.Null(selection);
+        Assert.Equal(DownloadSelectionOutcome.Canceled, selection.Outcome);
+        Assert.Null(selection.Selection);
         var request = Assert.Single(context.Dialogs.Requests);
         Assert.Equal(
             DownloadSettingsDialog.SubtitleTrackDiscoveryStatus.Failed,
@@ -193,7 +246,8 @@ public sealed class VideoTagLoadingTests : IDisposable
         var selection = await context.Service.SelectDownloadAsync(
             cancellationToken: TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-        Assert.Null(selection);
+        Assert.Equal(DownloadSelectionOutcome.Canceled, selection.Outcome);
+        Assert.Null(selection.Selection);
         Assert.Equal(
             DownloadSettingsDialog.SubtitleTrackDiscoveryStatus.NotAttempted,
             DownloadSettingsDialog.ReadSubtitleDiscovery(
@@ -216,7 +270,8 @@ public sealed class VideoTagLoadingTests : IDisposable
             page,
             TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-        Assert.Null(selection);
+        Assert.Equal(DownloadSelectionOutcome.Canceled, selection.Outcome);
+        Assert.Null(selection.Selection);
         var request = Assert.Single(context.Dialogs.Requests);
         Assert.Empty(DownloadSettingsDialog.ReadSubtitleTracks(request));
         Assert.Equal(
@@ -242,7 +297,8 @@ public sealed class VideoTagLoadingTests : IDisposable
             page,
             TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-        Assert.Null(selection);
+        Assert.Equal(DownloadSelectionOutcome.Canceled, selection.Outcome);
+        Assert.Null(selection.Selection);
         var discovery = DownloadSettingsDialog.ReadSubtitleDiscovery(
             Assert.Single(context.Dialogs.Requests));
         Assert.Equal(DownloadSettingsDialog.SubtitleTrackDiscoveryStatus.Available, discovery.Status);
@@ -1212,6 +1268,20 @@ public sealed class VideoTagLoadingTests : IDisposable
             bool isAll = false,
             CancellationToken cancellationToken = default)
         {
+            var result = await AddToDownloadResultAsync(
+                selection,
+                preparedDownload,
+                isAll,
+                cancellationToken).ConfigureAwait(true);
+            return result.AddedCount;
+        }
+
+        public async Task<DownloadAddResult> AddToDownloadResultAsync(
+            DownloadAddSelection selection,
+            PreparedDownload preparedDownload,
+            bool isAll = false,
+            CancellationToken cancellationToken = default)
+        {
             var finalizedDownload = await new DownloadActionPlanner(
                     new DownloadContentConflictResolver(Dialogs))
                 .PlanAsync(
@@ -1224,7 +1294,7 @@ public sealed class VideoTagLoadingTests : IDisposable
             var result = await Service
                 .AddToDownload(selection.Directory, finalizedDownload, cancellationToken)
                 .ConfigureAwait(true);
-            return result.AddedCount;
+            return result;
         }
 
         public Task<PreparedDownload> PrepareAsync(params VideoPage[] pages)
@@ -1440,12 +1510,19 @@ public sealed class VideoTagLoadingTests : IDisposable
 
         public Func<Task>? AfterAddAsync { get; set; }
 
+        public int? ExceptionOnAddCall { get; set; }
+
         public async Task<OperationResult> AddAsync(
             DownloadTask task,
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             AddCount++;
+            if (AddCount == ExceptionOnAddCall)
+            {
+                throw new IOException("Download task store failed.");
+            }
+
             if (AfterAddAsync != null)
             {
                 await AfterAddAsync().ConfigureAwait(false);

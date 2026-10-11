@@ -30,11 +30,11 @@ internal interface IVideoDetailWorkflowCoordinator : IDisposable
 
     Task<VideoDetailParseResult> LoadDetailAsync(VideoDetailOperation operation);
 
-    Task<VideoStreamParseResult?> LoadPageStreamAsync(
+    Task<VideoStreamParseResult> LoadPageStreamAsync(
         VideoPage page,
         VideoDetailOperation operation);
 
-    Task<IReadOnlyList<VideoStreamParseResult>> LoadPageStreamsAsync(
+    Task<VideoStreamParseBatchResult> LoadPageStreamsAsync(
         IEnumerable<VideoSection> sections,
         ParseScope parseScope,
         VideoDetailOperation operation);
@@ -120,20 +120,22 @@ internal sealed class VideoDetailWorkflowCoordinator : IVideoDetailWorkflowCoord
         return result;
     }
 
-    public Task<VideoStreamParseResult?> LoadPageStreamAsync(
+    public async Task<VideoStreamParseResult> LoadPageStreamAsync(
         VideoPage page,
         VideoDetailOperation operation)
     {
         ArgumentNullException.ThrowIfNull(page);
         EnsureCurrent(operation);
-        return _parseCoordinator.LoadPageStreamAsync(
+        var result = await _parseCoordinator.LoadPageStreamAsync(
             CurrentInput,
             page,
             refresh: true,
-            operation.CancellationToken);
+            operation.CancellationToken).ConfigureAwait(false);
+        EnsureCurrent(operation);
+        return result;
     }
 
-    public Task<IReadOnlyList<VideoStreamParseResult>> LoadPageStreamsAsync(
+    public async Task<VideoStreamParseBatchResult> LoadPageStreamsAsync(
         IEnumerable<VideoSection> sections,
         ParseScope parseScope,
         VideoDetailOperation operation)
@@ -141,10 +143,12 @@ internal sealed class VideoDetailWorkflowCoordinator : IVideoDetailWorkflowCoord
         ArgumentNullException.ThrowIfNull(sections);
         EnsureCurrent(operation);
         var pages = VideoSelectionState.GetPagesForScope(sections, parseScope);
-        return _parseCoordinator.LoadPageStreamsAsync(
+        var result = await _parseCoordinator.LoadPageStreamsAsync(
             CurrentInput,
             pages,
-            operation.CancellationToken);
+            operation.CancellationToken).ConfigureAwait(false);
+        EnsureCurrent(operation);
+        return result;
     }
 
     private void EnsureCurrent(VideoDetailOperation operation)

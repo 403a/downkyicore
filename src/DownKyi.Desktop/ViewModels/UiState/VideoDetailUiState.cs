@@ -18,6 +18,8 @@ internal enum VideoDetailOperationStatus
     None,
     Running,
     Success,
+    Warning,
+    Canceled,
     Error
 }
 
@@ -73,8 +75,8 @@ internal sealed partial class VideoDetailUiState : ObservableObject
 
     public bool IsOperationRunning => OperationStatus == VideoDetailOperationStatus.Running;
 
-    public bool IsOperationSettled => OperationStatus is VideoDetailOperationStatus.Success
-        or VideoDetailOperationStatus.Error;
+    public bool IsOperationSettled => OperationStatus is not VideoDetailOperationStatus.None
+        and not VideoDetailOperationStatus.Running;
 
     public bool IsContentVisible => DisplayState == VideoDetailDisplayState.Content
                                     || (DisplayState == VideoDetailDisplayState.Busy && VideoInfoView != null);

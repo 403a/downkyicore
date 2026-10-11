@@ -309,26 +309,30 @@ public sealed class ContentDownloadCoordinatorTests
 
         public int AddCount { get; private set; }
 
-        public Task<bool> EnsureAdmissionAsync(CancellationToken cancellationToken = default)
+        public Task<DownloadAdmissionOutcome> EnsureAdmissionAsync(
+            CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             AdmissionCheckCount++;
-            return Task.FromResult(admissionAllowed);
+            return Task.FromResult(admissionAllowed
+                ? DownloadAdmissionOutcome.Allowed
+                : DownloadAdmissionOutcome.Canceled);
         }
 
         public DownloadAddSelection Selection { get; } = new(
             @"D:\Downloads",
             DownloadContentSelection.None with { Video = true });
 
-        public Task<DownloadAddSelection?> SelectDownloadAsync(
+        public Task<DownloadSelectionResult> SelectDownloadAsync(
             VideoPage? subtitlePage = null,
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
             DirectorySelectionCount++;
             return Task.FromResult(directory == null
-                ? null
-                : new DownloadAddSelection(directory, Selection.RequestedContent));
+                ? DownloadSelectionResult.Canceled
+                : DownloadSelectionResult.Accepted(
+                    new DownloadAddSelection(directory, Selection.RequestedContent)));
         }
 
         public Task<PreparedDownload> PrepareAsync(
@@ -368,11 +372,11 @@ public sealed class ContentDownloadCoordinatorTests
             Assert.NotNull(finalizedDownload);
             AddCount++;
             afterAdd?.Invoke(AddCount);
-            return Task.FromResult(new DownloadAddResult(
-                AddedCount: 1,
-                DuplicateCount: 0,
-                FailedCount: 0,
-                SkippedCount: 0));
+            return Task.FromResult(DownloadAddResult.FromCounts(
+                addedCount: 1,
+                duplicateCount: 0,
+                failedCount: 0,
+                skippedCount: 0));
         }
     }
 

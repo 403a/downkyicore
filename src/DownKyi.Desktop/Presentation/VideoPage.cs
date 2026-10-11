@@ -103,35 +103,8 @@ internal class VideoPage : ObservableObject
             if (SetProperty(ref videoQuality, value))
             {
                 VideoQualityMatch = null;
-                OnPropertyChanged(nameof(SelectedVideoQualityId));
                 OnPropertyChanged(nameof(VideoCodecList));
                 OnPropertyChanged(nameof(SelectedVideoCodec));
-            }
-        }
-    }
-
-    public int? SelectedVideoQualityId
-    {
-        get => videoQuality?.Quality;
-        set
-        {
-            if (value == null)
-            {
-                if (videoQuality != null)
-                {
-                    OnPropertyChanged();
-                }
-
-                return;
-            }
-
-            var selected = videoQualityList.FirstOrDefault(candidate =>
-                    candidate.Quality == value
-                    && candidate.IsDurl == videoQuality?.IsDurl)
-                ?? videoQualityList.FirstOrDefault(candidate => candidate.Quality == value);
-            if (selected != null)
-            {
-                VideoQuality = selected;
             }
         }
     }
@@ -172,7 +145,6 @@ internal class VideoPage : ObservableObject
         ArgumentNullException.ThrowIfNull(match);
         if (SetProperty(ref videoQuality, value))
         {
-            OnPropertyChanged(nameof(SelectedVideoQualityId));
             OnPropertyChanged(nameof(VideoCodecList));
             OnPropertyChanged(nameof(SelectedVideoCodec));
         }
