@@ -100,8 +100,57 @@ internal class VideoPage : ObservableObject
         get => videoQuality;
         set
         {
-            SetProperty(ref videoQuality, value);
-            VideoQualityMatch = null;
+            if (SetProperty(ref videoQuality, value))
+            {
+                VideoQualityMatch = null;
+                OnPropertyChanged(nameof(SelectedVideoQualityId));
+                OnPropertyChanged(nameof(VideoCodecList));
+                OnPropertyChanged(nameof(SelectedVideoCodec));
+            }
+        }
+    }
+
+    public int? SelectedVideoQualityId
+    {
+        get => videoQuality?.Quality;
+        set
+        {
+            if (value == null)
+            {
+                if (videoQuality != null)
+                {
+                    OnPropertyChanged();
+                }
+
+                return;
+            }
+
+            var selected = videoQualityList.FirstOrDefault(candidate =>
+                    candidate.Quality == value
+                    && candidate.IsDurl == videoQuality?.IsDurl)
+                ?? videoQualityList.FirstOrDefault(candidate => candidate.Quality == value);
+            if (selected != null)
+            {
+                VideoQuality = selected;
+            }
+        }
+    }
+
+    public IList<string> VideoCodecList =>
+        videoQuality?.VideoCodecList ?? Array.Empty<string>();
+
+    public string SelectedVideoCodec
+    {
+        get => videoQuality?.SelectedVideoCodec ?? string.Empty;
+        set
+        {
+            if (videoQuality == null || string.IsNullOrEmpty(value))
+            {
+                return;
+            }
+
+            videoQuality.SelectedVideoCodec = value;
+            OnPropertyChanged();
         }
     }
 
@@ -121,7 +170,13 @@ internal class VideoPage : ObservableObject
         PlaybackQualityMatch match)
     {
         ArgumentNullException.ThrowIfNull(match);
-        SetProperty(ref videoQuality, value);
+        if (SetProperty(ref videoQuality, value))
+        {
+            OnPropertyChanged(nameof(SelectedVideoQualityId));
+            OnPropertyChanged(nameof(VideoCodecList));
+            OnPropertyChanged(nameof(SelectedVideoCodec));
+        }
+
         VideoQualityMatch = match;
     }
 
