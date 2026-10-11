@@ -36,16 +36,16 @@
                            Text="{DynamicResource ApplyToAllQualitySubstitutionExplanation}"
                            TextWrapping="Wrap" />
                 <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
-                    <Button Grid.Column="0"
+                    <Button x:Name="UseAvailableContentButton"
+                            Grid.Column="0"
                             Command="{Binding UseAvailableContentCommand}"
                             Content="{Binding UseAvailableContent}"
-                            Foreground="{DynamicResource BrushText}"
-                            Theme="{StaticResource BtnStyle}" />
-                    <Button Grid.Column="1"
+                            Theme="{StaticResource BtnPrimaryStyle}" />
+                    <Button x:Name="SkipDownloadPageButton"
+                            Grid.Column="1"
                             Command="{Binding SkipPageCommand}"
                             Content="{DynamicResource SkipDownloadPage}"
-                            Foreground="{DynamicResource BrushText}"
-                            Theme="{StaticResource BtnStyle}" />
+                            Theme="{StaticResource BtnBorderStyle}" />
                 </Grid>
             </StackPanel>
         </Grid>

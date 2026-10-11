@@ -74,4 +74,23 @@
             <Setter Property="Opacity" Value="0.38" />
         </Style>
     </ControlTheme>
+
+    <ControlTheme x:Key="BtnPrimaryStyle"
+                  TargetType="Button"
+                  BasedOn="{StaticResource BtnStyle}">
+        <Setter Property="Background" Value="{DynamicResource BrushPrimary}" />
+        <Setter Property="Foreground" Value="{DynamicResource BrushText}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Style Selector="^:pointerover">
+            <Setter Property="Background" Value="{DynamicResource BrushPrimary}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BrushText}" />
+        </Style>
+        <Style Selector="^:pressed">
+            <Setter Property="Background" Value="{DynamicResource BrushPrimary}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource BrushText}" />
+        </Style>
+        <Style Selector="^:focus-visible">
+            <Setter Property="BorderBrush" Value="{DynamicResource BrushText}" />
+        </Style>
+    </ControlTheme>
 </ResourceDictionary>
