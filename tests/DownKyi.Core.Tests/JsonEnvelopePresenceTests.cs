@@ -22,17 +22,17 @@ public sealed class JsonEnvelopePresenceTests
     }
 
     [Fact]
-    public void AriaErrorOnlyResponseKeepsResultMissing()
+    public void AriaErrorOnlyResponseRaisesTypedFailure()
     {
         const string json = """
             {"id":"fixture","jsonrpc":"2.0","error":{"code":1,"message":"Unauthorized"}}
             """;
 
-        var response = AriaClient.DeserializeRpcResponse<AriaAddUri>(json);
+        var exception = Assert.Throws<AriaRpcException>(() =>
+            AriaClient.DeserializeRpcResponse<AriaAddUri>(json));
 
-        Assert.Null(response.Result);
-        Assert.Equal(1, response.Error?.Code);
-        Assert.Equal("Unauthorized", response.Error?.Message);
+        Assert.Equal(1, exception.Code);
+        Assert.Equal("Unauthorized", exception.RpcMessage);
     }
 
     [Fact]

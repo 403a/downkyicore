@@ -151,7 +151,23 @@ public sealed partial class AriaClient
         where T : class
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(response);
-        var aria = JsonConvert.DeserializeObject<T>(response);
+        var token = JToken.Parse(response);
+        if (token is not JObject envelope)
+        {
+            throw new JsonSerializationException("aria2 RPC returned a non-object JSON value.");
+        }
+
+        if (envelope["error"] is { Type: not JTokenType.Null })
+        {
+            if (!TryReadJsonRpcError(envelope, out var error))
+            {
+                throw new JsonSerializationException("aria2 RPC returned a malformed error object.");
+            }
+
+            throw new AriaRpcException(error.Code, error.Message);
+        }
+
+        var aria = envelope.ToObject<T>();
         return aria ?? throw new JsonSerializationException("aria2 RPC returned an empty JSON value.");
     }
 
@@ -205,18 +221,34 @@ public sealed partial class AriaClient
         try
         {
             var response = JObject.Parse(content);
-            return string.Equals(
-                       response["jsonrpc"]?.Value<string>(),
-                       JSONRPC,
-                       StringComparison.Ordinal)
-                   && response["error"] is JObject error
-                   && error["code"]?.Type == JTokenType.Integer
-                   && error["message"]?.Type == JTokenType.String;
+            return TryReadJsonRpcError(response, out _);
         }
         catch (JsonReaderException)
         {
             return false;
         }
+    }
+
+    private static bool TryReadJsonRpcError(JObject response, out AriaError error)
+    {
+        if (string.Equals(
+                response["jsonrpc"]?.Value<string>(),
+                JSONRPC,
+                StringComparison.Ordinal)
+            && response["error"] is JObject errorObject
+            && errorObject["code"]?.Type == JTokenType.Integer
+            && errorObject["message"]?.Type == JTokenType.String)
+        {
+            error = new AriaError
+            {
+                Code = errorObject["code"]!.Value<int>(),
+                Message = errorObject["message"]!.Value<string>()!
+            };
+            return true;
+        }
+
+        error = null!;
+        return false;
     }
 
 }

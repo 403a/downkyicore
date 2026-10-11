@@ -219,21 +219,32 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
             return;
         }
 
+        var operation = _workflow.StartOperation();
         SetOperationStatus(
             VideoDetailOperationStatus.Running,
             StatusText(
                 "VideoDetailStatusChooseParseScope",
                 "请选择本次要解析的范围。"));
-        var result = await ParsingSelectorDialog.ShowAsync(AppDialogs).ConfigureAwait(true);
-        if (result != null)
+        await RunOperationAsync(operation, async () =>
         {
-            await ExecuteParseAsync(result.Scope).ConfigureAwait(true);
-            return;
-        }
+            var result = await ParsingSelectorDialog
+                .ShowAsync(AppDialogs, operation.CancellationToken)
+                .ConfigureAwait(true);
+            if (!_workflow.IsCurrent(operation))
+            {
+                return;
+            }
 
-        SetOperationStatus(
-            VideoDetailOperationStatus.Canceled,
-            StatusText("VideoDetailStatusCanceled", "操作已取消。"));
+            if (result != null)
+            {
+                await ExecuteParseAsync(result.Scope).ConfigureAwait(true);
+                return;
+            }
+
+            SetOperationStatus(
+                VideoDetailOperationStatus.Canceled,
+                StatusText("VideoDetailStatusCanceled", "操作已取消。"));
+        }, null).ConfigureAwait(true);
     }
 
     private async Task ExecuteParseAsync(ParseScope parseScope)

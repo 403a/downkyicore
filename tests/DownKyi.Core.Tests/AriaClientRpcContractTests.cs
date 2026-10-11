@@ -156,10 +156,29 @@ public sealed class AriaClientRpcContractTests
         var content = await AriaClient.ReadRpcResponseAsync(
             response,
             TestContext.Current.CancellationToken);
-        var parsed = AriaClient.DeserializeRpcResponse<AriaShutdown>(content);
+        var exception = Assert.Throws<AriaRpcException>(() =>
+            AriaClient.DeserializeRpcResponse<AriaShutdown>(content));
 
-        Assert.Equal(1, parsed.Error?.Code);
-        Assert.Equal("GID#missing is not found", parsed.Error?.Message);
+        Assert.Equal(1, exception.Code);
+        Assert.Equal("GID#missing is not found", exception.RpcMessage);
+    }
+
+    [Fact]
+    public async Task RpcMethodRaisesTypedFailureForStructuredJsonRpcError()
+    {
+        const string jsonRpcError =
+            "{\"jsonrpc\":\"2.0\",\"id\":\"pause-test\",\"error\":{\"code\":1,\"message\":\"Pause rejected\"}}";
+        var client = new AriaClient(
+            "https://aria-contract.example",
+            35076,
+            "contract-token",
+            (_, _) => Task.FromResult<string?>(jsonRpcError));
+
+        var exception = await Assert.ThrowsAsync<AriaRpcException>(() =>
+            client.PauseAsync("gid", TestContext.Current.CancellationToken));
+
+        Assert.Equal(1, exception.Code);
+        Assert.Equal("Pause rejected", exception.RpcMessage);
     }
 
     [Fact]

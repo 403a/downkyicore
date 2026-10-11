@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using DownKyi.Application.Diagnostics;
+using DownKyi.Core.Aria2cNet.Client;
 
 namespace DownKyi.Services.Download;
 
@@ -23,20 +24,36 @@ internal sealed partial class Aria2TransferBackend
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(3));
-            var removed = await _ariaClient
-                .ForceRemoveAsync(backendIdentity, timeout.Token)
-                .ConfigureAwait(true);
-            if (removed.Error != null && !IsNotFound(removed.Error))
+            try
+            {
+                _ = await _ariaClient
+                    .ForceRemoveAsync(backendIdentity, timeout.Token)
+                    .ConfigureAwait(true);
+            }
+            catch (AriaRpcException exception) when (IsNotFound(exception.RpcMessage))
+            {
+                _logger.LogDebugMessage(
+                    "aria2 reset found no active task for the persisted backend identity.");
+            }
+            catch (AriaRpcException)
             {
                 return DownloadTransferResult.Failed(
                     DownloadTransferFailureKind.TransientNetwork,
                     "download.transfer.aria2-reset-rejected");
             }
 
-            var resultRemoved = await _ariaClient
-                .RemoveDownloadResultAsync(backendIdentity, timeout.Token)
-                .ConfigureAwait(true);
-            if (resultRemoved.Error != null && !IsNotFound(resultRemoved.Error))
+            try
+            {
+                _ = await _ariaClient
+                    .RemoveDownloadResultAsync(backendIdentity, timeout.Token)
+                    .ConfigureAwait(true);
+            }
+            catch (AriaRpcException exception) when (IsNotFound(exception.RpcMessage))
+            {
+                _logger.LogDebugMessage(
+                    "aria2 reset found no retained result for the persisted backend identity.");
+            }
+            catch (AriaRpcException)
             {
                 return DownloadTransferResult.Failed(
                     DownloadTransferFailureKind.TransientNetwork,

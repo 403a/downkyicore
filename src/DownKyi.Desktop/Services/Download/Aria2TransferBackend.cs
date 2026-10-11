@@ -141,6 +141,14 @@ internal sealed partial class Aria2TransferBackend : ITransferBackend
                 DownloadTransferFailureKind.TransientNetwork,
                 "download.transfer.aria2-rpc");
         }
+        catch (AriaRpcException exception)
+        {
+            _logger.LogWarningMessage(
+                $"aria2 RPC request was rejected; rpcCode={exception.Code}.");
+            return DownloadTransferResult.Failed(
+                DownloadTransferFailureKind.Permanent,
+                "download.transfer.aria2-rpc-rejected");
+        }
         catch (Newtonsoft.Json.JsonException exception)
         {
             _logger.LogWarningMessage(
@@ -219,6 +227,14 @@ internal sealed partial class Aria2TransferBackend : ITransferBackend
                 DownloadTransferFailureKind.TransientNetwork,
                 "download.transfer.aria2-rpc");
         }
+        catch (AriaRpcException exception)
+        {
+            _logger.LogWarningMessage(
+                $"aria2 RPC polling was rejected; rpcCode={exception.Code}.");
+            return DownloadTransferResult.Failed(
+                DownloadTransferFailureKind.Permanent,
+                "download.transfer.aria2-rpc-rejected");
+        }
         catch (Newtonsoft.Json.JsonException exception)
         {
             _logger.LogWarningMessage(
@@ -293,6 +309,26 @@ internal sealed partial class Aria2TransferBackend : ITransferBackend
             try
             {
                 checkpoint = await pauseCheckpointTask.ConfigureAwait(true);
+            }
+            catch (AriaRpcException exception)
+            {
+                LogPauseCommunicationFailure(
+                    "pause-rpc",
+                    exception,
+                    pauseConfirmed: false);
+                var statusAfterPauseFailure = await CancelAndObserveStatusAsync(
+                    transferCancellation,
+                    statusTask,
+                    pauseConfirmed: false).ConfigureAwait(true);
+                if (statusAfterPauseFailure != null)
+                {
+                    return await CreateTransferResultAsync(statusAfterPauseFailure, request)
+                        .ConfigureAwait(true);
+                }
+
+                return DownloadTransferResult.Failed(
+                    DownloadTransferFailureKind.Permanent,
+                    "download.transfer.aria2-rpc-rejected");
             }
             catch (Exception exception) when (IsPauseCommunicationFailure(exception))
             {
@@ -478,6 +514,16 @@ internal sealed partial class Aria2TransferBackend : ITransferBackend
                 DownloadTransferFailureKind.TransientNetwork,
                 "download.transfer.aria2-rpc");
         }
+        catch (AriaRpcException exception)
+        {
+            LogPauseCommunicationFailure(
+                "status-rpc",
+                exception,
+                pauseConfirmed: false);
+            return DownloadTransferResult.Failed(
+                DownloadTransferFailureKind.Permanent,
+                "download.transfer.aria2-rpc-rejected");
+        }
 
         if (status is not { Result: { } statusResult })
         {
@@ -592,6 +638,7 @@ internal sealed partial class Aria2TransferBackend : ITransferBackend
         return exception is HttpRequestException
             or IOException
             or TimeoutException
+            or AriaRpcException
             or Newtonsoft.Json.JsonException;
     }
 
@@ -630,27 +677,25 @@ internal sealed partial class Aria2TransferBackend : ITransferBackend
         string? existingStatus = null;
         if (!string.IsNullOrWhiteSpace(gid))
         {
-            var status = await _ariaClient
-                .TellStatus(gid, request.CancellationToken)
-                .ConfigureAwait(true);
-            if (status is not { Result: { } statusResult })
+            try
             {
-                if (IsNotFound(status.Error))
-                {
-                    gid = null;
-                    await request.SetBackendIdentityAsync(
-                        null,
-                        request.CancellationToken).ConfigureAwait(true);
-                }
-                else
+                var status = await _ariaClient
+                    .TellStatus(gid, request.CancellationToken)
+                    .ConfigureAwait(true);
+                if (status is not { Result: { } statusResult })
                 {
                     throw new InvalidOperationException(
                         "aria2 rejected the status request.");
                 }
-            }
-            else
-            {
+
                 existingStatus = statusResult.Status;
+            }
+            catch (AriaRpcException exception) when (IsNotFound(exception.RpcMessage))
+            {
+                gid = null;
+                await request.SetBackendIdentityAsync(
+                    null,
+                    request.CancellationToken).ConfigureAwait(true);
             }
         }
 
@@ -742,9 +787,9 @@ internal sealed partial class Aria2TransferBackend : ITransferBackend
         }
     }
 
-    private static bool IsNotFound(AriaError? error)
+    private static bool IsNotFound(string? errorMessage)
     {
-        return error?.Message.Contains(
+        return errorMessage?.Contains(
             "is not found",
             StringComparison.OrdinalIgnoreCase) == true;
     }

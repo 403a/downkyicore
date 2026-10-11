@@ -456,8 +456,11 @@ public sealed class Aria2PauseEventTests
             .WaitAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
     }
 
-    [Fact]
-    public async Task CustomAriaPauseUsesRpcAcknowledgementWithoutNotificationSocket()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CustomAriaPauseRequiresRpcAcknowledgementWithoutNotificationSocket(
+        bool rejectPause)
     {
         const string gid = "custom-pause-gid";
         var directory = Path.Combine(
@@ -495,7 +498,9 @@ public sealed class Aria2PauseEventTests
                         return CreateStatusResponse("active", outputPath: null);
                     case "aria2.pause":
                         Interlocked.Increment(ref pauseRpcCalls);
-                        return CreateResponse(gid);
+                        return rejectPause
+                            ? "{\"jsonrpc\":\"2.0\",\"id\":\"pause-test\",\"error\":{\"code\":1,\"message\":\"Pause rejected\"}}"
+                            : CreateResponse(gid);
                     default:
                         throw new InvalidOperationException($"Unexpected RPC method '{method}'.");
                 }
@@ -551,7 +556,12 @@ public sealed class Aria2PauseEventTests
                     .WaitAsync(TestContext.Current.CancellationToken)
                     .ConfigureAwait(true);
 
-                Assert.Equal(DownloadTransferOutcome.Paused, result.Outcome);
+                Assert.Equal(
+                    rejectPause ? DownloadTransferOutcome.Failed : DownloadTransferOutcome.Paused,
+                    result.Outcome);
+                Assert.Equal(
+                    rejectPause ? "download.transfer.aria2-rpc-rejected" : string.Empty,
+                    result.ErrorCode);
                 Assert.Equal(0, Volatile.Read(ref notificationSocketFactoryCalls));
                 Assert.Equal(1, Volatile.Read(ref tellStatusCalls));
                 Assert.Equal(1, Volatile.Read(ref pauseRpcCalls));

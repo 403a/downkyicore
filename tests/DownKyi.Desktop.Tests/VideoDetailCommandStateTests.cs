@@ -685,6 +685,11 @@ public sealed class VideoDetailCommandStateTests
 
         Assert.Null(workflow.LastParseScope);
         Assert.False(workflow.PageStreamsStarted.Task.IsCompleted);
+        Assert.Equal(VideoDetailOperationStatus.Error, viewModel.UiState.OperationStatus);
+        Assert.Equal(
+            "Accepted ParsingSelector result is missing a valid ParseScope.",
+            viewModel.UiState.OperationStatusText);
+        Assert.NotEqual(VideoDetailOperationStatus.Running, viewModel.UiState.OperationStatus);
     }
 
     [AvaloniaFact]
