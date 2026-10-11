@@ -217,10 +217,23 @@ public static partial class VideoStreamApi
         PlayUrl? webpage = null;
         if (preferWebPage)
         {
-            webpage = await GetPlayUrlWebPageAsync(
-                client,
-                BuildVideoPlayPageUrl(avid, bvid, page),
-                cancellationToken).ConfigureAwait(false);
+            try
+            {
+                webpage = await GetPlayUrlWebPageAsync(
+                    client,
+                    BuildVideoPlayPageUrl(avid, bvid, page),
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (HttpRequestException)
+            {
+                // An unavailable webpage must not block the API from resolving
+                // the persisted, exact download selection.
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                // Only a transport timeout falls back; caller cancellation propagates.
+            }
+
             if (webpage != null && FinalizedPlaybackResolver.TrySelect(
                     webpage,
                     supplement: null,
