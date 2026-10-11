@@ -158,7 +158,7 @@ public sealed class StartupDialogOrderingTests
         Assert.Equal(
             [
                 AppDialog.LegacyUpgrade,
-                AppDialog.DownloadRuntimeFailure,
+                AppDialog.StartupDiagnostics,
                 AppDialog.NewVersionAvailable
             ],
             dialogs.Requests);
@@ -214,7 +214,7 @@ public sealed class StartupDialogOrderingTests
         await startup.ConfigureAwait(true);
 
         Assert.Equal(
-            [AppDialog.LegacyUpgrade, AppDialog.DownloadRuntimeFailure],
+            [AppDialog.LegacyUpgrade, AppDialog.StartupDiagnostics],
             dialogs.Requests);
         Assert.Collection(
             dialogs.StartupDiagnostics!,
@@ -228,24 +228,6 @@ public sealed class StartupDialogOrderingTests
                 Assert.Equal(StartupDiagnosticSource.DownloadBootstrap, download.Source);
                 Assert.Same(downloadFailure, download.Failure);
             });
-    }
-
-    [Fact]
-    public void CollectorDeduplicatesSharedRootOnlyWithinTheSameSource()
-    {
-        var root = new InvalidOperationException("shared root");
-        var diagnostics = new StartupDiagnosticCollection();
-
-        diagnostics.Add(StartupDiagnostic.ForDownloadBootstrap(
-            new InvalidOperationException("wrapper one", root)));
-        diagnostics.Add(StartupDiagnostic.ForDownloadBootstrap(
-            new InvalidOperationException("wrapper two", root)));
-        diagnostics.Add(StartupDiagnostic.ForLegacyMigration(root));
-
-        Assert.Collection(
-            diagnostics.Items,
-            item => Assert.Equal(StartupDiagnosticSource.DownloadBootstrap, item.Source),
-            item => Assert.Equal(StartupDiagnosticSource.LegacyMigration, item.Source));
     }
 
     private static DownloadStoreRecoveryPresenter CreateRecoveryPresenter(
@@ -280,10 +262,10 @@ public sealed class StartupDialogOrderingTests
                 return _legacyCompletion.Task.WaitAsync(cancellationToken);
             }
 
-            if (request.Dialog == AppDialog.DownloadRuntimeFailure)
+            if (request.Dialog == AppDialog.StartupDiagnostics)
             {
                 StartupDiagnostics = Assert.IsAssignableFrom<IReadOnlyList<StartupDiagnostic>>(
-                    request.Parameters?[DownloadRuntimeFailureDialogViewModel.DiagnosticsParameter]);
+                    request.Parameters?[StartupDiagnosticsDialogViewModel.DiagnosticsParameter]);
             }
 
             return Task.FromResult(new AppDialogResult(

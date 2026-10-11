@@ -37,9 +37,9 @@ internal sealed class DialogContentFactory(IServiceProvider services)
                 typeof(NewVersionAvailableDialog),
                 typeof(NewVersionAvailableDialogViewModel)),
             AppDialog.LegacyUpgrade => (typeof(ViewUpgradingDialog), typeof(ViewUpgradingDialogViewModel)),
-            AppDialog.DownloadRuntimeFailure => (
-                typeof(DownloadRuntimeFailureDialog),
-                typeof(DownloadRuntimeFailureDialogViewModel)),
+            AppDialog.StartupDiagnostics => (
+                typeof(StartupDiagnosticsDialog),
+                typeof(StartupDiagnosticsDialogViewModel)),
             AppDialog.DownloadContentConflict => (
                 typeof(DownloadContentConflictDialog),
                 typeof(DownloadContentConflictDialogViewModel)),

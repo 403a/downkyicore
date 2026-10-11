@@ -42,7 +42,7 @@ public sealed class StartupDiagnosticsDialogLayoutTests
                 new InvalidOperationException(
                     string.Join(Environment.NewLine, Enumerable.Repeat("stack frame", 400))))));
         Assert.Equal("启动时发现 2 项问题", viewModel.Title);
-        var view = new DownloadRuntimeFailureDialog { DataContext = viewModel };
+        var view = new StartupDiagnosticsDialog { DataContext = viewModel };
         var window = new Window
         {
             Content = view,
@@ -155,23 +155,23 @@ public sealed class StartupDiagnosticsDialogLayoutTests
             });
     }
 
-    private static DownloadRuntimeFailureDialogViewModel CreateViewModel()
+    private static StartupDiagnosticsDialogViewModel CreateViewModel()
     {
-        return new DownloadRuntimeFailureDialogViewModel(
+        return new StartupDiagnosticsDialogViewModel(
             new LogServiceStub(),
             new ClipboardServiceStub(),
             new PlatformLauncherStub(),
             new NotificationServiceStub(),
-            NullLogger<DownloadRuntimeFailureDialogViewModel>.Instance);
+            NullLogger<StartupDiagnosticsDialogViewModel>.Instance);
     }
 
     private static AppDialogRequest CreateRequest(params StartupDiagnostic[] diagnostics)
     {
         return new AppDialogRequest(
-            AppDialog.DownloadRuntimeFailure,
+            AppDialog.StartupDiagnostics,
             new Dictionary<string, object?>
             {
-                [DownloadRuntimeFailureDialogViewModel.DiagnosticsParameter] = diagnostics
+                [StartupDiagnosticsDialogViewModel.DiagnosticsParameter] = diagnostics
             });
     }
 

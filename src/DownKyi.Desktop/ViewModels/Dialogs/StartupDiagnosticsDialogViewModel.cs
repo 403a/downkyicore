@@ -19,7 +19,7 @@ using Microsoft.Extensions.Logging;
 
 namespace DownKyi.ViewModels.Dialogs;
 
-internal sealed class DownloadRuntimeFailureDialogViewModel : BaseDialogViewModel
+internal sealed class StartupDiagnosticsDialogViewModel : BaseDialogViewModel
 {
     internal const string DiagnosticsParameter = "diagnostics";
     internal const string RecoveryDiagnosticParameter = "recoveryDiagnostic";
@@ -32,20 +32,20 @@ internal sealed class DownloadRuntimeFailureDialogViewModel : BaseDialogViewMode
     private readonly IClipboardService _clipboardService;
     private readonly IPlatformLauncher _platformLauncher;
     private readonly IUserNotificationService _notifications;
-    private readonly ILogger<DownloadRuntimeFailureDialogViewModel> _logger;
-    private DownKyiAsyncDelegateCommand? _copyErrorDetailsCommand;
+    private readonly ILogger<StartupDiagnosticsDialogViewModel> _logger;
+    private DownKyiAsyncDelegateCommand? _copyAllDiagnosticsCommand;
     private DownKyiAsyncDelegateCommand? _createGitHubIssueCommand;
     private IReadOnlyList<StartupDiagnosticItemViewModel> _items = [];
     private string _introMessage;
     private string _diagnosticText = string.Empty;
     private string _issueDiagnosticText = string.Empty;
 
-    public DownloadRuntimeFailureDialogViewModel(
+    public StartupDiagnosticsDialogViewModel(
         IApplicationLogService logService,
         IClipboardService clipboardService,
         IPlatformLauncher platformLauncher,
         IUserNotificationService notifications,
-        ILogger<DownloadRuntimeFailureDialogViewModel> logger)
+        ILogger<StartupDiagnosticsDialogViewModel> logger)
     {
         _logService = logService ?? throw new ArgumentNullException(nameof(logService));
         _clipboardService = clipboardService
@@ -76,9 +76,9 @@ internal sealed class DownloadRuntimeFailureDialogViewModel : BaseDialogViewMode
         private set => SetProperty(ref _diagnosticText, value);
     }
 
-    public DownKyiAsyncDelegateCommand CopyErrorDetailsCommand =>
-        _copyErrorDetailsCommand ??= new DownKyiAsyncDelegateCommand(
-            CopyErrorDetailsAsync,
+    public DownKyiAsyncDelegateCommand CopyAllDiagnosticsCommand =>
+        _copyAllDiagnosticsCommand ??= new DownKyiAsyncDelegateCommand(
+            CopyAllDiagnosticsAsync,
             _logger);
 
     public DownKyiAsyncDelegateCommand CreateGitHubIssueCommand =>
@@ -109,7 +109,7 @@ internal sealed class DownloadRuntimeFailureDialogViewModel : BaseDialogViewMode
         _issueDiagnosticText = CreateIssueDiagnosticText(diagnostics);
     }
 
-    internal async Task CopyErrorDetailsAsync()
+    internal async Task CopyAllDiagnosticsAsync()
     {
         await _clipboardService.SetTextAsync(DiagnosticText).ConfigureAwait(true);
         _notifications.Show(DictionaryResource.GetString("ErrorDetailsCopied"));
@@ -151,21 +151,48 @@ internal sealed class DownloadRuntimeFailureDialogViewModel : BaseDialogViewMode
         StartupDiagnostic diagnostic,
         int index)
     {
-        var title = DictionaryResource.GetString(diagnostic.TitleResourceKey);
+        var (titleResourceKey, descriptionResourceKey, impactResourceKey) =
+            GetPresentationResourceKeys(diagnostic.Kind);
+        var title = DictionaryResource.GetString(titleResourceKey);
         return new StartupDiagnosticItemViewModel(
             diagnostic,
             string.Create(CultureInfo.CurrentCulture, $"{index}. {title}"),
-            DictionaryResource.GetString(diagnostic.DescriptionResourceKey),
+            DictionaryResource.GetString(descriptionResourceKey),
             FormatResource(
                 "StartupDiagnosticsImpactFormat",
-                DictionaryResource.GetString(diagnostic.ImpactResourceKey)),
+                DictionaryResource.GetString(impactResourceKey)),
             CreateItemDiagnosticText(diagnostic),
             RequestRecovery);
     }
 
+    private static (string Title, string Description, string Impact)
+        GetPresentationResourceKeys(StartupDiagnosticKind kind)
+    {
+        return kind switch
+        {
+            StartupDiagnosticKind.LegacyMigrationFailed => (
+                "StartupLegacyMigrationFailureTitle",
+                "StartupLegacyMigrationFailureDescription",
+                "StartupLegacyMigrationFailureImpact"),
+            StartupDiagnosticKind.DownloadRuntimeMissing => (
+                "StartupDownloadFailureTitle",
+                "StartupDownloadMissingDescription",
+                "StartupDownloadFailureImpact"),
+            StartupDiagnosticKind.DownloadStoreSchemaMismatch => (
+                "StartupDownloadStoreFailureTitle",
+                "StartupDownloadStoreFailureDescription",
+                "StartupDownloadStoreFailureImpact"),
+            StartupDiagnosticKind.DownloadRuntimeFailed => (
+                "StartupDownloadFailureTitle",
+                "StartupDownloadFailureDescription",
+                "StartupDownloadFailureImpact"),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
+        };
+    }
+
     private void RequestRecovery(StartupDiagnostic diagnostic)
     {
-        if (diagnostic.RecoveryAction != StartupRecoveryAction.ResetDownloadStore)
+        if (!diagnostic.AllowsDownloadStoreReset)
         {
             return;
         }
@@ -295,7 +322,7 @@ internal sealed class StartupDiagnosticItemViewModel : ObservableObject
     }
 
     public bool CanResetDownloadStore =>
-        Diagnostic.RecoveryAction == StartupRecoveryAction.ResetDownloadStore;
+        Diagnostic.AllowsDownloadStoreReset;
 
     public RelayCommand ResetDownloadStoreCommand { get; }
 

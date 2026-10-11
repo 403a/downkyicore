@@ -55,7 +55,7 @@ internal sealed class AvaloniaDialogService : IAppDialogService
             DataContext = viewModel
         };
         content.DataContext = viewModel;
-        if (request.Dialog == AppDialog.DownloadRuntimeFailure)
+        if (request.Dialog == AppDialog.StartupDiagnostics)
         {
             ConfigureStartupDiagnosticsWindow(window, content);
         }
@@ -65,11 +65,15 @@ internal sealed class AvaloniaDialogService : IAppDialogService
             new Dictionary<string, object?>(StringComparer.Ordinal));
         var closeRequested = false;
         var forcedCloseRequested = false;
+        var dialogShown = false;
         void OnCloseRequested(object? sender, AppDialogResult requestedResult)
         {
             result = requestedResult;
             closeRequested = true;
-            window.Close();
+            if (dialogShown)
+            {
+                window.Close();
+            }
         }
 
         void OnClosing(object? sender, WindowClosingEventArgs args)
@@ -86,13 +90,22 @@ internal sealed class AvaloniaDialogService : IAppDialogService
             Dispatcher.UIThread.Post(() =>
             {
                 forcedCloseRequested = true;
-                window.Close();
+                if (dialogShown)
+                {
+                    window.Close();
+                }
             }));
         try
         {
             viewModel.OnDialogOpened(request);
-            await window.ShowDialog(_desktopContext.MainWindow).ConfigureAwait(true);
             cancellationToken.ThrowIfCancellationRequested();
+            if (!closeRequested)
+            {
+                dialogShown = true;
+                await window.ShowDialog(_desktopContext.MainWindow).ConfigureAwait(true);
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
             return result;
         }
         finally

@@ -3,8 +3,8 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vmd="clr-namespace:DownKyi.ViewModels.Dialogs"
-             x:Class="DownKyi.Views.Dialogs.DownloadRuntimeFailureDialog"
-             x:DataType="vmd:DownloadRuntimeFailureDialogViewModel"
+             x:Class="DownKyi.Views.Dialogs.StartupDiagnosticsDialog"
+             x:DataType="vmd:StartupDiagnosticsDialogViewModel"
              d:DesignWidth="760"
              d:DesignHeight="680"
              mc:Ignorable="d">
@@ -111,7 +111,7 @@
                     <Button MinWidth="120"
                             Margin="0,0,10,8"
                             Content="{DynamicResource CopyAllDiagnostics}"
-                            Command="{Binding CopyErrorDetailsCommand}" />
+                            Command="{Binding CopyAllDiagnosticsCommand}" />
                     <Button MinWidth="150"
                             Margin="0,0,10,8"
                             Content="{DynamicResource CreateGitHubIssue}"

@@ -289,23 +289,28 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     internal async Task RunStartupDialogsAsync()
     {
-        var diagnostics = new StartupDiagnosticCollection();
-        var legacyDiagnosticTask = CollectLegacyUpgradeDiagnosticAsync();
+        // Download startup is independent of the migration dialog. Observe it first so the
+        // modal cannot hide an outcome that has already been produced.
         var downloadDiagnosticTask = CollectDownloadRuntimeDiagnosticAsync();
-
-        diagnostics.Add(await legacyDiagnosticTask.ConfigureAwait(true));
+        var legacyDiagnostic = await CollectLegacyUpgradeDiagnosticAsync().ConfigureAwait(true);
+        var downloadDiagnostic = await downloadDiagnosticTask.ConfigureAwait(true);
         if (_lifetimeToken.IsCancellationRequested)
         {
             return;
         }
 
-        diagnostics.Add(await downloadDiagnosticTask.ConfigureAwait(true));
-        if (_lifetimeToken.IsCancellationRequested)
+        var diagnostics = new List<StartupDiagnostic>(capacity: 2);
+        if (legacyDiagnostic is not null)
         {
-            return;
+            diagnostics.Add(legacyDiagnostic);
         }
 
-        await ShowStartupDiagnosticsAsync(diagnostics.Items).ConfigureAwait(true);
+        if (downloadDiagnostic is not null)
+        {
+            diagnostics.Add(downloadDiagnostic);
+        }
+
+        await ShowStartupDiagnosticsAsync(diagnostics).ConfigureAwait(true);
         if (_lifetimeToken.IsCancellationRequested)
         {
             return;
@@ -394,7 +399,7 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     private async Task ShowStartupDiagnosticsAsync(
-        IReadOnlyList<StartupDiagnostic> diagnostics)
+        List<StartupDiagnostic> diagnostics)
     {
         if (diagnostics.Count == 0)
         {
@@ -405,15 +410,15 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
         {
             var result = await _dialogService.ShowAsync(
                 new AppDialogRequest(
-                    AppDialog.DownloadRuntimeFailure,
+                    AppDialog.StartupDiagnostics,
                     new Dictionary<string, object?>
                     {
-                        [DownloadRuntimeFailureDialogViewModel.DiagnosticsParameter] = diagnostics
+                        [StartupDiagnosticsDialogViewModel.DiagnosticsParameter] = diagnostics
                     }),
                 _lifetimeToken).ConfigureAwait(true);
             if (result.Outcome == AppDialogOutcome.Accepted
                 && result.Parameters.TryGetValue(
-                    DownloadRuntimeFailureDialogViewModel.RecoveryDiagnosticParameter,
+                    StartupDiagnosticsDialogViewModel.RecoveryDiagnosticParameter,
                     out var value)
                 && value is StartupDiagnostic recoveryDiagnostic)
             {
