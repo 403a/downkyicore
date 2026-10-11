@@ -1,5 +1,26 @@
 # 更新日志
 
+## [1.3.0] - 2026-10-11
+
+### Features
+
+- 播放解析统一为网页优先，只在缺少所需媒体或画质低于设定时由 API 补足；网页与 API 的精确 DASH 轨道可合并使用，并保留每条媒体的来源。
+- 只有需要降低画质或缺少所选媒体时才会要求确认替代方案；批次下载可为各项目使用各自最接近的可用品质，不会自动新增未选内容。
+- 视频详情会立即显示加载、解析、下载、完成、取消与错误状态；自动解析不再被误解为自动下载，确认对话框也会区分主要与次要操作。
+- 反馈入口可导出脱敏诊断套件，为 Issue 提供可共享的应用程序、版本与失败线索，不包含 Cookie、外部资源 URL 或本机路径。
+
+### Bug Fixes
+
+- 下载规划会保留仅附加内容的选择、NFO 与字幕覆盖范围，并统一管理输出占用、同名处理与重试；不同 CID 不再共用错误的基础路径。
+- 应用程序关闭前会先保存已暂停的 aria2 session，重启后可从同一检查点继续；品质与 codec 选择保持同步，非成功 HTTP 状态中的 JSON-RPC 错误内容也不再丢失。
+- SQLite 下载资料库会恢复旧版历史记录，对不支持的 schema 显示脱敏诊断，并在重建保留键时隔离损坏记录，而不是中止其他可恢复项目。
+- 番剧播放在网页资料缺少所选轨道时会回退 API，API 查询失败最多重试一次，并正确区分可播放、不可用与仅音讯结果。
+
+### Reliability And Release
+
+- 发布候选产物会在 Windows、Linux 与 macOS 对下载后的实际安装包重新验证，失败时保留诊断；公开 Release 改为九个安装包加一个完整 verification ZIP。
+- 新增早期版本的可重现建置与草稿 Release 同步流程，并将 .NET SDK 更新至 `10.0.401`。
+
 ## [1.2.2] - 2026-10-07
 
 ### Bug Fixes
@@ -788,6 +809,7 @@
 - 修复构建
 - 去掉代理
 
+[1.3.0]: https://github.com/crazysmile-PhD/downkyicore/releases/tag/v1.3.0#assets
 [1.2.2]: https://github.com/crazysmile-PhD/downkyicore/releases/tag/v1.2.2#assets
 [1.2.1]: https://github.com/crazysmile-PhD/downkyicore/releases/tag/v1.2.1#assets
 [1.1.6]: https://github.com/crazysmile-PhD/downkyicore/releases/tag/v1.1.6#assets
