@@ -1,0 +1,49 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:custom="clr-namespace:DownKyi.CustomControl"
+             xmlns:vm="clr-namespace:DownKyi.ViewModels"
+             x:Class="DownKyi.Views.VideoDetailOperationStatusView"
+             x:DataType="vm:ViewVideoDetailViewModel"
+             mc:Ignorable="d">
+    <Border
+        x:Name="OperationStatusBar"
+        MinHeight="38"
+        Margin="10,0,10,10"
+        Padding="10,7"
+        Background="{DynamicResource BrushSurfaceRaised}"
+        BorderBrush="{DynamicResource BrushBorderSubtle}"
+        BorderThickness="1"
+        CornerRadius="{DynamicResource DownKyiRadiusMedium}"
+        IsVisible="{Binding UiState.IsOperationStatusVisible}">
+        <Grid ColumnDefinitions="24,*">
+            <custom:Loading
+                Grid.Column="0"
+                Width="18"
+                Height="18"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Center"
+                Foreground="{DynamicResource BrushPrimary}"
+                IsActive="True"
+                IsVisible="{Binding UiState.IsOperationRunning}" />
+            <Path
+                Grid.Column="0"
+                Width="{Binding UiState.OperationStatusIcon.Width}"
+                Height="{Binding UiState.OperationStatusIcon.Height}"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Center"
+                Data="{Binding UiState.OperationStatusIcon.Data}"
+                Fill="{Binding UiState.OperationStatusIcon.Fill}"
+                IsVisible="{Binding UiState.IsOperationSettled}"
+                Stretch="Uniform" />
+            <TextBlock
+                Grid.Column="1"
+                VerticalAlignment="Center"
+                Foreground="{DynamicResource BrushTextPrimary}"
+                Text="{Binding UiState.OperationStatusText}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="Wrap" />
+        </Grid>
+    </Border>
+</UserControl>

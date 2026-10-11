@@ -742,7 +742,8 @@ public sealed class UiSmokeTests
                                     actions => Assert.IsType<VideoDetailActionsView>(actions));
                             });
                     },
-                    child => Assert.IsType<Image>(child));
+                    child => Assert.IsType<Image>(child),
+                    child => Assert.IsType<VideoDetailOperationStatusView>(child));
 
                 host.Services
                     .GetRequiredService<IAppNavigationService>()

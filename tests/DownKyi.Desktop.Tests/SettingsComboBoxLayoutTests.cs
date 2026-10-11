@@ -132,6 +132,48 @@ public sealed class SettingsComboBoxLayoutTests
     }
 
     [AvaloniaFact]
+    public Task BasicSettingsUsesOneParseScopeAndExplainsAutomaticTiming()
+    {
+        return AvaloniaTestDispatcher.RunAsync(() =>
+        {
+            DesktopTestResources.EnsureProductThemeResources();
+            DesktopTestResources.EnsureDownloadProjectionResources();
+            var view = new ViewBasic();
+            var autoParse = Assert.IsType<CheckBox>(
+                view.FindControl<CheckBox>("NameAutoParseVideo"));
+            var description = Assert.IsType<TextBlock>(
+                view.FindControl<TextBlock>("NameAutoParseVideoDescription"));
+            var parseScope = Assert.IsType<ComboBox>(
+                view.FindControl<ComboBox>("NameParseScopes"));
+            var window = new Window
+            {
+                Content = view,
+                Width = 840,
+                Height = 680
+            };
+
+            try
+            {
+                window.Show();
+                window.UpdateLayout();
+
+                Assert.Equal("载入视频后自动解析画质与编码", autoParse.Content);
+                Assert.Equal(
+                    "读取视频信息后，按照下方范围自动取得音质、画质与编码；不会自动开始下载。",
+                    description.Text);
+                Assert.True(parseScope.IsVisible);
+                Assert.DoesNotContain(
+                    view.GetVisualDescendants().OfType<CheckBox>(),
+                    checkBox => Equals(checkBox.Content, "解析后自动下载已解析视频"));
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+    }
+
+    [AvaloniaFact]
     public Task DanmakuSettingsUsesLightweightGroupsAcrossThemes()
     {
         return AvaloniaTestDispatcher.RunAsync(() =>

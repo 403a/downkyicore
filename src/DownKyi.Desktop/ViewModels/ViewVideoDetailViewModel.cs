@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -119,6 +120,10 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
             return;
         }
 
+        SetOperationStatus(
+            VideoDetailOperationStatus.Running,
+            StatusText("VideoDetailStatusLoading", "正在读取视频信息……"));
+
         await RunOperationAsync(operation, async () =>
         {
             UiState.InputText = _workflow.SetInput(requestedInput);
@@ -172,16 +177,31 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
 
         var operation = _workflow.StartOperation();
         var settings = _settingsStore.Current;
+        SetOperationStatus(
+            VideoDetailOperationStatus.Running,
+            StatusText("VideoDetailStatusParsing", "正在解析音质、画质和视频编码……"));
         SetDisplayState(VideoDetailDisplayState.Busy);
         await RunOperationAsync(operation, async () =>
         {
             var result = await _workflow.LoadPageStreamAsync(page, operation).ConfigureAwait(true);
             if (result != null)
             {
-                await UiDispatcher.InvokeAsync(() => ApplyVideoStreamResults(
-                    [result],
-                    settings,
-                    operation.CancellationToken));
+                await UiDispatcher.InvokeAsync(() =>
+                {
+                    ApplyVideoStreamResults(
+                        [result],
+                        settings,
+                        operation.CancellationToken);
+                    PublishParseStatus([result]);
+                });
+            }
+            else
+            {
+                SetOperationStatus(
+                    VideoDetailOperationStatus.Error,
+                    StatusText(
+                        "VideoDetailStatusNoPlayback",
+                        "解析没有返回可用的媒体信息。"));
             }
 
             RestoreDisplayStateIfCurrent(operation);
@@ -197,44 +217,59 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
             return;
         }
 
+        SetOperationStatus(
+            VideoDetailOperationStatus.Running,
+            StatusText(
+                "VideoDetailStatusChooseParseScope",
+                "请选择本次要解析的范围。"));
         var result = await ParsingSelectorDialog.ShowAsync(AppDialogs).ConfigureAwait(true);
         if (result != null)
         {
             await ExecuteParseAsync(result.Scope).ConfigureAwait(true);
+            return;
         }
+
+        SetOperationStatus(
+            VideoDetailOperationStatus.Success,
+            StatusText("VideoDetailStatusCanceled", "操作已取消。"));
     }
 
     private async Task ExecuteParseAsync(ParseScope parseScope)
     {
         var operation = _workflow.StartOperation();
         var settings = _settingsStore.Current;
+        SetOperationStatus(
+            VideoDetailOperationStatus.Running,
+            StatusText("VideoDetailStatusParsing", "正在解析音质、画质和视频编码……"));
         SetDisplayState(VideoDetailDisplayState.Busy);
         await RunOperationAsync(operation, async () =>
         {
             var results = await _workflow
                 .LoadPageStreamsAsync(VideoSections, parseScope, operation)
                 .ConfigureAwait(true);
-            await UiDispatcher.InvokeAsync(() => ApplyVideoStreamResults(
-                results,
-                settings,
-                operation.CancellationToken));
+            await UiDispatcher.InvokeAsync(() =>
+            {
+                ApplyVideoStreamResults(
+                    results,
+                    settings,
+                    operation.CancellationToken);
+                PublishParseStatus(results);
+            });
             if (!_workflow.IsCurrent(operation))
             {
                 return;
             }
 
             RestoreDisplayState();
-            if (parseScope != ParseScope.None && settings.Basic.IsAutoDownloadAll == AllowStatus.Yes)
-            {
-                await AddToDownloadAsync(true).ConfigureAwait(true);
-            }
-
             _logger.LogDebugMessage($"ParseScope: {parseScope:G}");
         }, null).ConfigureAwait(true);
     }
 
     private async Task AddToDownloadAsync(bool isAll)
     {
+        SetOperationStatus(
+            VideoDetailOperationStatus.Running,
+            StatusText("VideoDetailStatusAddingDownloads", "正在建立下载任务……"));
         if (UiState.VideoInfoView == null)
         {
             PublishAddResult(new Services.Download.DownloadAddResult(
@@ -259,6 +294,14 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
             {
                 PublishAddResult(result);
             }
+            else if (_workflow.IsCurrent(operation))
+            {
+                SetOperationStatus(
+                    VideoDetailOperationStatus.Error,
+                    StatusText(
+                        "VideoDetailStatusAddUnavailable",
+                        "未能建立下载任务；下载服务没有返回结果。"));
+            }
         }
         catch (OperationCanceledException) when (operation.CancellationToken.IsCancellationRequested)
         {
@@ -274,6 +317,7 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
         UiState.VideoInfoView = null;
         UiState.SelectedVideoPage = null;
         VideoSections.ReplaceRange(Array.Empty<VideoSection>());
+        SetOperationStatus(VideoDetailOperationStatus.None, string.Empty);
     }
 
     private void ApplyVideoDetailResult(VideoDetailParseResult result, CancellationToken cancellationToken)
@@ -283,12 +327,20 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
         if (UiState.VideoInfoView == null)
         {
             SetDisplayState(VideoDetailDisplayState.Empty);
+            SetOperationStatus(
+                VideoDetailOperationStatus.Error,
+                StatusText(
+                    "VideoDetailStatusNoContent",
+                    "没有找到可解析的视频内容。"));
             return;
         }
 
         VideoSections.ReplaceRange(result.VideoSections);
         UiState.SelectedVideoPage = VideoSelectionState.SelectInputPage(VideoSections, _workflow.CurrentInput);
         SetDisplayState(VideoDetailDisplayState.Content);
+        SetOperationStatus(
+            VideoDetailOperationStatus.Success,
+            StatusText("VideoDetailStatusLoaded", "视频信息已载入，可选择内容并解析画质。"));
     }
 
     private void ApplyVideoStreamResults(
@@ -305,7 +357,15 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
 
     private void PublishAddResult(DownloadAddResult result)
     {
-        Notifications.Show(DownloadAddNotificationFormatter.Format(result));
+        var message = DownloadAddNotificationFormatter.Format(result);
+        Notifications.Show(message);
+        SetOperationStatus(
+            result.FailedCount > 0 || (result.AddedCount == 0
+                && result.DuplicateCount == 0
+                && result.SkippedCount == 0)
+                ? VideoDetailOperationStatus.Error
+                : VideoDetailOperationStatus.Success,
+            message);
     }
 
     private void HandleOperationError(
@@ -320,6 +380,7 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
 
         _logger.LogErrorMessage("Video detail operation failed.", exception);
         Notifications.Show(exception.Message);
+        SetOperationStatus(VideoDetailOperationStatus.Error, exception.Message);
         if (failureState is { } state)
         {
             SetDisplayState(state);
@@ -342,6 +403,9 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
         catch (OperationCanceledException)
         {
             RestoreDisplayStateIfCurrent(operation);
+            SetOperationStatus(
+                VideoDetailOperationStatus.Success,
+                StatusText("VideoDetailStatusCanceled", "操作已取消。"));
         }
         catch (Exception exception) when (IsExpectedOperationException(exception))
         {
@@ -369,6 +433,90 @@ internal sealed class ViewVideoDetailViewModel : ViewModelBase
         SetDisplayState(UiState.VideoInfoView == null
             ? VideoDetailDisplayState.Idle
             : VideoDetailDisplayState.Content);
+    }
+
+    private void PublishParseStatus(IReadOnlyList<VideoStreamParseResult> results)
+    {
+        var missingCodecs = results
+            .Select(result => new
+            {
+                Quality = result.Page.VideoQuality,
+                CodecIds = result.Page.PlaybackAvailability?.Video
+                    .Where(video => video.Quality == result.Page.VideoQuality?.Quality)
+                    .Select(video => video.CodecId)
+                    .Distinct()
+                    .Order()
+                    .ToArray() ?? []
+            })
+            .Where(item => item.Quality != null && item.Quality.VideoCodecList.Count == 0)
+            .ToArray();
+        if (missingCodecs.Length == 0)
+        {
+            SetOperationStatus(
+                VideoDetailOperationStatus.Success,
+                StatusText(
+                    "VideoDetailStatusParsed",
+                    "解析完成：已更新 {0} 个视频。",
+                    results.Count));
+            return;
+        }
+
+        var qualityDetails = string.Join(
+            "、",
+            missingCodecs
+                .Select(item => StatusText(
+                    "VideoDetailStatusMissingCodecDetail",
+                    "{0}（编码 ID：{1}）",
+                    string.IsNullOrWhiteSpace(item.Quality!.QualityFormat)
+                        ? "未知画质"
+                        : item.Quality.QualityFormat,
+                    item.CodecIds.Length == 0
+                        ? "未收到"
+                        : string.Join(",", item.CodecIds)))
+                .Distinct(StringComparer.Ordinal));
+        var message = StatusText(
+            "VideoDetailStatusMissingCodecs",
+            "解析完成，但 {0} 个视频的当前画质没有可识别的编码选项：{1}。",
+            missingCodecs.Length,
+            qualityDetails);
+        SetOperationStatus(VideoDetailOperationStatus.Error, message);
+    }
+
+    private void SetOperationStatus(VideoDetailOperationStatus status, string message)
+    {
+        void Apply()
+        {
+            UiState.OperationStatusIcon = status == VideoDetailOperationStatus.Error
+                ? SystemIcon.Current.Error
+                : SystemIcon.Current.Info;
+            UiState.OperationStatusText = message;
+            UiState.OperationStatus = status;
+        }
+
+        if (UiDispatcher.CheckAccess())
+        {
+            Apply();
+        }
+        else
+        {
+            UiDispatcher.Post(Apply);
+        }
+    }
+
+    private static string StatusText(
+        string resourceKey,
+        string fallback,
+        params object[] arguments)
+    {
+        var format = DictionaryResource.GetString(resourceKey);
+        if (string.IsNullOrWhiteSpace(format))
+        {
+            format = fallback;
+        }
+
+        return arguments.Length == 0
+            ? format
+            : string.Format(CultureInfo.CurrentCulture, format, arguments);
     }
 
     private void SetDisplayState(VideoDetailDisplayState state)
