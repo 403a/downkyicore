@@ -369,6 +369,32 @@ public sealed class PlayUrlEnvelopeContractTests
     }
 
     [Fact]
+    public async Task FinalizedOrdinaryPlaybackUsesApiAfterWebpageTransportFailure()
+    {
+        var requests = 0;
+        var client = new StubBilibiliApiClient((request, _) =>
+        {
+            requests++;
+            return request.RequestAddress.StartsWith(
+                "https://www.bilibili.com/video/", StringComparison.Ordinal)
+                ? Task.FromException<string>(new HttpRequestException("webpage unavailable"))
+                : Task.FromResult(
+                    """
+                    {"code":0,"data":{"dash":{"video":[{"id":80,"codecid":7,"base_url":"https://api.invalid/video"}],"audio":[]}}}
+                    """);
+        });
+
+        var selected = await client.GetVideoFinalizedPlaybackAsync(
+            Keys, 1702204169, 1, "BV1fixture", 2, 1,
+            new FinalizedPlaybackSelection(80, 7, null, PlayUrlStreamKind.Dash, true),
+            preferWebPage: true,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, requests);
+        Assert.Equal("https://api.invalid/video", Assert.Single(selected!.Dash.Video).BaseAddress);
+    }
+
+    [Fact]
     public async Task BangumiDiscoverySupplementsWebVideoWithApiAudio()
     {
         var requests = 0;
