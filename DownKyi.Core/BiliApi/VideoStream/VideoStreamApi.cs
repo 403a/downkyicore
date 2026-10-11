@@ -17,12 +17,6 @@ public static partial class VideoStreamApi
         Result
     }
 
-    private sealed record DiscoveryPreference(
-        int VideoQuality,
-        int AudioQuality,
-        bool RequireVideo,
-        bool RequireAudio);
-
     /// <summary>
     /// 获取普通视频的视频流
     /// </summary>
@@ -80,43 +74,6 @@ public static partial class VideoStreamApi
     }
 
     /// <summary>
-    /// 获取普通视频的视频流（WebPage方式）
-    /// </summary>
-    /// <param name="avid"></param>
-    /// <param name="bvid"></param>
-    /// <param name="p"></param>
-    /// <returns></returns>
-    public static async Task<PlayUrl?> GetVideoPlayUrlWebPageAsync(
-        this IBilibiliApiClient client,
-        WbiKeys keys,
-        long unixTimeSeconds,
-        long avid,
-        string bvid,
-        long cid,
-        int p,
-        int quality = 125,
-        CancellationToken cancellationToken = default)
-    {
-        var url = BuildVideoPlayPageUrl(avid, bvid, p);
-        var playUrl = await GetPlayUrlWebPageAsync(client, url, cancellationToken)
-            .ConfigureAwait(false);
-        if (playUrl == null ||
-            (playUrl.Durl.Count > 0 && playUrl.Quality != quality))
-        {
-            playUrl = await client.GetVideoPlayUrlAsync(
-                keys,
-                unixTimeSeconds,
-                avid,
-                bvid,
-                cid,
-                quality,
-                cancellationToken: cancellationToken).ConfigureAwait(false);
-        }
-
-        return playUrl;
-    }
-
-    /// <summary>
     /// Discover website playback first; query the API only for a requested missing or
     /// lower-quality component. Keep webpage candidates when API supplementation succeeds.
     /// </summary>
@@ -128,12 +85,10 @@ public static partial class VideoStreamApi
         string bvid,
         long cid,
         int page,
-        int preferredVideoQuality,
-        int preferredAudioQuality,
-        bool requireVideo,
-        bool requireAudio,
+        PlaybackDiscoveryRequest request,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(request);
         PlayUrl? webpage;
         try
         {
@@ -151,12 +106,7 @@ public static partial class VideoStreamApi
             webpage = null;
         }
 
-        if (webpage != null && !PlaybackDiscoveryPolicy.NeedsApiSupplement(
-                PlayUrlAvailability.From(webpage),
-                preferredVideoQuality,
-                preferredAudioQuality,
-                requireVideo,
-                requireAudio))
+        if (webpage != null && !request.NeedsApiSupplement(PlayUrlAvailability.From(webpage)))
         {
             return webpage;
         }
@@ -190,7 +140,7 @@ public static partial class VideoStreamApi
         {
             // Availability is the union; download-time URL selection stays with the
             // existing exact finalized resolver, which retains each stream's origin.
-            webpage.Availability = BangumiPlaybackResolver.DiscoverAvailability(webpage, api);
+            webpage.Availability = PlayUrlAvailability.Combine(webpage, api);
         }
 
         return webpage;
@@ -228,10 +178,12 @@ public static partial class VideoStreamApi
             {
                 // An unavailable webpage must not block the API from resolving
                 // the persisted, exact download selection.
+                webpage = null;
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
                 // Only a transport timeout falls back; caller cancellation propagates.
+                webpage = null;
             }
 
             if (webpage != null && FinalizedPlaybackResolver.TrySelect(
@@ -288,8 +240,10 @@ public static partial class VideoStreamApi
         string bvid,
         long cid,
         long episodeId,
+        PlaybackDiscoveryRequest request,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(request);
         return GetBangumiPlaybackCoreAsync(
             client,
             avid,
@@ -301,40 +255,9 @@ public static partial class VideoStreamApi
             videoCodecId: null,
             audioId: null,
             streamKind: null,
-            requireVideo: true,
-            cancellationToken);
-    }
-
-    public static Task<PlayUrl?> GetBangumiPlaybackDiscoveryAsync(
-        this IBilibiliApiClient client,
-        long avid,
-        string bvid,
-        long cid,
-        long episodeId,
-        int preferredVideoQuality,
-        int preferredAudioQuality,
-        bool requireVideo,
-        bool requireAudio,
-        CancellationToken cancellationToken = default)
-    {
-        return GetBangumiPlaybackCoreAsync(
-            client,
-            avid,
-            bvid,
-            cid,
-            episodeId,
-            PlaybackQualityCatalog.MaximumProbeQuality,
-            discoverAvailability: true,
-            videoCodecId: null,
-            audioId: null,
-            streamKind: null,
-            requireVideo,
+            request.RequireVideo,
             cancellationToken,
-            new DiscoveryPreference(
-                preferredVideoQuality,
-                preferredAudioQuality,
-                requireVideo,
-                requireAudio));
+            request);
     }
 
     public static Task<PlayUrl?> GetBangumiPlayUrlAsync(
@@ -408,7 +331,7 @@ public static partial class VideoStreamApi
         PlayUrlStreamKind? streamKind,
         bool requireVideo,
         CancellationToken cancellationToken,
-        DiscoveryPreference? discoveryPreference = null)
+        PlaybackDiscoveryRequest? discoveryRequest = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(episodeId);
         if (!discoverAvailability && !requireVideo && audioId == null)
@@ -447,8 +370,7 @@ public static partial class VideoStreamApi
                 PlaybackSourceProvenance.Mark(
                     embeddedPlayUrl,
                     PlayUrlResolutionSource.WebPage);
-                var embeddedAvailability = BangumiPlaybackResolver.DiscoverAvailability(
-                    embeddedPlayUrl);
+                var embeddedAvailability = PlayUrlAvailability.Combine(embeddedPlayUrl);
                 var hasUsableEmbeddedPlayback = requireVideo
                     ? embeddedAvailability.Video.Count > 0
                     : embeddedAvailability.Audio.Count > 0;
@@ -456,7 +378,7 @@ public static partial class VideoStreamApi
                         discoverAvailability,
                         hasUsableEmbeddedPlayback,
                         embeddedAvailability,
-                        discoveryPreference))
+                        discoveryRequest))
                 {
                     return CompleteBangumiPlayback(
                         embeddedPlayUrl,
@@ -579,16 +501,12 @@ public static partial class VideoStreamApi
         bool discoverAvailability,
         bool hasUsableEmbeddedPlayback,
         PlayUrlAvailability embeddedAvailability,
-        DiscoveryPreference? discoveryPreference)
+        PlaybackDiscoveryRequest? discoveryRequest)
     {
         return discoverAvailability
                && hasUsableEmbeddedPlayback
-               && (discoveryPreference == null || !PlaybackDiscoveryPolicy.NeedsApiSupplement(
-                   embeddedAvailability,
-                   discoveryPreference.VideoQuality,
-                   discoveryPreference.AudioQuality,
-                   discoveryPreference.RequireVideo,
-                   discoveryPreference.RequireAudio));
+               && (discoveryRequest == null
+                   || !discoveryRequest.NeedsApiSupplement(embeddedAvailability));
     }
 
     private static PlayUrl CompleteBangumiPlayback(
@@ -607,7 +525,7 @@ public static partial class VideoStreamApi
         if (discoverAvailability)
         {
             var primaryAvailability = PlayUrlAvailability.From(playUrl);
-            var combinedAvailability = BangumiPlaybackResolver.DiscoverAvailability(playUrl, supplement);
+            var combinedAvailability = PlayUrlAvailability.Combine(playUrl, supplement);
             playUrl.Availability = combinedAvailability;
             var result = AttachBangumiDiagnostics(
                 playUrl,

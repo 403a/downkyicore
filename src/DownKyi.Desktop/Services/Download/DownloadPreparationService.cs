@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DownKyi.Application.Bilibili;
 using DownKyi.Application.Diagnostics;
+using DownKyi.Core.BiliApi.BiliUtils;
 using DownKyi.Core.BiliApi.Sign;
 using DownKyi.Core.BiliApi.VideoStream;
 using DownKyi.Core.Settings;
@@ -133,58 +134,53 @@ internal sealed class DownloadPreparationService
         DownloadContentSelection requestedContent,
         CancellationToken cancellationToken)
     {
-        var preferences = _settingsStore.Current.Video;
-        // An already parsed page may have been discovered for different checkboxes.
-        // Re-query only for requested media still missing or below the preference.
-        var requireVideo = requestedContent.Video
-                           && (page.VideoQualityMatch != null || page.VideoQuality == null);
-        var requireAudio = requestedContent.Audio
-                           && (page.AudioQualityMatch != null
-                               || string.IsNullOrEmpty(page.AudioQualityFormat));
+        var settings = _settingsStore.Current;
+        var request = CreateDiscoveryRequest(page, requestedContent, settings);
         var currentAvailability = page.PlaybackAvailability;
         if (currentAvailability == null
-            || PlaybackDiscoveryPolicy.NeedsApiSupplement(
-                currentAvailability,
-                preferences.Quality,
-                preferences.AudioQuality,
-                requireVideo,
-                requireAudio))
+            || request.NeedsApiSupplement(currentAvailability))
         {
-            // Preserve explicit per-page choices when enriching cached discovery.
-            var selectedVideo = page.VideoQualityMatch == null ? page.VideoQuality : null;
-            var selectedAudio = page.AudioQualityMatch == null ? page.AudioQualityFormat : null;
             var playUrl = await videoInfoService
                 .GetVideoStreamAsync(
                     page,
-                    requestedContent.Video,
-                    requestedContent.Audio,
+                    request,
                     cancellationToken)
                 .ConfigureAwait(false);
-            VideoPagePlaybackMapper.ApplyPlayUrl(
+            VideoPagePlaybackMapper.ApplyPlayUrlPreservingSelection(
                 playUrl,
                 page,
-                _settingsStore.Current,
+                settings,
                 _logger);
-
-            if (selectedVideo != null)
-            {
-                var matchingVideo = page.VideoQualityList.FirstOrDefault(candidate =>
-                    candidate.Quality == selectedVideo.Quality
-                    && candidate.IsDurl == selectedVideo.IsDurl);
-                if (matchingVideo != null
-                    && matchingVideo.VideoCodecList.Contains(selectedVideo.SelectedVideoCodec))
-                {
-                    matchingVideo.SelectedVideoCodec = selectedVideo.SelectedVideoCodec;
-                    page.VideoQuality = matchingVideo;
-                }
-            }
-
-            if (!string.IsNullOrEmpty(selectedAudio)
-                && page.AudioQualityFormatList.Contains(selectedAudio))
-            {
-                page.AudioQualityFormat = selectedAudio;
-            }
         }
+    }
 
+    private static PlaybackDiscoveryRequest CreateDiscoveryRequest(
+        VideoPage page,
+        DownloadContentSelection requestedContent,
+        ApplicationSettings settings)
+    {
+        var videoSettings = settings.Video;
+        var hasCachedAvailability = page.PlaybackAvailability != null;
+        var preferredVideoQuality = hasCachedAvailability
+                                    && page.VideoQualityMatch == null
+                                    && page.VideoQuality is { Quality: > 0 } selectedVideo
+            ? selectedVideo.Quality
+            : videoSettings.Quality;
+        var preferredAudioQuality = hasCachedAvailability
+                                    && page.AudioQualityMatch == null
+                                    && !string.IsNullOrEmpty(page.AudioQualityFormat)
+            ? PlaybackQualityCatalog.GetAudioQualities()
+                  .FirstOrDefault(quality => string.Equals(
+                      quality.Name,
+                      page.AudioQualityFormat,
+                      StringComparison.Ordinal))
+                  ?.Id
+              ?? videoSettings.AudioQuality
+            : videoSettings.AudioQuality;
+        return new PlaybackDiscoveryRequest(
+            preferredVideoQuality,
+            preferredAudioQuality,
+            requestedContent.Video,
+            requestedContent.Audio);
     }
 }

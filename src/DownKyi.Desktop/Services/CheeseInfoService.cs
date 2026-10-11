@@ -180,6 +180,15 @@ internal class CheeseInfoService : IInfoService
             cancellationToken: cancellationToken);
     }
 
+    public Task<PlayUrl?> GetVideoStreamAsync(
+        VideoPage page,
+        PlaybackDiscoveryRequest request,
+        System.Threading.CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return GetVideoStreamAsync(page, cancellationToken);
+    }
+
     /// <summary>
     /// 获取视频信息
     /// </summary>

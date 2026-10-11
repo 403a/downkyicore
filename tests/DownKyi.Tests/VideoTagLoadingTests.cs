@@ -3,6 +3,7 @@ using System.Net.Http;
 using DownKyi.Application.Desktop;
 using DownKyi.Application.Downloads;
 using DownKyi.Core.BiliApi.BiliUtils;
+using DownKyi.Core.BiliApi.VideoStream;
 using DownKyi.Core.BiliApi.VideoStream.Models;
 using DownKyi.Core.FileName;
 using DownKyi.Domain.Downloads;
@@ -561,6 +562,7 @@ public sealed class VideoTagLoadingTests : IDisposable
         });
 
         var preparedDownload = await context.PrepareAsync(
+            DownloadContentSelection.None,
             videoOnly,
             audioAndVideo,
             combined,
@@ -765,7 +767,9 @@ public sealed class VideoTagLoadingTests : IDisposable
                 Audio = []
             }
         });
-        var preparedDownload = await context.PrepareAsync(page);
+        var preparedDownload = await context.PrepareAsync(
+            DownloadContentSelection.None with { Video = true },
+            page);
         context.Dialogs.Result = new AppDialogResult(
             AppDialogOutcome.Accepted,
             DownloadContentConflictDialogContract.Encode(new DownloadContentConflictDecision(
@@ -809,7 +813,9 @@ public sealed class VideoTagLoadingTests : IDisposable
                 Audio = []
             }
         });
-        var preparedDownload = await context.PrepareAsync(page);
+        var preparedDownload = await context.PrepareAsync(
+            DownloadContentSelection.None with { Video = true },
+            page);
         context.Dialogs.Result = new AppDialogResult(
             AppDialogOutcome.Accepted,
             DownloadContentConflictDialogContract.Encode(new DownloadContentConflictDecision(
@@ -867,6 +873,79 @@ public sealed class VideoTagLoadingTests : IDisposable
             preparedPage.AvailableMedia);
         Assert.True(page.IsSelected);
         Assert.Equal(1, infoService.StreamRequestCount);
+    }
+
+    [Fact]
+    public async Task PreparationUsesRequestedMediaAndManualQualityForSupplementation()
+    {
+        using var context = CreateContext(generateMetadata: false);
+        var page = CreatePage(_ => Task.FromResult<IReadOnlyList<string>>([]));
+        page.PlaybackAvailability = new PlayUrlAvailability(
+        [
+            new PlayUrlVideoAvailability(
+                64,
+                12,
+                PlayUrlStreamKind.Dash,
+                "720P 高清")
+        ],
+        []);
+        page.VideoQuality = new VideoQuality
+        {
+            Quality = 64,
+            QualityFormat = "720P 高清",
+            VideoCodecList = ["H.265/HEVC"],
+            SelectedVideoCodec = "H.265/HEVC"
+        };
+        page.AudioQualityFormat = string.Empty;
+        var infoService = new PreparationInfoService(
+            new VideoInfoView { Title = "manual-selection" },
+            [new VideoSection { VideoPages = [page] }],
+            new PlayUrl
+            {
+                Dash = new PlayUrlDash
+                {
+                    Video =
+                    [
+                        new PlayUrlDashVideo
+                        {
+                            Id = 64,
+                            CodecId = 12,
+                            BaseAddress = "https://media.invalid/video-64-hevc.m4s"
+                        }
+                    ],
+                    Audio =
+                    [
+                        new PlayUrlDashVideo
+                        {
+                            Id = 30280,
+                            BaseAddress = "https://media.invalid/audio-30280.m4s"
+                        }
+                    ]
+                },
+                SupportFormats =
+                [
+                    new PlayUrlSupportFormat
+                    {
+                        Quality = 64,
+                        NewDescription = "720P 高清"
+                    }
+                ]
+            });
+
+        var prepared = await context.Service.PrepareAsync(
+            infoService,
+            DownloadContentSelection.None with { Video = true, Audio = true },
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(prepared);
+        var request = Assert.IsType<PlaybackDiscoveryRequest>(infoService.LastDiscoveryRequest);
+        Assert.Equal(64, request.PreferredVideoQuality);
+        Assert.Equal(30280, request.PreferredAudioQuality);
+        Assert.True(request.RequireVideo);
+        Assert.True(request.RequireAudio);
+        Assert.Equal(64, page.VideoQuality!.Quality);
+        Assert.Equal("H.265/HEVC", page.VideoQuality.SelectedVideoCodec);
+        Assert.Equal("高质量", page.AudioQualityFormat);
     }
 
     [Fact]
@@ -1150,6 +1229,13 @@ public sealed class VideoTagLoadingTests : IDisposable
 
         public Task<PreparedDownload> PrepareAsync(params VideoPage[] pages)
         {
+            return PrepareAsync(DownloadContentSelection.All, pages);
+        }
+
+        public Task<PreparedDownload> PrepareAsync(
+            DownloadContentSelection requestedContent,
+            params VideoPage[] pages)
+        {
             return Service.PrepareAsync(
                 new VideoInfoView
                 {
@@ -1166,7 +1252,7 @@ public sealed class VideoTagLoadingTests : IDisposable
                         VideoPages = pages
                     }
                 ],
-                DownloadContentSelection.All,
+                requestedContent,
                 isAll: false,
                 TestContext.Current.CancellationToken);
         }
@@ -1304,6 +1390,8 @@ public sealed class VideoTagLoadingTests : IDisposable
     {
         public int StreamRequestCount { get; private set; }
 
+        public PlaybackDiscoveryRequest? LastDiscoveryRequest { get; private set; }
+
         public VideoInfoView? GetVideoView(CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -1329,6 +1417,15 @@ public sealed class VideoTagLoadingTests : IDisposable
             cancellationToken.ThrowIfCancellationRequested();
             StreamRequestCount++;
             return Task.FromResult<PlayUrl?>(playUrl);
+        }
+
+        public Task<PlayUrl?> GetVideoStreamAsync(
+            VideoPage page,
+            PlaybackDiscoveryRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            LastDiscoveryRequest = request;
+            return GetVideoStreamAsync(page, cancellationToken);
         }
     }
 

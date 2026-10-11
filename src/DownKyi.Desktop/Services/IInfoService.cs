@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using DownKyi.Core.BiliApi.VideoStream;
 using DownKyi.Core.BiliApi.VideoStream.Models;
 using DownKyi.Presentation;
 
@@ -17,12 +18,8 @@ internal interface IInfoService
         VideoPage page,
         System.Threading.CancellationToken cancellationToken = default);
 
-    // Playback discovery can limit API supplementation to media actually requested
-    // by this download. Other implementations retain their existing behavior.
     Task<PlayUrl?> GetVideoStreamAsync(
         VideoPage page,
-        bool requireVideo,
-        bool requireAudio,
-        System.Threading.CancellationToken cancellationToken = default) =>
-        GetVideoStreamAsync(page, cancellationToken);
+        PlaybackDiscoveryRequest request,
+        System.Threading.CancellationToken cancellationToken = default);
 }

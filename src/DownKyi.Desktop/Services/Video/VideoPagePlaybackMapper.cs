@@ -67,6 +67,48 @@ internal static class VideoPagePlaybackMapper
             : Format.FormatDuration(playUrl.Durl.Select(item => item.Length).Sum() / 1000);
     }
 
+    internal static void ApplyPlayUrlPreservingSelection(
+        PlayUrl? playUrl,
+        VideoPage page,
+        ApplicationSettings settings,
+        ILogger? logger = null)
+    {
+        if (playUrl == null)
+        {
+            return;
+        }
+
+        ArgumentNullException.ThrowIfNull(page);
+        var manualVideo = page.VideoQualityMatch == null ? page.VideoQuality : null;
+        var selectedCodec = page.VideoQuality?.SelectedVideoCodec;
+        var manualAudio = page.AudioQualityMatch == null ? page.AudioQualityFormat : null;
+
+        ApplyPlayUrl(playUrl, page, settings, logger);
+
+        if (manualVideo != null)
+        {
+            var matchingVideo = page.VideoQualityList.FirstOrDefault(candidate =>
+                candidate.Quality == manualVideo.Quality
+                && candidate.IsDurl == manualVideo.IsDurl);
+            if (matchingVideo != null)
+            {
+                page.VideoQuality = matchingVideo;
+            }
+        }
+
+        if (!string.IsNullOrEmpty(selectedCodec)
+            && page.VideoQuality?.VideoCodecList.Contains(selectedCodec) == true)
+        {
+            page.VideoQuality.SelectedVideoCodec = selectedCodec;
+        }
+
+        if (!string.IsNullOrEmpty(manualAudio)
+            && page.AudioQualityFormatList.Contains(manualAudio))
+        {
+            page.AudioQualityFormat = manualAudio;
+        }
+    }
+
     /// <summary>
     /// 设置音质
     /// </summary>

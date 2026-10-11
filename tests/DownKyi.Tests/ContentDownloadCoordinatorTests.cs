@@ -444,6 +444,14 @@ public sealed class ContentDownloadCoordinatorTests
         {
             return Task.FromException<PlayUrl?>(new NotSupportedException());
         }
+
+        public Task<PlayUrl?> GetVideoStreamAsync(
+            VideoPage page,
+            PlaybackDiscoveryRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromException<PlayUrl?>(new NotSupportedException());
+        }
     }
 
     private sealed class CancelingInfoServiceFactory(CancellationTokenSource cancellation)

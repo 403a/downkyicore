@@ -306,6 +306,70 @@ public sealed class VideoPagePlaybackMapperTests : IDisposable
     }
 
     [Fact]
+    public void SupplementationPreservesSelectedCodecWhileAutomaticQualityAdvances()
+    {
+        var settings = CreateSettings(videoQuality: 80, isVip: true);
+        var initial = CreatePlayUrl(64);
+        initial.Dash.Video =
+        [
+            new PlayUrlDashVideo
+            {
+                Id = 64,
+                CodecId = 7,
+                BaseAddress = "https://media.invalid/video-64-avc"
+            },
+            new PlayUrlDashVideo
+            {
+                Id = 64,
+                CodecId = 12,
+                BaseAddress = "https://media.invalid/video-64-hevc"
+            }
+        ];
+        var supplemented = CreatePlayUrl(80, 64);
+        supplemented.Dash.Video =
+        [
+            new PlayUrlDashVideo
+            {
+                Id = 80,
+                CodecId = 7,
+                BaseAddress = "https://media.invalid/video-80-avc"
+            },
+            new PlayUrlDashVideo
+            {
+                Id = 80,
+                CodecId = 12,
+                BaseAddress = "https://media.invalid/video-80-hevc"
+            },
+            new PlayUrlDashVideo
+            {
+                Id = 64,
+                CodecId = 7,
+                BaseAddress = "https://media.invalid/video-64-avc"
+            },
+            new PlayUrlDashVideo
+            {
+                Id = 64,
+                CodecId = 12,
+                BaseAddress = "https://media.invalid/video-64-hevc"
+            }
+        ];
+        var page = new VideoPage();
+
+        VideoPagePlaybackMapper.ApplyPlayUrl(initial, page, settings);
+        Assert.Equal(PlaybackQualityMatchKind.Lower, page.VideoQualityMatch!.Kind);
+        page.VideoQuality!.SelectedVideoCodec = "H.265/HEVC";
+
+        VideoPagePlaybackMapper.ApplyPlayUrlPreservingSelection(
+            supplemented,
+            page,
+            settings);
+
+        Assert.Equal(80, page.VideoQuality!.Quality);
+        Assert.Equal("H.265/HEVC", page.VideoQuality.SelectedVideoCodec);
+        Assert.Equal(PlaybackQualityMatchKind.Exact, page.VideoQualityMatch!.Kind);
+    }
+
+    [Fact]
     public void ServerProvidedVipQualityIsNotHiddenByCachedAccountState()
     {
         var settings = CreateSettings(videoQuality: 127, isVip: false);

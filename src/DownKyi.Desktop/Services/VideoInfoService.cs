@@ -336,23 +336,26 @@ internal class VideoInfoService : IInfoService
         VideoPage page,
         CancellationToken cancellationToken = default)
     {
-        var content = _settingsStore.Current.Video.Content;
+        var video = _settingsStore.Current.Video;
+        var content = video.Content;
         return GetVideoStreamAsync(
             page,
-            content.DownloadVideo,
-            content.DownloadAudio,
+            new PlaybackDiscoveryRequest(
+                video.Quality,
+                video.AudioQuality,
+                content.DownloadVideo,
+                content.DownloadAudio),
             cancellationToken);
     }
 
     public async Task<PlayUrl?> GetVideoStreamAsync(
         VideoPage page,
-        bool requireVideo,
-        bool requireAudio,
+        PlaybackDiscoveryRequest request,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(page);
+        ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
-        var preferences = _settingsStore.Current.Video;
         return await WbiRequestExecutor.ExecuteAsync(
             _wbiKeyProvider,
             (keys, unixTimeSeconds) => _client.GetVideoPlaybackDiscoveryAsync(
@@ -362,10 +365,7 @@ internal class VideoInfoService : IInfoService
                 page.Bvid,
                 page.Cid,
                 page.Page,
-                preferences.Quality,
-                preferences.AudioQuality,
-                requireVideo,
-                requireAudio,
+                request,
                 cancellationToken),
             TimeProvider.System,
             cancellationToken).ConfigureAwait(false);

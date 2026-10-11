@@ -12,6 +12,11 @@ public sealed class PlayUrlEnvelopeContractTests
     private const string ImgKey = "12345678901234567890123456789012";
     private const string SubKey = "abcdefghijklmnopqrstuvwxyzABCDEF";
     private static readonly WbiKeys Keys = new(ImgKey, SubKey);
+    private static readonly PlaybackDiscoveryRequest AnyVideoDiscovery = new(
+        PreferredVideoQuality: 16,
+        PreferredAudioQuality: 30216,
+        RequireVideo: true,
+        RequireAudio: false);
     private static readonly string SampleDirectory = Path.Combine(
         FindRepositoryRoot(),
         "tests",
@@ -101,44 +106,6 @@ public sealed class PlayUrlEnvelopeContractTests
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(80, Assert.Single(payload?.Dash.Video ?? []).Id);
-    }
-
-    [Fact]
-    public async Task WebPageVideoEndpointFallsBackWhenDurlQualityDiffersFromRequestedQuality()
-    {
-        var requests = new List<BilibiliHttpRequest>();
-        var client = new StubBilibiliApiClient((request, _) =>
-        {
-            requests.Add(request);
-            if (request.RequestAddress.StartsWith(
-                    "https://www.bilibili.com/video/",
-                    StringComparison.Ordinal))
-            {
-                return Task.FromResult(
-                    """
-                    <script>window.__playinfo__={"code":0,"message":"success","data":{"quality":64,"video_codecid":7,"durl":[{"order":1,"url":"https://example.invalid/default"}]}}</script>
-                    """);
-            }
-
-            return Task.FromResult(
-                """
-                {"code":0,"message":"success","data":{"quality":80,"video_codecid":7,"durl":[{"order":1,"url":"https://example.invalid/requested"}]}}
-                """);
-        });
-
-        var payload = await client.GetVideoPlayUrlWebPageAsync(
-            Keys,
-            1702204169,
-            1,
-            "BV1fixture",
-            2,
-            1,
-            quality: 80,
-            cancellationToken: TestContext.Current.CancellationToken);
-
-        Assert.Equal(80, payload?.Quality);
-        Assert.Equal(2, requests.Count);
-        Assert.Contains("qn=80", requests[1].RequestAddress, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -277,8 +244,7 @@ public sealed class PlayUrlEnvelopeContractTests
 
         var discovered = await client.GetVideoPlaybackDiscoveryAsync(
             Keys, 1702204169, 1, "BV1fixture", 2, 1,
-            preferredVideoQuality: 80, preferredAudioQuality: 30280,
-            requireVideo: true, requireAudio: true,
+            new PlaybackDiscoveryRequest(80, 30280, RequireVideo: true, RequireAudio: true),
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, requests.Count);
@@ -305,8 +271,7 @@ public sealed class PlayUrlEnvelopeContractTests
 
         var discovered = await client.GetVideoPlaybackDiscoveryAsync(
             Keys, 1702204169, 1, "BV1fixture", 2, 1,
-            preferredVideoQuality: 80, preferredAudioQuality: 30280,
-            requireVideo: true, requireAudio: false,
+            new PlaybackDiscoveryRequest(80, 30280, RequireVideo: true, RequireAudio: false),
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Single(discovered!.Dash.Video);
@@ -332,8 +297,7 @@ public sealed class PlayUrlEnvelopeContractTests
 
         var discovered = await client.GetVideoPlaybackDiscoveryAsync(
             Keys, 1702204169, 1, "BV1fixture", 2, 1,
-            preferredVideoQuality: 80, preferredAudioQuality: 30280,
-            requireVideo: true, requireAudio: true,
+            new PlaybackDiscoveryRequest(80, 30280, RequireVideo: true, RequireAudio: true),
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, requests);
@@ -360,8 +324,7 @@ public sealed class PlayUrlEnvelopeContractTests
 
         var discovered = await client.GetVideoPlaybackDiscoveryAsync(
             Keys, 1702204169, 1, "BV1fixture", 2, 1,
-            preferredVideoQuality: 80, preferredAudioQuality: 30280,
-            requireVideo: true, requireAudio: false,
+            new PlaybackDiscoveryRequest(80, 30280, RequireVideo: true, RequireAudio: false),
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, requests);
@@ -412,8 +375,7 @@ public sealed class PlayUrlEnvelopeContractTests
 
         var discovered = await client.GetBangumiPlaybackDiscoveryAsync(
             1, "BV1fixture", 2, 3489,
-            preferredVideoQuality: 80, preferredAudioQuality: 30280,
-            requireVideo: true, requireAudio: true,
+            new PlaybackDiscoveryRequest(80, 30280, RequireVideo: true, RequireAudio: true),
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, requests);
@@ -442,8 +404,7 @@ public sealed class PlayUrlEnvelopeContractTests
 
         var discovered = await client.GetBangumiPlaybackDiscoveryAsync(
             1, "BV1fixture", 2, 3489,
-            preferredVideoQuality: 80, preferredAudioQuality: 30280,
-            requireVideo: true, requireAudio: false,
+            new PlaybackDiscoveryRequest(80, 30280, RequireVideo: true, RequireAudio: false),
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, requests);
@@ -506,6 +467,7 @@ public sealed class PlayUrlEnvelopeContractTests
             "BV1fixture",
             2,
             3489,
+            AnyVideoDiscovery,
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, payload!.Dash.Video.Count);
@@ -541,6 +503,7 @@ public sealed class PlayUrlEnvelopeContractTests
             "BV1fixture",
             2,
             3489,
+            AnyVideoDiscovery,
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Single(requests);
@@ -569,6 +532,7 @@ public sealed class PlayUrlEnvelopeContractTests
             "BV1fixture",
             2,
             3489,
+            AnyVideoDiscovery,
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Single(requests);
@@ -579,6 +543,48 @@ public sealed class PlayUrlEnvelopeContractTests
         Assert.Equal(PlayUrlStreamKind.Durl, availability.StreamKind);
         Assert.Equal(PlayUrlResolutionSource.WebPage, payload.Diagnostics?.Source);
         Assert.Equal("embedded-availability-selected", payload.Diagnostics?.Outcome);
+    }
+
+    [Fact]
+    public void DiscoveryTreatsRequestedDurlVideoAsContainingAudio()
+    {
+        var request = new PlaybackDiscoveryRequest(
+            80,
+            30280,
+            RequireVideo: true,
+            RequireAudio: true);
+        var availability = new PlayUrlAvailability(
+        [
+            new PlayUrlVideoAvailability(
+                80,
+                7,
+                PlayUrlStreamKind.Durl,
+                "1080P 高清")
+        ],
+        []);
+
+        Assert.False(request.NeedsApiSupplement(availability));
+    }
+
+    [Fact]
+    public void DiscoveryDoesNotTreatDurlAsAnAudioOnlyStream()
+    {
+        var request = new PlaybackDiscoveryRequest(
+            80,
+            30280,
+            RequireVideo: false,
+            RequireAudio: true);
+        var availability = new PlayUrlAvailability(
+        [
+            new PlayUrlVideoAvailability(
+                80,
+                7,
+                PlayUrlStreamKind.Durl,
+                "1080P 高清")
+        ],
+        []);
+
+        Assert.True(request.NeedsApiSupplement(availability));
     }
 
     [Fact]
@@ -651,7 +657,7 @@ public sealed class PlayUrlEnvelopeContractTests
             }
         };
 
-        var availability = BangumiPlaybackResolver.DiscoverAvailability(primary, supplement);
+        var availability = PlayUrlAvailability.Combine(primary, supplement);
 
         Assert.Equal([30280, 30251, 30250], availability.Audio);
     }
@@ -774,6 +780,7 @@ public sealed class PlayUrlEnvelopeContractTests
             "BV1fixture",
             2,
             3489,
+            AnyVideoDiscovery,
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(64, Assert.Single(payload!.Availability!.Video).Quality);
@@ -805,6 +812,7 @@ public sealed class PlayUrlEnvelopeContractTests
             "BV1fixture",
             2,
             3489,
+            AnyVideoDiscovery,
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, requests);
@@ -1144,6 +1152,7 @@ public sealed class PlayUrlEnvelopeContractTests
             "BV1fixture",
             2,
             3489,
+            AnyVideoDiscovery,
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(64, Assert.Single(payload!.Availability!.Video).Quality);
@@ -1239,6 +1248,7 @@ public sealed class PlayUrlEnvelopeContractTests
                 "BV1fixture",
                 2,
                 3489,
+                AnyVideoDiscovery,
                 cancellationToken: caller.Token));
 
         Assert.Equal(1, requests);
@@ -1262,6 +1272,7 @@ public sealed class PlayUrlEnvelopeContractTests
             "BV1fixture",
             2,
             3489,
+            AnyVideoDiscovery,
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(64, Assert.Single(payload?.Dash.Video ?? []).Id);
@@ -1397,6 +1408,7 @@ public sealed class PlayUrlEnvelopeContractTests
             "BV1fixture",
             2,
             3489,
+            AnyVideoDiscovery,
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.NotNull(payload);
