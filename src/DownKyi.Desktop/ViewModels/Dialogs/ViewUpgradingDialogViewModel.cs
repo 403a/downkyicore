@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.Input;
@@ -9,7 +8,6 @@ using DownKyi.Application.Diagnostics;
 using DownKyi.Application.Lifetime;
 using DownKyi.Commands;
 using DownKyi.Services.Migration;
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 
 namespace DownKyi.ViewModels.Dialogs;
@@ -171,7 +169,7 @@ internal sealed class ViewUpgradingDialogViewModel : BaseDialogViewModel, IAsync
         {
             return;
         }
-        catch (Exception e) when (IsRecoverableMigrationBoundaryFailure(e))
+        catch (Exception e) when (LegacyUpgradeCoordinator.IsMigrationException(e))
         {
             _logger.LogErrorMessage("Legacy data migration dialog failed.", e);
             FinishMigrationActivity();
@@ -196,14 +194,6 @@ internal sealed class ViewUpgradingDialogViewModel : BaseDialogViewModel, IAsync
         {
             Percent = percent;
         }
-    }
-
-    private static bool IsRecoverableMigrationBoundaryFailure(Exception failure)
-    {
-        return failure is InvalidOperationException or IOException or UnauthorizedAccessException
-            or SqliteException or InvalidCastException or FormatException or ArgumentException
-            or KeyNotFoundException or NotSupportedException
-            or System.Runtime.Serialization.SerializationException;
     }
 
     private async Task ExecuteRestartAsync()

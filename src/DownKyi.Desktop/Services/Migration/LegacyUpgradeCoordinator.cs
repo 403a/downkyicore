@@ -479,7 +479,7 @@ internal sealed class LegacyUpgradeCoordinator : ILegacyUpgradeCoordinator
         }
     }
 
-    private static bool IsMigrationException(Exception exception)
+    internal static bool IsMigrationException(Exception exception)
     {
         return exception is SqliteException or IOException or UnauthorizedAccessException
             or InvalidOperationException || IsLegacyRecordException(exception);
