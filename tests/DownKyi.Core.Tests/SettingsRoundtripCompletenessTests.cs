@@ -243,7 +243,6 @@ public sealed class SettingsRoundtripCompletenessTests
                 "Video.VideoCodecs" => 12,
                 "Video.Quality" => 80,
                 "Video.AudioQuality" => 30232,
-                "Video.VideoParseType" => 1,
                 "Video.FfmpegMaxParallelJobs" => 2,
                 "Danmaku.ScreenWidth" => 1280,
                 "Danmaku.ScreenHeight" => 720,

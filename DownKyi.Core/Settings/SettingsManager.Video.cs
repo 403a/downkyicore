@@ -130,24 +130,6 @@ public partial class SettingsManager
     }
 
     /// <summary>
-    /// 获取首选视频解析方式
-    /// </summary>
-    public int VideoParseType => _appSettings.Video.VideoParseType;
-
-    /// <summary>
-    /// 设置首选视频解析方式
-    /// </summary>
-    /// <param name="videoParseType"></param>
-    /// <returns></returns>
-    public bool SetVideoParseType(int videoParseType)
-    {
-        return SetProperty(
-            _appSettings.Video.VideoParseType,
-            videoParseType,
-            v => _appSettings.Video.VideoParseType = v);
-    }
-
-    /// <summary>
     /// 获取是否下载flv视频后转码为mp4
     /// </summary>
     /// <returns></returns>

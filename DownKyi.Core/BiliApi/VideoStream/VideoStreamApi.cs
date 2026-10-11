@@ -452,13 +452,11 @@ public static partial class VideoStreamApi
                 var hasUsableEmbeddedPlayback = requireVideo
                     ? embeddedAvailability.Video.Count > 0
                     : embeddedAvailability.Audio.Count > 0;
-                if (discoverAvailability && hasUsableEmbeddedPlayback
-                    && (discoveryPreference == null || !PlaybackDiscoveryPolicy.NeedsApiSupplement(
+                if (CanCompleteEmbeddedDiscovery(
+                        discoverAvailability,
+                        hasUsableEmbeddedPlayback,
                         embeddedAvailability,
-                        discoveryPreference.VideoQuality,
-                        discoveryPreference.AudioQuality,
-                        discoveryPreference.RequireVideo,
-                        discoveryPreference.RequireAudio)))
+                        discoveryPreference))
                 {
                     return CompleteBangumiPlayback(
                         embeddedPlayUrl,
@@ -575,6 +573,22 @@ public static partial class VideoStreamApi
             response.Result?.PlayCheck?.PlayDetail,
             PlayUrlResolutionSource.Api,
             $"api-fallback-selected:{apiFallbackReason}");
+    }
+
+    private static bool CanCompleteEmbeddedDiscovery(
+        bool discoverAvailability,
+        bool hasUsableEmbeddedPlayback,
+        PlayUrlAvailability embeddedAvailability,
+        DiscoveryPreference? discoveryPreference)
+    {
+        return discoverAvailability
+               && hasUsableEmbeddedPlayback
+               && (discoveryPreference == null || !PlaybackDiscoveryPolicy.NeedsApiSupplement(
+                   embeddedAvailability,
+                   discoveryPreference.VideoQuality,
+                   discoveryPreference.AudioQuality,
+                   discoveryPreference.RequireVideo,
+                   discoveryPreference.RequireAudio));
     }
 
     private static PlayUrl CompleteBangumiPlayback(

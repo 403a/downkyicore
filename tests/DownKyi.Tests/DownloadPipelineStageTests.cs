@@ -54,13 +54,9 @@ public sealed class DownloadPipelineStageTests
     }
 
     [Fact]
-    public async Task OrdinaryResumeIgnoresLegacyApiFirstSettingAndUsesWebpageBeforeApi()
+    public async Task OrdinaryResumeUsesWebpageBeforeApi()
     {
         using var settings = new TestSettingsStore();
-        settings.Store.Update(current => current with
-        {
-            Video = current.Video with { VideoParseType = 0 }
-        });
         var requests = new List<string>();
         var client = new TestBilibiliApiClient
         {
@@ -893,7 +889,7 @@ public sealed class DownloadPipelineStageTests
 
         Assert.False(result.IsSuccess);
         Assert.Equal("download.playback.selection-unavailable", result.Error?.Code);
-        Assert.Equal(1, refreshRequestCount);
+        Assert.Equal(2, refreshRequestCount);
         Assert.Single(fixture.Backend.Requests);
     }
 
@@ -1648,14 +1644,6 @@ public sealed class DownloadPipelineStageTests
                 historyService,
                 new SystemClock());
             var settings = new TestSettingsStore();
-            if (apiClient != null)
-            {
-                settings.Store.Update(current => current with
-                {
-                    Video = current.Video with { VideoParseType = 0 }
-                });
-            }
-
             var stateWriter = new DownloadTaskStateWriter(tasks);
             var taskId = new DownloadTaskId($"media-stage-{Guid.NewGuid():N}");
             var downloadBase = new DownloadBase

@@ -49,13 +49,6 @@ internal partial class ViewVideoViewModel : ViewModelBase
         // 优先下载音质
         AudioQualityList = PlaybackQualityCatalog.GetAudioPreferences();
 
-        // The old parse-mode setting stays readable, but playback is always
-        // webpage-first with API supplementation.
-        VideoParseTypeList = new List<VideoParseType>
-        {
-            new() { Name = "网页优先（API 自动补足）", Id = 1 }
-        };
-
         // 文件命名格式
         SelectedFileName.CollectionChanged += (sender, e) =>
         {
@@ -130,10 +123,6 @@ internal partial class ViewVideoViewModel : ViewModelBase
         // 优先下载音质
         var audioQuality = videoSettings.AudioQuality;
         SelectedAudioQuality = AudioQualityList.FirstOrDefault(t => t.Id == audioQuality) ?? AudioQualityList[0];
-
-        // 首选视频解析方式
-        var videoParseType = videoSettings.VideoParseType;
-        SelectedVideoParseType = VideoParseTypeList.FirstOrDefault(t => t.Id == videoParseType) ?? VideoParseTypeList[0];
 
         // 是否下载flv视频后转码为mp4
         var isTranscodingFlvToMp4 = videoSettings.IsTranscodingFlvToMp4;
@@ -256,28 +245,6 @@ internal partial class ViewVideoViewModel : ViewModelBase
         }
 
         var isSucceed = UpdateVideo(settings => settings with { AudioQuality = quality.Id }).AudioQuality == quality.Id;
-        PublishTip(isSucceed);
-    }
-
-
-    // 首选视频解析线路事件
-    private RelayCommand<object>? _videoParseTypeCommand;
-
-    public RelayCommand<object> VideoParseTypeCommand => _videoParseTypeCommand ??= RequiredParameterCommand.Create<object>(ExecuteVideoParseTypeCommand);
-
-    /// <summary>
-    /// 首选视频解析线路事件
-    /// </summary>
-    /// <param name="parameter"></param>
-    private void ExecuteVideoParseTypeCommand(object parameter)
-    {
-        if (parameter is not VideoParseType type)
-        {
-            return;
-        }
-
-        var parseType = type.Id ?? 1;
-        var isSucceed = UpdateVideo(settings => settings with { VideoParseType = parseType }).VideoParseType == parseType;
         PublishTip(isSucceed);
     }
 

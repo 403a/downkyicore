@@ -25,7 +25,7 @@
                 Name="NameVideoDownloadPreferences"
                 Margin="0,12,0,0"
                 ColumnDefinitions="160,320"
-                RowDefinitions="Auto,Auto,Auto,Auto">
+                RowDefinitions="Auto,Auto,Auto">
                 <TextBlock
                     Grid.Row="0"
                     Grid.Column="0"
@@ -98,30 +98,6 @@
                         <EventTriggerBehavior EventName="SelectionChanged">
                             <InvokeCommandAction Command="{Binding AudioQualityCommand}"
                                                  CommandParameter="{Binding ElementName=NameAudioQualityList,Path=SelectedValue}" />
-                        </EventTriggerBehavior>
-                    </Interaction.Behaviors>
-                </ComboBox>
-                <TextBlock
-                    Grid.Row="3"
-                    Grid.Column="0"
-                    VerticalAlignment="Center"
-                    FontSize="{DynamicResource DownKyiFontSizeBody}"
-                    Foreground="{DynamicResource BrushTextDark}"
-                    Text="{DynamicResource VideoParseType}" />
-                <ComboBox
-                    Name="NameVideoParseTypeList"
-                    Grid.Row="3"
-                    Grid.Column="1"
-                    HorizontalAlignment="Stretch"
-                    VerticalContentAlignment="Center"
-                    DisplayMemberBinding="{Binding Name}"
-                    ItemsSource="{Binding VideoParseTypeList}"
-                    IsEnabled="False"
-                    SelectedItem="{Binding SelectedVideoParseType}">
-                    <Interaction.Behaviors>
-                        <EventTriggerBehavior EventName="SelectionChanged">
-                            <InvokeCommandAction Command="{Binding VideoParseTypeCommand}"
-                                                 CommandParameter="{Binding ElementName=NameVideoParseTypeList,Path=SelectedValue}" />
                         </EventTriggerBehavior>
                     </Interaction.Behaviors>
                 </ComboBox>

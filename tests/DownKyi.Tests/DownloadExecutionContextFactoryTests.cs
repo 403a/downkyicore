@@ -29,7 +29,6 @@ public sealed class DownloadExecutionContextFactoryTests : IDisposable
             Basic = current.Basic with { DownloadFinishedSort = DownloadFinishedSort.Number },
             Video = current.Video with
             {
-                VideoParseType = 1,
                 IsTranscodingAacToMp3 = AllowStatus.Yes
             },
             Danmaku = current.Danmaku with
@@ -129,7 +128,6 @@ public sealed class DownloadExecutionContextFactoryTests : IDisposable
             Basic = current.Basic with { DownloadFinishedSort = DownloadFinishedSort.DownloadDesc },
             Video = current.Video with
             {
-                VideoParseType = 0,
                 IsTranscodingAacToMp3 = AllowStatus.No
             },
             Danmaku = current.Danmaku with
@@ -142,7 +140,6 @@ public sealed class DownloadExecutionContextFactoryTests : IDisposable
         });
 
         Assert.Equal(DownloadFinishedSort.DownloadDesc, replacementSettings.Basic.DownloadFinishedSort);
-        Assert.Equal(0, replacementSettings.Video.VideoParseType);
         Assert.Equal(AllowStatus.No, replacementSettings.Video.IsTranscodingAacToMp3);
         Assert.Equal(1280, replacementSettings.Danmaku.ScreenWidth);
         Assert.Equal(720, replacementSettings.Danmaku.ScreenHeight);
