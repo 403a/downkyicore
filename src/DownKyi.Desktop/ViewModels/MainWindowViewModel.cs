@@ -14,6 +14,9 @@ using DownKyi.Models;
 using DownKyi.Platform;
 using DownKyi.Services;
 using DownKyi.Services.Download;
+using DownKyi.Services.Migration;
+using DownKyi.Services.Startup;
+using DownKyi.ViewModels.Dialogs;
 using Microsoft.Extensions.Logging;
 
 namespace DownKyi.ViewModels;
@@ -286,13 +289,23 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
 
     internal async Task RunStartupDialogsAsync()
     {
-        await ShowUpgradeDialogAsync().ConfigureAwait(true);
+        var diagnostics = new StartupDiagnosticCollection();
+        var legacyDiagnosticTask = CollectLegacyUpgradeDiagnosticAsync();
+        var downloadDiagnosticTask = CollectDownloadRuntimeDiagnosticAsync();
+
+        diagnostics.Add(await legacyDiagnosticTask.ConfigureAwait(true));
         if (_lifetimeToken.IsCancellationRequested)
         {
             return;
         }
 
-        await ShowDownloadRuntimeFailureDialogAsync().ConfigureAwait(true);
+        diagnostics.Add(await downloadDiagnosticTask.ConfigureAwait(true));
+        if (_lifetimeToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        await ShowStartupDiagnosticsAsync(diagnostics.Items).ConfigureAwait(true);
         if (_lifetimeToken.IsCancellationRequested)
         {
             return;
@@ -312,25 +325,47 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
             TaskScheduler.Default);
     }
 
-    private async Task ShowUpgradeDialogAsync()
+    private async Task<StartupDiagnostic?> CollectLegacyUpgradeDiagnosticAsync()
     {
         try
         {
-            await _dialogService
+            var result = await _dialogService
                 .ShowAsync(new AppDialogRequest(AppDialog.LegacyUpgrade), _lifetimeToken)
                 .ConfigureAwait(true);
+            if (result.Parameters.TryGetValue(
+                    ViewUpgradingDialogViewModel.FailureResultParameter,
+                    out var value)
+                && value is LegacyUpgradeResult { Failure: { } failure } upgradeFailure)
+            {
+                return StartupDiagnostic.ForLegacyMigration(
+                    failure,
+                    upgradeFailure.ErrorMessage);
+            }
+
+            if (result.Outcome == AppDialogOutcome.Rejected)
+            {
+                var incompleteFailure = new InvalidOperationException(
+                    "The legacy migration failed without returning diagnostic details.");
+                _logger.LogErrorMessage(
+                    "Legacy upgrade returned an incomplete failure result.",
+                    incompleteFailure);
+                return StartupDiagnostic.ForLegacyMigration(incompleteFailure);
+            }
         }
         catch (OperationCanceledException) when (_lifetimeToken.IsCancellationRequested)
         {
-            return;
+            return null;
         }
         catch (InvalidOperationException e)
         {
             _logger.LogErrorMessage("Legacy upgrade dialog failed to open.", e);
+            return StartupDiagnostic.ForLegacyMigration(e);
         }
+
+        return null;
     }
 
-    private async Task ShowDownloadRuntimeFailureDialogAsync()
+    private async Task<StartupDiagnostic?> CollectDownloadRuntimeDiagnosticAsync()
     {
         try
         {
@@ -339,21 +374,51 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
                 .ConfigureAwait(true);
             if (outcome.State == DownloadRuntimeStartupState.Ready)
             {
-                return;
+                return null;
             }
 
             var failure = outcome.Failure
                 ?? throw new InvalidOperationException(
                     "The faulted download startup outcome has no failure.");
+            return StartupDiagnostic.ForDownloadBootstrap(failure);
+        }
+        catch (OperationCanceledException) when (_lifetimeToken.IsCancellationRequested)
+        {
+            return null;
+        }
+        catch (InvalidOperationException e)
+        {
+            _logger.LogErrorMessage("Download runtime startup outcome was invalid.", e);
+            return StartupDiagnostic.ForDownloadBootstrap(e);
+        }
+    }
+
+    private async Task ShowStartupDiagnosticsAsync(
+        IReadOnlyList<StartupDiagnostic> diagnostics)
+    {
+        if (diagnostics.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
             var result = await _dialogService.ShowAsync(
                 new AppDialogRequest(
                     AppDialog.DownloadRuntimeFailure,
-                    new Dictionary<string, object?> { ["failure"] = failure }),
+                    new Dictionary<string, object?>
+                    {
+                        [DownloadRuntimeFailureDialogViewModel.DiagnosticsParameter] = diagnostics
+                    }),
                 _lifetimeToken).ConfigureAwait(true);
-            if (result.Outcome == AppDialogOutcome.Accepted)
+            if (result.Outcome == AppDialogOutcome.Accepted
+                && result.Parameters.TryGetValue(
+                    DownloadRuntimeFailureDialogViewModel.RecoveryDiagnosticParameter,
+                    out var value)
+                && value is StartupDiagnostic recoveryDiagnostic)
             {
                 await _downloadStoreRecoveryPresenter
-                    .ConfirmResetAndRestartAsync(failure, _lifetimeToken)
+                    .ConfirmResetAndRestartAsync(recoveryDiagnostic.Failure, _lifetimeToken)
                     .ConfigureAwait(true);
             }
         }
@@ -363,7 +428,7 @@ internal sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
         catch (InvalidOperationException e)
         {
-            _logger.LogErrorMessage("Download runtime failure dialog failed to open.", e);
+            _logger.LogErrorMessage("Startup diagnostics dialog failed to open.", e);
         }
     }
 

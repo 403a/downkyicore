@@ -6,7 +6,10 @@ using DownKyi.Core.Settings;
 using DownKyi.Platform;
 using DownKyi.Services;
 using DownKyi.Services.Download;
+using DownKyi.Services.Migration;
+using DownKyi.Services.Startup;
 using DownKyi.ViewModels;
+using DownKyi.ViewModels.Dialogs;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DownKyi.Tests;
@@ -109,7 +112,7 @@ public sealed class StartupDialogOrderingTests
     }
 
     [Fact]
-    public async Task DownloadFailureDialogWaitsForLegacyDialogAndPrecedesUpdateDialog()
+    public async Task DownloadFailureIsShownOnceAfterLegacyDialogAndBeforeUpdateDialog()
     {
         using var settings = new TestSettingsStore();
         settings.Store.Update(current => current with
@@ -159,7 +162,90 @@ public sealed class StartupDialogOrderingTests
                 AppDialog.NewVersionAvailable
             ],
             dialogs.Requests);
-        Assert.Same(failure, dialogs.DownloadRuntimeFailure);
+        var diagnostic = Assert.Single(dialogs.StartupDiagnostics!);
+        Assert.Equal(StartupDiagnosticSource.DownloadBootstrap, diagnostic.Source);
+        Assert.Same(failure, diagnostic.Failure);
+    }
+
+    [Fact]
+    public async Task LegacyFailureDoesNotBlockAlreadyDetectedDownloadFailure()
+    {
+        using var settings = new TestSettingsStore();
+        settings.Store.Update(current => current with
+        {
+            About = current.About with
+            {
+                AutoUpdateWhenLaunch = AllowStatus.No
+            }
+        });
+        var navigation = new NavigationStub();
+        var dialogs = new OrderedDialogService();
+        using var handler = new ReleaseHandler();
+        using var httpClient = new HttpClient(handler, disposeHandler: false)
+        {
+            BaseAddress = new Uri("https://api.github.test/")
+        };
+        using var clipboard = new ClipboardMonitorStub();
+        var migrationFailure = new InvalidOperationException("Synthetic migration failure.");
+        var downloadFailure = new InvalidOperationException("Synthetic download failure.");
+        var availability = new RuntimeAvailabilityStub(
+            DownloadRuntimeStartupOutcome.Faulted(downloadFailure));
+        using var viewModel = new MainWindowViewModel(
+            navigation,
+            new NotificationStub(),
+            dialogs,
+            settings.Store,
+            clipboard,
+            new SearchService(settings.Store, navigation),
+            new VersionCheckerService(httpClient, "owner", "repo"),
+            availability,
+            CreateRecoveryPresenter(dialogs),
+            NullLogger<MainWindowViewModel>.Instance);
+
+        var startup = viewModel.RunStartupDialogsAsync();
+        await dialogs.LegacyDialogStarted.Task
+            .WaitAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        Assert.Equal(1, availability.WaitCallCount);
+        Assert.Equal([AppDialog.LegacyUpgrade], dialogs.Requests);
+
+        dialogs.CompleteLegacyDialogWithFailure(migrationFailure);
+        await startup.ConfigureAwait(true);
+
+        Assert.Equal(
+            [AppDialog.LegacyUpgrade, AppDialog.DownloadRuntimeFailure],
+            dialogs.Requests);
+        Assert.Collection(
+            dialogs.StartupDiagnostics!,
+            migration =>
+            {
+                Assert.Equal(StartupDiagnosticSource.LegacyMigration, migration.Source);
+                Assert.Same(migrationFailure, migration.Failure);
+            },
+            download =>
+            {
+                Assert.Equal(StartupDiagnosticSource.DownloadBootstrap, download.Source);
+                Assert.Same(downloadFailure, download.Failure);
+            });
+    }
+
+    [Fact]
+    public void CollectorDeduplicatesSharedRootOnlyWithinTheSameSource()
+    {
+        var root = new InvalidOperationException("shared root");
+        var diagnostics = new StartupDiagnosticCollection();
+
+        diagnostics.Add(StartupDiagnostic.ForDownloadBootstrap(
+            new InvalidOperationException("wrapper one", root)));
+        diagnostics.Add(StartupDiagnostic.ForDownloadBootstrap(
+            new InvalidOperationException("wrapper two", root)));
+        diagnostics.Add(StartupDiagnostic.ForLegacyMigration(root));
+
+        Assert.Collection(
+            diagnostics.Items,
+            item => Assert.Equal(StartupDiagnosticSource.DownloadBootstrap, item.Source),
+            item => Assert.Equal(StartupDiagnosticSource.LegacyMigration, item.Source));
     }
 
     private static DownloadStoreRecoveryPresenter CreateRecoveryPresenter(
@@ -180,7 +266,7 @@ public sealed class StartupDialogOrderingTests
 
         public List<AppDialog> Requests { get; } = [];
 
-        public Exception? DownloadRuntimeFailure { get; private set; }
+        public IReadOnlyList<StartupDiagnostic>? StartupDiagnostics { get; private set; }
 
         public Task<AppDialogResult> ShowAsync(
             AppDialogRequest request,
@@ -196,8 +282,8 @@ public sealed class StartupDialogOrderingTests
 
             if (request.Dialog == AppDialog.DownloadRuntimeFailure)
             {
-                DownloadRuntimeFailure = Assert.IsAssignableFrom<Exception>(
-                    request.Parameters?["failure"]);
+                StartupDiagnostics = Assert.IsAssignableFrom<IReadOnlyList<StartupDiagnostic>>(
+                    request.Parameters?[DownloadRuntimeFailureDialogViewModel.DiagnosticsParameter]);
             }
 
             return Task.FromResult(new AppDialogResult(
@@ -210,6 +296,20 @@ public sealed class StartupDialogOrderingTests
             _legacyCompletion.TrySetResult(new AppDialogResult(
                 AppDialogOutcome.Accepted,
                 new Dictionary<string, object?>(StringComparer.Ordinal)));
+        }
+
+        public void CompleteLegacyDialogWithFailure(Exception failure)
+        {
+            _legacyCompletion.TrySetResult(new AppDialogResult(
+                AppDialogOutcome.Rejected,
+                new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    [ViewUpgradingDialogViewModel.FailureResultParameter] =
+                        new LegacyUpgradeResult(
+                            LegacyUpgradeOutcome.Failed,
+                            "migration failed",
+                            failure)
+                }));
         }
     }
 
@@ -264,6 +364,8 @@ public sealed class StartupDialogOrderingTests
     {
         private readonly DownloadRuntimeStartupOutcome _outcome;
 
+        public int WaitCallCount { get; private set; }
+
         public RuntimeAvailabilityStub()
             : this(DownloadRuntimeStartupOutcome.Ready())
         {
@@ -282,6 +384,7 @@ public sealed class StartupDialogOrderingTests
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            WaitCallCount++;
             return Task.FromResult(_outcome);
         }
     }

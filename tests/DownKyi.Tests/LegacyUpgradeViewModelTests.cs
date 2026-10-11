@@ -126,11 +126,47 @@ public sealed class LegacyUpgradeViewModelTests
         Assert.True(viewModel.RestartVisible);
         Assert.False(viewModel.IsMigrationActive);
 
+        var closed = new TaskCompletionSource<AppDialogResult>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        viewModel.CloseRequested += (_, result) => closed.TrySetResult(result);
+        viewModel.RequestCancelMigrationCommand.Execute(null);
+        Assert.Equal(
+            AppDialogOutcome.Canceled,
+            (await closed.Task.WaitAsync(TestContext.Current.CancellationToken)).Outcome);
+
         await viewModel.OnDialogClosedAsync().ConfigureAwait(true);
     }
 
     [Fact]
-    public async Task ClosingDialogObservesUnexpectedMigrationFailure()
+    public async Task ExpectedMigrationFailureStopsLoadingAndReturnsDiagnostic()
+    {
+        var failure = new InvalidOperationException("Expected migration failure.");
+        var viewModel = CreateViewModel(new FailedLegacyUpgradeCoordinator(failure));
+        await using var viewModelScope = viewModel.ConfigureAwait(true);
+        var closed = new TaskCompletionSource<AppDialogResult>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        viewModel.CloseRequested += (_, result) => closed.TrySetResult(result);
+
+        viewModel.OnDialogOpened(new AppDialogRequest(AppDialog.LegacyUpgrade));
+        var result = await closed.Task
+            .WaitAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+
+        Assert.False(viewModel.IsMigrationActive);
+        Assert.False(viewModel.CancelConfirmationVisible);
+        Assert.False(viewModel.RestartVisible);
+        Assert.True(viewModel.CanCloseDialog());
+        Assert.Equal("legacy backup preserved", viewModel.Message);
+        Assert.Equal(AppDialogOutcome.Rejected, result.Outcome);
+        var failureResult = Assert.IsType<LegacyUpgradeResult>(
+            result.Parameters[ViewUpgradingDialogViewModel.FailureResultParameter]);
+        Assert.Same(failure, failureResult.Failure);
+
+        await viewModel.OnDialogClosedAsync().ConfigureAwait(true);
+    }
+
+    [Fact]
+    public async Task UnexpectedMigrationFailureIsLoggedAndReturnedInsteadOfHanging()
     {
         var coordinator = new FaultingLegacyUpgradeCoordinator();
         var viewModel = new ViewUpgradingDialogViewModel(
@@ -141,12 +177,21 @@ public sealed class LegacyUpgradeViewModelTests
 
         viewModel.OnDialogOpened(new AppDialogRequest(AppDialog.LegacyUpgrade));
         await coordinator.Started.Task.WaitAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        var closed = new TaskCompletionSource<AppDialogResult>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        viewModel.CloseRequested += (_, result) => closed.TrySetResult(result);
         coordinator.Fail.TrySetResult();
 
-        var exception = await Assert.ThrowsAsync<NotSupportedException>(
-            () => viewModel.OnDialogClosedAsync()).ConfigureAwait(true);
+        var result = await closed.Task
+            .WaitAsync(TestContext.Current.CancellationToken)
+            .ConfigureAwait(true);
+        await viewModel.OnDialogClosedAsync().ConfigureAwait(true);
 
-        Assert.Equal("Unexpected migration failure.", exception.Message);
+        Assert.Equal(AppDialogOutcome.Rejected, result.Outcome);
+        Assert.False(viewModel.IsMigrationActive);
+        var failureResult = Assert.IsType<LegacyUpgradeResult>(
+            result.Parameters[ViewUpgradingDialogViewModel.FailureResultParameter]);
+        Assert.IsType<NotSupportedException>(failureResult.Failure);
     }
 
     private sealed class BlockingLegacyUpgradeCoordinator : ILegacyUpgradeCoordinator
@@ -224,6 +269,20 @@ public sealed class LegacyUpgradeViewModelTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(new LegacyUpgradeResult(LegacyUpgradeOutcome.Completed));
+        }
+    }
+
+    private sealed class FailedLegacyUpgradeCoordinator(Exception failure) : ILegacyUpgradeCoordinator
+    {
+        public Task<LegacyUpgradeResult> UpgradeAsync(
+            IProgress<LegacyUpgradeProgress> progress,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(new LegacyUpgradeResult(
+                LegacyUpgradeOutcome.Failed,
+                "legacy backup preserved",
+                failure));
         }
     }
 

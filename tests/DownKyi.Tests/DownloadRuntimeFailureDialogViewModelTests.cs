@@ -2,6 +2,7 @@ using DownKyi.Application.Desktop;
 using DownKyi.Application.Diagnostics;
 using DownKyi.Core.Aria2cNet.Server;
 using DownKyi.Infrastructure.Downloads;
+using DownKyi.Services.Startup;
 using DownKyi.ViewModels.Dialogs;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -10,6 +11,38 @@ namespace DownKyi.Tests;
 
 public sealed class DownloadRuntimeFailureDialogViewModelTests
 {
+    [Fact]
+    public void DialogUsesActualIssueCountAndKeepsItemsSeparate()
+    {
+        var viewModel = new DownloadRuntimeFailureDialogViewModel(
+            new RedactingLogService(),
+            new RecordingClipboardService(),
+            new RecordingPlatformLauncher(),
+            new RecordingNotificationService(),
+            NullLogger<DownloadRuntimeFailureDialogViewModel>.Instance);
+
+        viewModel.OnDialogOpened(CreateRequest(
+            StartupDiagnostic.ForDownloadBootstrap(
+                new InvalidOperationException("download failed"))));
+
+        Assert.Single(viewModel.Items);
+
+        viewModel.OnDialogOpened(CreateRequest(
+            StartupDiagnostic.ForDownloadBootstrap(
+                new InvalidOperationException("download failed")),
+            StartupDiagnostic.ForLegacyMigration(
+                new InvalidOperationException("migration failed"))));
+
+        Assert.Collection(
+            viewModel.Items,
+            item => Assert.Equal(
+                StartupDiagnosticKind.DownloadRuntimeFailed,
+                item.Diagnostic.Kind),
+            item => Assert.Equal(
+                StartupDiagnosticKind.LegacyMigrationFailed,
+                item.Diagnostic.Kind));
+    }
+
     [Fact]
     public async Task ResetActionIsAvailableOnlyForDownloadSchemaMismatch()
     {
@@ -20,35 +53,34 @@ public sealed class DownloadRuntimeFailureDialogViewModelTests
             new RecordingNotificationService(),
             NullLogger<DownloadRuntimeFailureDialogViewModel>.Instance);
 
-        viewModel.OnDialogOpened(new AppDialogRequest(
-            AppDialog.DownloadRuntimeFailure,
-            new Dictionary<string, object?>
-            {
-                ["failure"] = new InvalidOperationException(
-                    "bootstrap wrapper",
-                    new DownloadStoreSchemaMismatchException("unsupported schema"))
-            }));
+        var schemaFailure = new InvalidOperationException(
+            "bootstrap wrapper",
+            new DownloadStoreSchemaMismatchException("unsupported schema"));
+        viewModel.OnDialogOpened(CreateRequest(
+            StartupDiagnostic.ForDownloadBootstrap(schemaFailure)));
 
-        Assert.True(viewModel.CanResetDownloadStore);
-        Assert.Equal("DownloadStoreSchemaMismatchMessage", viewModel.FailureMessageResourceKey);
+        var schemaItem = Assert.Single(viewModel.Items);
+        Assert.True(schemaItem.CanResetDownloadStore);
+        Assert.Equal(StartupDiagnosticKind.DownloadStoreSchemaMismatch, schemaItem.Diagnostic.Kind);
 
         var closeCompletion = new TaskCompletionSource<AppDialogResult>(
             TaskCreationOptions.RunContinuationsAsynchronously);
         viewModel.CloseRequested += (_, closeResult) =>
             closeCompletion.TrySetResult(closeResult);
-        viewModel.ResetDownloadStoreCommand.Execute(null);
+        schemaItem.ResetDownloadStoreCommand.Execute(null);
         var result = await closeCompletion.Task.WaitAsync(TestContext.Current.CancellationToken);
         Assert.Equal(AppDialogOutcome.Accepted, result.Outcome);
+        Assert.Same(
+            schemaFailure,
+            Assert.IsType<StartupDiagnostic>(
+                result.Parameters[DownloadRuntimeFailureDialogViewModel.RecoveryDiagnosticParameter])
+                .Failure);
 
-        viewModel.OnDialogOpened(new AppDialogRequest(
-            AppDialog.DownloadRuntimeFailure,
-            new Dictionary<string, object?>
-            {
-                ["failure"] = new SqliteException("database is locked", 5)
-            }));
+        viewModel.OnDialogOpened(CreateRequest(
+            StartupDiagnostic.ForDownloadBootstrap(
+                new SqliteException("database is locked", 5))));
 
-        Assert.False(viewModel.CanResetDownloadStore);
-        Assert.Equal("DownloadRuntimeFailureMessage", viewModel.FailureMessageResourceKey);
+        Assert.False(Assert.Single(viewModel.Items).CanResetDownloadStore);
     }
 
     [Fact]
@@ -64,23 +96,20 @@ public sealed class DownloadRuntimeFailureDialogViewModelTests
             launcher,
             notifications,
             NullLogger<DownloadRuntimeFailureDialogViewModel>.Instance);
-        viewModel.OnDialogOpened(new AppDialogRequest(
-            AppDialog.DownloadRuntimeFailure,
-            new Dictionary<string, object?>
-            {
-                ["failure"] = new InvalidOperationException("secret-path")
-            }));
+        viewModel.OnDialogOpened(CreateRequest(
+            StartupDiagnostic.ForDownloadBootstrap(
+                new InvalidOperationException("secret-path"))));
 
         await viewModel.CopyErrorDetailsAsync();
         await viewModel.CreateGitHubIssueAsync();
 
         Assert.Equal(viewModel.DiagnosticText, clipboard.Text);
-        Assert.Contains("Download bootstrap", viewModel.DiagnosticText, StringComparison.Ordinal);
+        Assert.Contains("DownloadBootstrap", viewModel.DiagnosticText, StringComparison.Ordinal);
         Assert.Contains("[redacted]", viewModel.DiagnosticText, StringComparison.Ordinal);
         Assert.DoesNotContain("secret-path", viewModel.DiagnosticText, StringComparison.Ordinal);
         Assert.Equal("github.com", launcher.Uri?.Host);
         Assert.Equal("/crazysmile-PhD/downkyicore/issues/new", launcher.Uri?.AbsolutePath);
-        Assert.Equal("Download system failed to initialize", GetQueryValue(launcher.Uri!, "title"));
+        Assert.Equal("DownKyi startup diagnostics report", GetQueryValue(launcher.Uri!, "title"));
         Assert.Equal("app_diagnostic_report.yml", GetQueryValue(launcher.Uri!, "template"));
         Assert.Equal(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar),
             launcher.FolderPath?.TrimEnd(Path.DirectorySeparatorChar));
@@ -109,9 +138,8 @@ public sealed class DownloadRuntimeFailureDialogViewModelTests
             new RecordingNotificationService(),
             NullLogger<DownloadRuntimeFailureDialogViewModel>.Instance);
 
-        viewModel.OnDialogOpened(new AppDialogRequest(
-            AppDialog.DownloadRuntimeFailure,
-            new Dictionary<string, object?> { ["failure"] = failure }));
+        viewModel.OnDialogOpened(CreateRequest(
+            StartupDiagnostic.ForDownloadBootstrap(failure)));
 
         Assert.Contains("Redownload and reinstall DownKyi", viewModel.DiagnosticText,
             StringComparison.Ordinal);
@@ -132,12 +160,9 @@ public sealed class DownloadRuntimeFailureDialogViewModelTests
             launcher,
             new RecordingNotificationService(),
             NullLogger<DownloadRuntimeFailureDialogViewModel>.Instance);
-        viewModel.OnDialogOpened(new AppDialogRequest(
-            AppDialog.DownloadRuntimeFailure,
-            new Dictionary<string, object?>
-            {
-                ["failure"] = new InvalidOperationException(new string('\u4E0B', 10_000))
-            }));
+        viewModel.OnDialogOpened(CreateRequest(
+            StartupDiagnostic.ForDownloadBootstrap(
+                new InvalidOperationException(new string('\u4E0B', 10_000)))));
 
         await viewModel.CreateGitHubIssueAsync();
 
@@ -174,12 +199,9 @@ public sealed class DownloadRuntimeFailureDialogViewModelTests
             launcher,
             new RecordingNotificationService(),
             NullLogger<DownloadRuntimeFailureDialogViewModel>.Instance);
-        viewModel.OnDialogOpened(new AppDialogRequest(
-            AppDialog.DownloadRuntimeFailure,
-            new Dictionary<string, object?>
-            {
-                ["failure"] = new InvalidOperationException($"Request failed for {resource}")
-            }));
+        viewModel.OnDialogOpened(CreateRequest(
+            StartupDiagnostic.ForDownloadBootstrap(
+                new InvalidOperationException($"Request failed for {resource}"))));
 
         await viewModel.CopyErrorDetailsAsync();
         await viewModel.CreateGitHubIssueAsync();
@@ -206,12 +228,8 @@ public sealed class DownloadRuntimeFailureDialogViewModelTests
             launcher,
             new RecordingNotificationService(),
             NullLogger<DownloadRuntimeFailureDialogViewModel>.Instance);
-        viewModel.OnDialogOpened(new AppDialogRequest(
-            AppDialog.DownloadRuntimeFailure,
-            new Dictionary<string, object?>
-            {
-                ["failure"] = CreatePrivateFailure()
-            }));
+        viewModel.OnDialogOpened(CreateRequest(
+            StartupDiagnostic.ForDownloadBootstrap(CreatePrivateFailure())));
 
         await viewModel.CreateGitHubIssueAsync();
 
@@ -235,12 +253,9 @@ public sealed class DownloadRuntimeFailureDialogViewModelTests
             launcher,
             new RecordingNotificationService(),
             NullLogger<DownloadRuntimeFailureDialogViewModel>.Instance);
-        viewModel.OnDialogOpened(new AppDialogRequest(
-            AppDialog.DownloadRuntimeFailure,
-            new Dictionary<string, object?>
-            {
-                ["failure"] = new SqliteException("private-sqlite-message-73918", 19)
-            }));
+        viewModel.OnDialogOpened(CreateRequest(
+            StartupDiagnostic.ForDownloadBootstrap(
+                new SqliteException("private-sqlite-message-73918", 19))));
 
         await viewModel.CreateGitHubIssueAsync();
 
@@ -261,17 +276,54 @@ public sealed class DownloadRuntimeFailureDialogViewModelTests
             NullLogger<DownloadRuntimeFailureDialogViewModel>.Instance);
         var diagnostic = string.Join('.', Enumerable.Repeat("segment", 20_000));
 
-        viewModel.OnDialogOpened(new AppDialogRequest(
-            AppDialog.DownloadRuntimeFailure,
-            new Dictionary<string, object?>
-            {
-                ["failure"] = new InvalidOperationException(diagnostic)
-            }));
+        viewModel.OnDialogOpened(CreateRequest(
+            StartupDiagnostic.ForDownloadBootstrap(
+                new InvalidOperationException(diagnostic))));
 
         Assert.DoesNotContain(
             "[resource redacted]",
             viewModel.DiagnosticText,
             StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CopyAllPreservesEveryRedactedDiagnosticAndOriginalLineBreaks()
+    {
+        var clipboard = new RecordingClipboardService();
+        var viewModel = new DownloadRuntimeFailureDialogViewModel(
+            new RedactingLogService(),
+            clipboard,
+            new RecordingPlatformLauncher(),
+            new RecordingNotificationService(),
+            NullLogger<DownloadRuntimeFailureDialogViewModel>.Instance);
+        var migrationFailure = new InvalidOperationException(
+            "migration line one" + Environment.NewLine + "migration line two");
+        var downloadFailure = new InvalidOperationException(
+            "download line one" + Environment.NewLine + "secret-path");
+        viewModel.OnDialogOpened(CreateRequest(
+            StartupDiagnostic.ForLegacyMigration(migrationFailure),
+            StartupDiagnostic.ForDownloadBootstrap(downloadFailure)));
+
+        await viewModel.CopyErrorDetailsAsync();
+
+        Assert.Equal(viewModel.DiagnosticText, clipboard.Text);
+        Assert.Contains(
+            "migration line one" + Environment.NewLine + "migration line two",
+            clipboard.Text,
+            StringComparison.Ordinal);
+        Assert.Contains("download line one", clipboard.Text, StringComparison.Ordinal);
+        Assert.Contains("[redacted]", clipboard.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret-path", clipboard.Text, StringComparison.Ordinal);
+    }
+
+    private static AppDialogRequest CreateRequest(params StartupDiagnostic[] diagnostics)
+    {
+        return new AppDialogRequest(
+            AppDialog.DownloadRuntimeFailure,
+            new Dictionary<string, object?>
+            {
+                [DownloadRuntimeFailureDialogViewModel.DiagnosticsParameter] = diagnostics
+            });
     }
 
     private static string GetQueryValue(Uri uri, string name)

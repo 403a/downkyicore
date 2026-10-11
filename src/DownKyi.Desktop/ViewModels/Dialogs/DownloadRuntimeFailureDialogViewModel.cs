@@ -1,7 +1,11 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DownKyi.Application.Desktop;
 using DownKyi.Application.Diagnostics;
@@ -9,7 +13,7 @@ using DownKyi.Commands;
 using DownKyi.Infrastructure.Logging;
 using DownKyi.Models;
 using DownKyi.Services;
-using DownKyi.Services.Download;
+using DownKyi.Services.Startup;
 using DownKyi.Utils;
 using Microsoft.Extensions.Logging;
 
@@ -17,7 +21,9 @@ namespace DownKyi.ViewModels.Dialogs;
 
 internal sealed class DownloadRuntimeFailureDialogViewModel : BaseDialogViewModel
 {
-    private const string IssueTitle = "Download system failed to initialize";
+    internal const string DiagnosticsParameter = "diagnostics";
+    internal const string RecoveryDiagnosticParameter = "recoveryDiagnostic";
+    private const string IssueTitle = "DownKyi startup diagnostics report";
     private const string IssueTemplate = "app_diagnostic_report.yml";
     private const string TruncatedDiagnosticSuffix =
         "\n\n[The summary was truncated; attach the generated diagnostic ZIP.]";
@@ -29,11 +35,10 @@ internal sealed class DownloadRuntimeFailureDialogViewModel : BaseDialogViewMode
     private readonly ILogger<DownloadRuntimeFailureDialogViewModel> _logger;
     private DownKyiAsyncDelegateCommand? _copyErrorDetailsCommand;
     private DownKyiAsyncDelegateCommand? _createGitHubIssueCommand;
-    private RelayCommand? _resetDownloadStoreCommand;
-    private string _failureMessage;
+    private IReadOnlyList<StartupDiagnosticItemViewModel> _items = [];
+    private string _introMessage;
     private string _diagnosticText = string.Empty;
     private string _issueDiagnosticText = string.Empty;
-    private bool _canResetDownloadStore;
 
     public DownloadRuntimeFailureDialogViewModel(
         IApplicationLogService logService,
@@ -49,18 +54,21 @@ internal sealed class DownloadRuntimeFailureDialogViewModel : BaseDialogViewMode
             ?? throw new ArgumentNullException(nameof(platformLauncher));
         _notifications = notifications ?? throw new ArgumentNullException(nameof(notifications));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        Title = DictionaryResource.GetString("DownloadRuntimeFailureTitle");
-        _failureMessage = DictionaryResource.GetString("DownloadRuntimeFailureMessage");
+        Title = DictionaryResource.GetString("StartupDiagnosticsTitle");
+        _introMessage = DictionaryResource.GetString("StartupDiagnosticsMessage");
     }
 
-    public string FailureMessage
+    public string IntroMessage
     {
-        get => _failureMessage;
-        private set => SetProperty(ref _failureMessage, value);
+        get => _introMessage;
+        private set => SetProperty(ref _introMessage, value);
     }
 
-    internal string FailureMessageResourceKey { get; private set; } =
-        "DownloadRuntimeFailureMessage";
+    public IReadOnlyList<StartupDiagnosticItemViewModel> Items
+    {
+        get => _items;
+        private set => SetProperty(ref _items, value);
+    }
 
     public string DiagnosticText
     {
@@ -78,27 +86,27 @@ internal sealed class DownloadRuntimeFailureDialogViewModel : BaseDialogViewMode
             CreateGitHubIssueAsync,
             _logger);
 
-    public bool CanResetDownloadStore
-    {
-        get => _canResetDownloadStore;
-        private set => SetProperty(ref _canResetDownloadStore, value);
-    }
-
-    public RelayCommand ResetDownloadStoreCommand =>
-        _resetDownloadStoreCommand ??= new RelayCommand(() =>
-            CloseDialog(AppDialogOutcome.Accepted));
-
     public override void OnDialogOpened(AppDialogRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var failure = GetRequiredParameter<Exception>(request, "failure");
-        DiagnosticText = CreateDiagnosticText(failure);
-        _issueDiagnosticText = CreateIssueDiagnosticText(failure);
-        CanResetDownloadStore = DownloadStoreRecoveryPresenter.CanReset(failure);
-        FailureMessageResourceKey = CanResetDownloadStore
-            ? "DownloadStoreSchemaMismatchMessage"
-            : "DownloadRuntimeFailureMessage";
-        FailureMessage = DictionaryResource.GetString(FailureMessageResourceKey);
+        var diagnostics = GetRequiredParameter<IReadOnlyList<StartupDiagnostic>>(
+            request,
+            DiagnosticsParameter);
+        if (diagnostics.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "The startup diagnostics dialog requires at least one diagnostic.");
+        }
+
+        Title = FormatResource(
+            "StartupDiagnosticsTitleFormat",
+            diagnostics.Count.ToString(CultureInfo.CurrentCulture));
+        IntroMessage = DictionaryResource.GetString("StartupDiagnosticsMessage");
+        Items = diagnostics
+            .Select((diagnostic, index) => CreateItem(diagnostic, index + 1))
+            .ToArray();
+        DiagnosticText = CreateDiagnosticText(diagnostics);
+        _issueDiagnosticText = CreateIssueDiagnosticText(diagnostics);
     }
 
     internal async Task CopyErrorDetailsAsync()
@@ -127,7 +135,7 @@ internal sealed class DownloadRuntimeFailureDialogViewModel : BaseDialogViewMode
                 ?? throw new InvalidOperationException("Feedback package directory is unavailable.");
             if (!await _platformLauncher.OpenFolderAsync(directory).ConfigureAwait(true))
             {
-                _notifications.Show("无法打开诊断包所在文件夹");
+                _notifications.Show(DictionaryResource.GetString("OpenDiagnosticFolderFailed"));
             }
         }
         catch (Exception exception) when (exception is System.IO.IOException
@@ -139,34 +147,98 @@ internal sealed class DownloadRuntimeFailureDialogViewModel : BaseDialogViewMode
         }
     }
 
-    private string CreateDiagnosticText(Exception failure)
+    private StartupDiagnosticItemViewModel CreateItem(
+        StartupDiagnostic diagnostic,
+        int index)
     {
-        var exceptionText = RedactDiagnosticText(failure.ToString());
-        var operatingSystem = RedactDiagnosticText(
-            RuntimeInformation.OSDescription);
-        return $"""
-            DownKyi version: {new AppInfo().VersionName}
-            Operating system: {operatingSystem}
-            Architecture: {RuntimeInformation.OSArchitecture}
-            Failure boundary: Download bootstrap
-
-            {exceptionText}
-            """;
+        var title = DictionaryResource.GetString(diagnostic.TitleResourceKey);
+        return new StartupDiagnosticItemViewModel(
+            diagnostic,
+            string.Create(CultureInfo.CurrentCulture, $"{index}. {title}"),
+            DictionaryResource.GetString(diagnostic.DescriptionResourceKey),
+            FormatResource(
+                "StartupDiagnosticsImpactFormat",
+                DictionaryResource.GetString(diagnostic.ImpactResourceKey)),
+            CreateItemDiagnosticText(diagnostic),
+            RequestRecovery);
     }
 
-    private static string CreateIssueDiagnosticText(Exception failure)
+    private void RequestRecovery(StartupDiagnostic diagnostic)
+    {
+        if (diagnostic.RecoveryAction != StartupRecoveryAction.ResetDownloadStore)
+        {
+            return;
+        }
+
+        CloseDialog(
+            AppDialogOutcome.Accepted,
+            new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                [RecoveryDiagnosticParameter] = diagnostic
+            });
+    }
+
+    private string CreateDiagnosticText(IReadOnlyList<StartupDiagnostic> diagnostics)
+    {
+        var builder = new StringBuilder();
+        builder.Append("DownKyi version: ").AppendLine(new AppInfo().VersionName);
+        builder.Append("Operating system: ").AppendLine(RedactDiagnosticText(
+            RuntimeInformation.OSDescription));
+        builder.Append("Architecture: ").AppendLine(RuntimeInformation.OSArchitecture.ToString());
+        builder.Append("Startup issue count: ").AppendLine(
+            diagnostics.Count.ToString(CultureInfo.InvariantCulture));
+
+        for (var index = 0; index < diagnostics.Count; index++)
+        {
+            builder.AppendLine();
+            builder.Append("===== Startup issue ")
+                .Append(index + 1)
+                .AppendLine(" =====");
+            builder.Append(CreateItemDiagnosticText(diagnostics[index]));
+        }
+
+        return builder.ToString().TrimEnd();
+    }
+
+    private string CreateItemDiagnosticText(StartupDiagnostic diagnostic)
+    {
+        var builder = new StringBuilder();
+        builder.Append("Source: ").AppendLine(diagnostic.Source.ToString());
+        builder.Append("Type: ").AppendLine(diagnostic.Kind.ToString());
+        if (!string.IsNullOrWhiteSpace(diagnostic.Context))
+        {
+            builder.Append("Context: ").AppendLine(RedactDiagnosticText(diagnostic.Context));
+        }
+
+        builder.AppendLine(RedactDiagnosticText(diagnostic.Failure.ToString()));
+        return builder.ToString().TrimEnd();
+    }
+
+    private static string CreateIssueDiagnosticText(
+        IReadOnlyList<StartupDiagnostic> diagnostics)
     {
         var builder = new StringBuilder();
         builder.AppendLine("Safe diagnostic summary");
         builder.Append("DownKyi version: ").AppendLine(new AppInfo().VersionName);
         builder.Append("Operating system: ").AppendLine(RuntimeInformation.OSDescription);
         builder.Append("OS architecture: ").AppendLine(RuntimeInformation.OSArchitecture.ToString());
-        builder.Append("Process architecture: ").AppendLine(RuntimeInformation.ProcessArchitecture.ToString());
+        builder.Append("Process architecture: ")
+            .AppendLine(RuntimeInformation.ProcessArchitecture.ToString());
         builder.Append(".NET runtime: ").AppendLine(Environment.Version.ToString());
-        builder.AppendLine("Failure boundary: Download bootstrap");
+        builder.Append("Startup issue count: ").AppendLine(
+            diagnostics.Count.ToString(CultureInfo.InvariantCulture));
 
-        builder.AppendLine(SafeExceptionDiagnosticFormatter.Format(failure));
+        for (var index = 0; index < diagnostics.Count; index++)
+        {
+            var diagnostic = diagnostics[index];
+            builder.AppendLine();
+            builder.Append("Issue ").Append(index + 1).AppendLine(":");
+            builder.Append("Source: ").AppendLine(diagnostic.Source.ToString());
+            builder.Append("Type: ").AppendLine(diagnostic.Kind.ToString());
+            builder.AppendLine(SafeExceptionDiagnosticFormatter.Format(diagnostic.Failure));
+        }
 
+        builder.AppendLine();
         builder.AppendLine("Attach the generated downkyi-feedback.zip file below.");
         return builder.ToString().TrimEnd();
     }
@@ -176,4 +248,56 @@ internal sealed class DownloadRuntimeFailureDialogViewModel : BaseDialogViewMode
         var resourceRedacted = ExternalResourceRedactor.Redact(text);
         return _logService.RedactDiagnosticText(resourceRedacted);
     }
+
+    private static string FormatResource(string resourceKey, string value)
+    {
+        return DictionaryResource.GetString(resourceKey)
+            .Replace("{0}", value, StringComparison.Ordinal);
+    }
+}
+
+internal sealed class StartupDiagnosticItemViewModel : ObservableObject
+{
+    private bool _isExpanded;
+
+    public StartupDiagnosticItemViewModel(
+        StartupDiagnostic diagnostic,
+        string title,
+        string description,
+        string impact,
+        string diagnosticText,
+        Action<StartupDiagnostic> requestRecovery)
+    {
+        Diagnostic = diagnostic ?? throw new ArgumentNullException(nameof(diagnostic));
+        Title = title ?? throw new ArgumentNullException(nameof(title));
+        Description = description ?? throw new ArgumentNullException(nameof(description));
+        Impact = impact ?? throw new ArgumentNullException(nameof(impact));
+        DiagnosticText = diagnosticText ?? throw new ArgumentNullException(nameof(diagnosticText));
+        ArgumentNullException.ThrowIfNull(requestRecovery);
+        ResetDownloadStoreCommand = new RelayCommand(() => requestRecovery(diagnostic));
+        ToggleDetailsCommand = new RelayCommand(() => IsExpanded = !IsExpanded);
+    }
+
+    internal StartupDiagnostic Diagnostic { get; }
+
+    public string Title { get; }
+
+    public string Description { get; }
+
+    public string Impact { get; }
+
+    public string DiagnosticText { get; }
+
+    public bool IsExpanded
+    {
+        get => _isExpanded;
+        private set => SetProperty(ref _isExpanded, value);
+    }
+
+    public bool CanResetDownloadStore =>
+        Diagnostic.RecoveryAction == StartupRecoveryAction.ResetDownloadStore;
+
+    public RelayCommand ResetDownloadStoreCommand { get; }
+
+    public RelayCommand ToggleDetailsCommand { get; }
 }

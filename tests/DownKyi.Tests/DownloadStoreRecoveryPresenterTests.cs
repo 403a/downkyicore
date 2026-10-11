@@ -61,6 +61,24 @@ public sealed class DownloadStoreRecoveryPresenterTests
         Assert.Empty(dialogs.Requests);
     }
 
+    [Fact]
+    public async Task FailedBackupAndResetDoesNotRestartAndPreservesErrorFlow()
+    {
+        var dialogs = new DialogStub(AppDialogOutcome.Accepted);
+        var recovery = new RecoveryStub(new IOException("backup failed"));
+        var lifecycle = new LifecycleStub(restartSucceeded: true);
+        var presenter = CreatePresenter(dialogs, recovery, lifecycle);
+
+        await presenter.ConfirmResetAndRestartAsync(
+            new DownloadStoreSchemaMismatchException("unsupported schema"),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(recovery.Called);
+        Assert.False(lifecycle.RestartCalled);
+        Assert.Equal(2, dialogs.Requests.Count);
+        Assert.All(dialogs.Requests, request => Assert.Equal(AppDialog.Alert, request.Dialog));
+    }
+
     private static DownloadStoreRecoveryPresenter CreatePresenter(
         IAppDialogService dialogs,
         IDownloadStoreRecovery recovery,
@@ -87,7 +105,7 @@ public sealed class DownloadStoreRecoveryPresenterTests
         }
     }
 
-    private sealed class RecoveryStub : IDownloadStoreRecovery
+    private sealed class RecoveryStub(Exception? failure = null) : IDownloadStoreRecovery
     {
         public bool Called { get; private set; }
 
@@ -95,6 +113,11 @@ public sealed class DownloadStoreRecoveryPresenterTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             Called = true;
+            if (failure != null)
+            {
+                return Task.FromException(failure);
+            }
+
             return Task.CompletedTask;
         }
     }
